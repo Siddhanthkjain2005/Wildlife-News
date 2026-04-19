@@ -8,6 +8,9 @@ logs/
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+data/*.db-shm
+data/*.db-wal
+data/*.xlsx
 data/backups/
 
 frontend/node_modules/
