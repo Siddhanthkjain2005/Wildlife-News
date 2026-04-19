@@ -1,11 +1,11 @@
 # Wildlife Live Poaching News System
 
-This project collects **live wildlife-poaching related news**, uses a **multilingual AI model** to keep only likely **India poaching incidents**, stores results in a database, exports to an **Excel sheet**, and displays everything on a website dashboard.
+This project collects **live wildlife-poaching related news**, uses intelligence scoring to keep only likely **India poaching incidents**, stores results in a database, exports to an **Excel sheet**, and displays everything on a website dashboard.
 
 ## Features
 
 - Multi-provider ingestion (Google RSS, Bing RSS, GDELT, plus optional key-based APIs).
-- AI filtering using `MoritzLaurer/mDeBERTa-v3-base-mnli-xnli` (zero-shot multilingual model).
+- AI/rule filtering: runs with lightweight rule intelligence by default, and can optionally use `MoritzLaurer/mDeBERTa-v3-base-mnli-xnli` for higher accuracy.
 - India-only enforcement using AI + keyword geo-context validation.
 - Precision boost with domain keywords (wildlife + crime terms) to reduce false positives.
 - Website dashboard (React + FastAPI APIs) with:
@@ -35,6 +35,7 @@ wildlife-live-poaching-news-system/
 ├─ data/                         # SQLite DB + Excel output
 ├─ .env.example
 ├─ requirements.txt
+├─ requirements-ai.txt            # optional heavy AI model dependencies
 └─ README.md
 ```
 
@@ -46,6 +47,12 @@ wildlife-live-poaching-news-system/
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Optional (higher-accuracy transformer mode, larger memory/image footprint):
+
+```bash
+pip install -r requirements-ai.txt
 ```
 
 2. Create environment file:
@@ -240,8 +247,9 @@ You can enable/disable providers with:
 
 ## Accuracy Notes
 
-- The AI model is multilingual and can classify poaching context in different languages.
-- Filtering uses both model confidence and wildlife/crime term validation.
+- With `requirements-ai.txt` installed, the multilingual model can classify poaching context in different languages.
+- Without transformer dependencies, the app automatically uses rule-based fallback intelligence (lighter deploy footprint).
+- Filtering combines model/rule confidence with wildlife/crime term validation.
 - India-only mode (`INDIA_ONLY=true`) keeps incidents with strong India context.
 - You can tighten precision by increasing `AI_THRESHOLD` in `.env` (example: `0.70`).
 - You can tighten India geolocation strictness via `INDIA_THRESHOLD`.

@@ -5,7 +5,13 @@ import re
 from dataclasses import asdict, dataclass
 from threading import Lock
 
-from transformers import pipeline
+try:
+    from transformers import pipeline as hf_pipeline
+except Exception as import_error:  # pragma: no cover - optional dependency path
+    hf_pipeline = None
+    _TRANSFORMERS_IMPORT_ERROR = import_error
+else:
+    _TRANSFORMERS_IMPORT_ERROR = None
 
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -119,6 +125,7 @@ class HybridIntelligenceEngine:
         self._classifier = None
         self._lock = Lock()
         self._model_ready = False
+        self._logged_fallback_notice = False
 
     @property
     def model_ready(self) -> bool:
@@ -127,6 +134,9 @@ class HybridIntelligenceEngine:
     def warmup(self) -> bool:
         try:
             classifier = self._get_classifier()
+            if classifier is False:
+                self._model_ready = False
+                return False
             _ = classifier(
                 "Wildlife officers seized tiger skin in Karnataka.",
                 candidate_labels=[
@@ -147,14 +157,79 @@ class HybridIntelligenceEngine:
             return False
 
     def _get_classifier(self):
+        if self._classifier is False:
+            return self._classifier
         if self._classifier is None:
             with self._lock:
                 if self._classifier is None:
-                    self._classifier = pipeline(
+                    if hf_pipeline is None:
+                        if not self._logged_fallback_notice:
+                            logger.warning(
+                                "transformers unavailable (%s); using rule-based intelligence fallback.",
+                                _TRANSFORMERS_IMPORT_ERROR,
+                            )
+                            self._logged_fallback_notice = True
+                        self._classifier = False
+                        return self._classifier
+                    self._classifier = hf_pipeline(
                         "zero-shot-classification",
                         model=settings.model_name,
                     )
         return self._classifier
+
+    @classmethod
+    def _fallback_score_map(cls, text: str) -> dict[str, float]:
+        labels = [
+            "wildlife poaching",
+            "wildlife smuggling",
+            "illegal wildlife trade",
+            "ivory trade",
+            "tiger skin seizure",
+            "rhino horn trafficking",
+            "exotic bird trafficking",
+            "illegal fishing",
+            "forest hunting gang",
+            "not wildlife crime",
+            "incident in India",
+            "incident outside India",
+        ]
+        score_map = {label: 0.0 for label in labels}
+
+        rule_crime_type, rule_score = cls._keyword_crime_scores(text)
+        keyword_hits = cls._keyword_signal_hits(text)
+        species = cls._extract_species(text)
+        state, district, _ = cls._extract_location(text)
+
+        poach_signal = min(1.0, rule_score + min(0.35, keyword_hits * 0.08) + (0.08 if species else 0.0))
+        india_signal = 0.0
+        if "india" in text or "bharat" in text:
+            india_signal += 0.55
+        if state:
+            india_signal += 0.30
+        if district:
+            india_signal += 0.20
+        india_signal = min(1.0, india_signal)
+
+        crime_label_map = {
+            "poaching": "wildlife poaching",
+            "smuggling": "wildlife smuggling",
+            "illegal_wildlife_trade": "illegal wildlife trade",
+            "ivory_trade": "ivory trade",
+            "tiger_skin_seizure": "tiger skin seizure",
+            "rhino_horn_trafficking": "rhino horn trafficking",
+            "exotic_bird_trafficking": "exotic bird trafficking",
+            "illegal_fishing": "illegal fishing",
+            "forest_hunting_gang": "forest hunting gang",
+        }
+        mapped_label = crime_label_map.get(rule_crime_type)
+        if mapped_label:
+            score_map[mapped_label] = poach_signal
+
+        score_map["wildlife poaching"] = max(score_map["wildlife poaching"], poach_signal)
+        score_map["incident in India"] = india_signal
+        score_map["incident outside India"] = max(0.0, min(1.0, 1.0 - india_signal))
+        score_map["not wildlife crime"] = max(0.0, min(1.0, 0.85 - poach_signal))
+        return score_map
 
     @staticmethod
     def _has_false_positive(text: str) -> bool:
@@ -363,26 +438,29 @@ class HybridIntelligenceEngine:
             )
 
         classifier = self._get_classifier()
-        zs = classifier(
-            text,
-            candidate_labels=[
-                "wildlife poaching",
-                "wildlife smuggling",
-                "illegal wildlife trade",
-                "ivory trade",
-                "tiger skin seizure",
-                "rhino horn trafficking",
-                "exotic bird trafficking",
-                "illegal fishing",
-                "forest hunting gang",
-                "not wildlife crime",
-                "incident in India",
-                "incident outside India",
-            ],
-            hypothesis_template="This report concerns {}.",
-            multi_label=True,
-        )
-        score_map = dict(zip(zs["labels"], zs["scores"]))
+        if classifier is False:
+            score_map = self._fallback_score_map(text)
+        else:
+            zs = classifier(
+                text,
+                candidate_labels=[
+                    "wildlife poaching",
+                    "wildlife smuggling",
+                    "illegal wildlife trade",
+                    "ivory trade",
+                    "tiger skin seizure",
+                    "rhino horn trafficking",
+                    "exotic bird trafficking",
+                    "illegal fishing",
+                    "forest hunting gang",
+                    "not wildlife crime",
+                    "incident in India",
+                    "incident outside India",
+                ],
+                hypothesis_template="This report concerns {}.",
+                multi_label=True,
+            )
+            score_map = dict(zip(zs["labels"], zs["scores"]))
         poach_prob = max(
             score_map.get("wildlife poaching", 0.0),
             score_map.get("wildlife smuggling", 0.0),
