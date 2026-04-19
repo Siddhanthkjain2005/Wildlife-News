@@ -46,7 +46,7 @@ class NewsItem(Base):
     likely_smuggling_route: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     enforcement_recommendation: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     confidence_explanation: Mapped[str] = mapped_column(String(500), nullable=False, default="")
-    url_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="", index=True)
+    url_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     duplicate_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     report_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
