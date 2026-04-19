@@ -110,6 +110,8 @@ class NewsCollector:
         self.http = requests.Session()
         self._provider_failures: dict[str, int] = {}
         self._failed_sources: list[dict[str, object]] = []
+        self._provider_cooldowns: dict[str, datetime] = {}
+        self._cooldown_notified: set[str] = set()
 
     @staticmethod
     def _parse_points(raw: str) -> list[str]:
@@ -287,6 +289,24 @@ class NewsCollector:
         if language in QUERY_BY_LANGUAGE:
             return QUERY_BY_LANGUAGE[language]
         return QUERY_BY_LANGUAGE["en"]
+
+    def _provider_on_cooldown(self, provider: str) -> bool:
+        until = self._provider_cooldowns.get(provider)
+        if until is None:
+            return False
+        now = datetime.utcnow()
+        if now >= until:
+            self._provider_cooldowns.pop(provider, None)
+            self._cooldown_notified.discard(provider)
+            return False
+        if provider not in self._cooldown_notified:
+            logger.warning(
+                "Skipping provider %s due to temporary cooldown until %s UTC",
+                provider,
+                until.isoformat(timespec="seconds"),
+            )
+            self._cooldown_notified.add(provider)
+        return True
 
     @staticmethod
     def _region(language: str) -> tuple[str, str, str, str]:
@@ -607,6 +627,8 @@ class NewsCollector:
         return items
 
     def _fetch_provider(self, provider: str, language: str, query: str, limit: int) -> list[RawArticle]:
+        if self._provider_on_cooldown(provider):
+            return []
         try:
             if provider == "google_rss":
                 return self._fetch_google_rss(language, query, limit)
@@ -631,6 +653,24 @@ class NewsCollector:
             if provider == "x_adapter":
                 return self._fetch_x_adapter(query, limit)
         except requests.RequestException as err:
+            status_code = getattr(getattr(err, "response", None), "status_code", None)
+            if provider == "gdelt" and status_code == 429:
+                cooldown_until = datetime.utcnow() + timedelta(minutes=15)
+                previous = self._provider_cooldowns.get(provider)
+                if previous is None or previous < cooldown_until:
+                    self._provider_cooldowns[provider] = cooldown_until
+                    self._cooldown_notified.discard(provider)
+                logger.warning(
+                    "Provider request failed: %s (%s, %s): %s; enabling cooldown until %s UTC",
+                    provider,
+                    language,
+                    query,
+                    err,
+                    cooldown_until.isoformat(timespec="seconds"),
+                )
+                self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
+                self._push_failed_source(provider=provider, language=language, query=query, error=str(err))
+                return []
             logger.warning("Provider request failed: %s (%s, %s): %s", provider, language, query, err)
             self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
             self._push_failed_source(provider=provider, language=language, query=query, error=str(err))
@@ -986,6 +1026,27 @@ class NewsCollector:
     ) -> dict[str, list[RawArticle]]:
         if not queries:
             return {}
+        if provider == "gdelt":
+            fetched: dict[str, list[RawArticle]] = {}
+            for query in queries:
+                if progress_callback:
+                    progress_callback(
+                        {
+                            "stage": "fetching",
+                            "provider": provider,
+                            "language": language,
+                            "query": query,
+                            "scanned": scanned,
+                            "kept": kept,
+                        }
+                    )
+                fetched[query] = self._fetch_provider(
+                    provider=provider,
+                    language=language,
+                    query=query,
+                    limit=limit_per_query,
+                )
+            return fetched
         worker_count = max(1, min(settings.provider_parallel_workers, len(queries)))
         fetched: dict[str, list[RawArticle]] = {}
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -1037,6 +1098,8 @@ class NewsCollector:
         provider_stats: dict[str, dict[str, int]] = {}
         district_spike_cache: dict[tuple[str, str], bool] = {}
         self._provider_failures = {}
+        self._provider_cooldowns = {}
+        self._cooldown_notified = set()
         start_from_utc = self._start_from_utc() if (settings.today_only or str(settings.start_from_date or "").strip()) else None
 
         for provider in self._enabled_providers():
