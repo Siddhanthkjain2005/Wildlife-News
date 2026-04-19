@@ -107,7 +107,7 @@ Behavior:
 1. Push this repo to GitHub and create a Railway project from that repo.
 2. Railway root directory: repository root (`/`).
 3. Keep build mode on **Dockerfile** (this repo includes a slim `Dockerfile` to stay under Railway image-size limits).
-4. Railway start command: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` (already in `Procfile` and Docker `CMD`).
+4. Railway start command: `python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '8000')))"` (already in `Procfile`).
 5. Add a Railway volume and mount it at `/data`.
 6. Set these Railway environment variables:
 
