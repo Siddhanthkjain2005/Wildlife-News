@@ -146,6 +146,7 @@ Notes:
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
 - For Vercel deployment, use `npm run build` (default static SPA build).
 - If Railway still shows image-size errors, clear old failed deployments and redeploy so it rebuilds from the new Dockerfile.
+- If you see `sqlite3.OperationalError: unable to open database file`, verify volume mount path is `/data` and `DATABASE_URL=sqlite:////data/news.db`.
 
 ## Data Output
 

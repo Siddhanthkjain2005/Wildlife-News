@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.core.backup import sqlite_path_from_url
 from app.core.config import settings
 from app.core.logger import get_logger
 
@@ -275,6 +276,15 @@ def _ensure_audit_logs_schema() -> None:
 
 def init_database() -> None:
     from app import models as _models  # noqa: F401
+
+    if is_sqlite and not settings.database_url.endswith(":memory:"):
+        db_path = sqlite_path_from_url(settings.database_url)
+        if db_path is not None:
+            try:
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError as err:
+                logger.error("Failed to create SQLite database directory %s: %s", db_path.parent, err)
+                raise
 
     Base.metadata.create_all(bind=engine)
     try:
