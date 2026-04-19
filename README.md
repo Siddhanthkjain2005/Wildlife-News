@@ -99,9 +99,10 @@ Behavior:
 
 1. Push this repo to GitHub and create a Railway project from that repo.
 2. Railway root directory: repository root (`/`).
-3. Railway start command: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` (already in `Procfile`).
-4. Add a Railway volume and mount it at `/data`.
-5. Set these Railway environment variables:
+3. Keep build mode on **Dockerfile** (this repo includes a slim `Dockerfile` to stay under Railway image-size limits).
+4. Railway start command: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` (already in `Procfile` and Docker `CMD`).
+5. Add a Railway volume and mount it at `/data`.
+6. Set these Railway environment variables:
 
 ```env
 DATABASE_URL=sqlite:////data/news.db
@@ -114,7 +115,7 @@ SYNC_INTERVAL_MINUTES=5
 FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
 ```
 
-6. Deploy and verify:
+7. Deploy and verify:
    - `https://<railway-backend>/health`
    - `https://<railway-backend>/api/sync-status`
 
@@ -137,6 +138,7 @@ Notes:
 
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
 - For Vercel deployment, use `npm run build` (default static SPA build).
+- If Railway still shows image-size errors, clear old failed deployments and redeploy so it rebuilds from the new Dockerfile.
 
 ## Data Output
 
