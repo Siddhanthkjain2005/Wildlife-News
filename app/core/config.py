@@ -57,6 +57,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_dir: str = "./logs"
+    frontend_origin: str = ""
 
     # Security / Ops hardening
     admin_token: str | None = None

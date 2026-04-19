@@ -31,7 +31,7 @@ wildlife-live-poaching-news-system/
 │  ├─ core/
 │  ├─ static/react-build/        # built React assets served by FastAPI
 │  └─ templates/react_index.html
-├─ frontend/                     # React (Vite) source
+├─ updated_frontend/             # React (Vite) source
 ├─ data/                         # SQLite DB + Excel output
 ├─ .env.example
 ├─ requirements.txt
@@ -54,12 +54,12 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-3. Build frontend assets:
+3. Build frontend assets for backend-served UI:
 
 ```bash
-cd frontend
+cd updated_frontend
 npm install
-npm run build
+npm run build:embed
 cd ..
 ```
 
@@ -84,6 +84,7 @@ TODAY_ONLY=true
 APP_TIMEZONE="Asia/Kolkata"
 START_FROM_DATE="2026-04-19"
 SYNC_INTERVAL_MINUTES=5
+FRONTEND_ORIGIN="https://your-frontend-domain.vercel.app"
 ```
 
 Behavior:
@@ -92,84 +93,50 @@ Behavior:
 - APIs and dashboard queries are filtered to the same start-date floor.
 - Older rows are **not auto-deleted** at startup or during sync.
 
-## 24/7 deployment (Ubuntu + systemd + Nginx)
+## 24/7 deployment (Railway backend + Vercel frontend)
 
-1. Install runtime dependencies:
+### Railway (backend, always-on sync)
 
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip nodejs npm nginx
+1. Push this repo to GitHub and create a Railway project from that repo.
+2. Railway root directory: repository root (`/`).
+3. Railway start command: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` (already in `Procfile`).
+4. Add a Railway volume and mount it at `/data`.
+5. Set these Railway environment variables:
+
+```env
+DATABASE_URL=sqlite:////data/news.db
+EXCEL_PATH=/data/wildlife_poaching_news.xlsx
+LOG_DIR=/data/logs
+TODAY_ONLY=true
+APP_TIMEZONE=Asia/Kolkata
+START_FROM_DATE=2026-04-19
+SYNC_INTERVAL_MINUTES=5
+FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
 ```
 
-2. Build and prepare app:
+6. Deploy and verify:
+   - `https://<railway-backend>/health`
+   - `https://<railway-backend>/api/sync-status`
 
-```bash
-cd /opt/wildlife-live-poaching-news-system
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cd frontend && npm ci && npm run build && cd ..
-cp .env.example .env
+### Vercel (frontend)
+
+1. Import the same repo in Vercel.
+2. Set **Root Directory** to `updated_frontend`.
+3. Build settings:
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+4. Add Vercel environment variable:
+
+```env
+VITE_API_BASE_URL=https://<railway-backend>.up.railway.app
 ```
 
-3. Create systemd service `/etc/systemd/system/wildlife-news.service`:
+5. Redeploy frontend, then copy the final Vercel domain and set it in Railway `FRONTEND_ORIGIN`.
 
-```ini
-[Unit]
-Description=Wildlife Live Poaching News System
-After=network.target
+Notes:
 
-[Service]
-User=www-data
-WorkingDirectory=/opt/wildlife-live-poaching-news-system
-Environment="PATH=/opt/wildlife-live-poaching-news-system/.venv/bin"
-ExecStart=/opt/wildlife-live-poaching-news-system/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-4. Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now wildlife-news
-sudo systemctl status wildlife-news
-```
-
-5. Reverse proxy with Nginx (`/etc/nginx/sites-available/wildlife-news`):
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Then:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/wildlife-news /etc/nginx/sites-enabled/wildlife-news
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-6. (Recommended) TLS:
-
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
-```
+- For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
+- For Vercel deployment, use `npm run build` (default static SPA build).
 
 ## Data Output
 

@@ -1,17 +1,20 @@
+const API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
+const withBase = (path) => (API_BASE ? `${API_BASE}${path}` : path);
+
 export const ENDPOINTS = {
-  summary: "/api/dashboard-summary",
-  chart: "/api/chart-data",
-  map: "/api/map-data",
-  alerts: "/api/alerts?limit=60",
-  reports: "/api/reports?limit=50",
-  osint: "/api/osint-feed?limit=30",
-  syncStatus: "/api/sync-status",
-  filterNews: "/api/filter-news",
-  exportCsv: "/api/export/csv",
-  exportPdf: "/api/export/pdf",
-  exportExcel: "/api/export/excel",
-  exportBriefing: "/api/export/briefing-pack",
-  sync: "/sync"
+  summary: withBase("/api/dashboard-summary"),
+  chart: withBase("/api/chart-data"),
+  map: withBase("/api/map-data"),
+  alerts: withBase("/api/alerts?limit=60"),
+  reports: withBase("/api/reports?limit=50"),
+  osint: withBase("/api/osint-feed?limit=30"),
+  syncStatus: withBase("/api/sync-status"),
+  filterNews: withBase("/api/filter-news"),
+  exportCsv: withBase("/api/export/csv"),
+  exportPdf: withBase("/api/export/pdf"),
+  exportExcel: withBase("/api/export/excel"),
+  exportBriefing: withBase("/api/export/briefing-pack"),
+  sync: withBase("/sync")
 };
 
 export async function fetchJson(url) {

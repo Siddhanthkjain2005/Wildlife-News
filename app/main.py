@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -40,6 +41,16 @@ from app.utils.india_geo import INDIA_CENTER, centroid_for_state
 from app.workers.sync_manager import SyncStateStore
 
 app = FastAPI(title=settings.app_name)
+allowed_origins = [origin.strip() for origin in settings.frontend_origin.split(",") if origin.strip()]
+if allowed_origins:
+    allow_credentials = "*" not in allowed_origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
