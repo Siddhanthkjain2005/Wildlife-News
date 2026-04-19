@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wildlife Crime Intelligence Center</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='react-build/dashboard.css') }}">
+</head>
+<body>
+  <div id="root">
+    <div style="padding:24px;color:#e8edff;font-family:Inter,system-ui,sans-serif;background:#060c1c;min-height:100vh">
+      <h2 style="margin:0 0 8px">Loading Wildlife Crime Intelligence Dashboard…</h2>
+      <p style="margin:0 0 12px;opacity:.85">If this page stays blank, open the <a href="/legacy?legacy=1" style="color:#9ec2ff">legacy dashboard</a>.</p>
+    </div>
+  </div>
+  <script>
+    window.__WILDLIFE_DASHBOARD_BOOTED__ = false;
+    window.setTimeout(function () {
+      var root = document.getElementById("root");
+      var text = root && root.textContent ? root.textContent : "";
+      var stillLoading = text.indexOf("Loading Wildlife Crime Intelligence Dashboard") !== -1;
+      if (!window.__WILDLIFE_DASHBOARD_BOOTED__ && stillLoading) {
+        window.location.replace("/legacy?legacy=1");
+      }
+    }, 5000);
+  </script>
+  <noscript>
+    <div style="padding:24px;font-family:Inter,system-ui,sans-serif">
+      JavaScript is required for the React dashboard. Open <a href="/legacy?legacy=1">legacy dashboard</a>.
+    </div>
+  </noscript>
+  <script type="module" src="{{ url_for('static', path='react-build/dashboard.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+
+logs/
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/backups/
+
+frontend/node_modules/
+updated_frontend/node_modules/
+app/static/react-build/
+
+*.zip

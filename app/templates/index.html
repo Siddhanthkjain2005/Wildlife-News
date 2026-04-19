@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="{{ ui_lang if ui_lang else 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wildlife Crime Intelligence Center</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
+</head>
+<body class="ops-body">
+  <div class="container-fluid py-3 px-3 px-lg-4">
+    <header class="ops-topbar mb-3">
+      <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center">
+        <div>
+          <h1 class="ops-title mb-1">Wildlife Crime Intelligence Center</h1>
+          <div class="d-flex gap-3 flex-wrap">
+            <span class="ops-pill" id="sync-indicator">Sync: Idle</span>
+            <span class="ops-pill">Last Sync: <span id="last-sync-time">{{ dashboard_summary.last_sync_time or "-" }}</span></span>
+            <span class="ops-pill">Total Incidents: <span id="top-total-incidents">{{ dashboard_summary.total_incidents }}</span></span>
+            <span class="ops-pill ops-pill-alert" id="high-risk-pill">High-Risk Alerts: <span id="top-high-risk-alerts">{{ dashboard_summary.high_risk_alerts }}</span></span>
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+        <form method="post" action="/sync" id="sync-form" class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-info" id="sync-now-btn">{{ texts.manual_sync }}</button>
+        </form>
+          <a class="btn btn-sm btn-outline-light" href="/admin/settings">Admin Settings</a>
+        </div>
+      </div>
+    </header>
+
+    {% if sync_status == "ok" %}
+      <div class="alert alert-success">{{ texts.sync_success }} {{ sync_message }}</div>
+    {% elif sync_status == "error" %}
+      <div class="alert alert-danger">{{ texts.sync_error }} {{ sync_message }}</div>
+    {% endif %}
+    <div id="sync-live-status" class="alert d-none mb-3"></div>
+
+    <section class="row g-3 mb-3">
+      <div class="col-6 col-lg-2"><div class="kpi-card"><div class="kpi-label">Total Incidents</div><div class="kpi-value" id="kpi-total-incidents">{{ dashboard_summary.kpis.total_incidents }}</div></div></div>
+      <div class="col-6 col-lg-2"><div class="kpi-card"><div class="kpi-label">High Risk (&gt;80)</div><div class="kpi-value text-danger" id="kpi-high-risk">{{ dashboard_summary.kpis.high_risk }}</div></div></div>
+      <div class="col-6 col-lg-2"><div class="kpi-card"><div class="kpi-label">States Active</div><div class="kpi-value" id="kpi-states-active">{{ dashboard_summary.kpis.states_active }}</div></div></div>
+      <div class="col-6 col-lg-2"><div class="kpi-card"><div class="kpi-label">Species Tracked</div><div class="kpi-value" id="kpi-species-tracked">{{ dashboard_summary.kpis.species_tracked }}</div></div></div>
+      <div class="col-6 col-lg-2"><div class="kpi-card"><div class="kpi-label">Sources Active</div><div class="kpi-value" id="kpi-sources-active">{{ dashboard_summary.kpis.sources_active }}</div></div></div>
+      <div class="col-6 col-lg-2"><div class="kpi-card"><div class="kpi-label">Reports Today</div><div class="kpi-value" id="kpi-reports-today">{{ dashboard_summary.kpis.reports_today }}</div></div></div>
+    </section>
+
+    <section class="row g-3 mb-3">
+      <div class="col-lg-8">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">India Wildlife Crime Map</div>
+          <div class="ops-card-body p-0">
+            <div id="india-map"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="ops-card h-100">
+          <div class="ops-card-header d-flex justify-content-between align-items-center">
+            <span>Live Alert Feed</span>
+            <span class="badge rounded-pill text-bg-danger alert-badge" id="new-alert-badge">0 new</span>
+          </div>
+          <div class="ops-card-body feed-body">
+            <div id="alert-skeleton" class="d-block">
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line"></div>
+            </div>
+            <div id="alert-feed-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="row g-3 mb-3">
+      <div class="col-lg-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header" id="timeline-chart-title">Timeline Incidents</div>
+          <div class="ops-card-body"><canvas id="timeline-chart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Top States by Incidents</div>
+          <div class="ops-card-body"><canvas id="states-chart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Species Distribution</div>
+          <div class="ops-card-body"><canvas id="species-chart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Source Reliability Rankings</div>
+          <div class="ops-card-body"><canvas id="source-chart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="row g-3 mb-3">
+      <div class="col-lg-5">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">OSINT Feed</div>
+          <div class="ops-card-body feed-body" id="osint-feed-list">
+            <div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-3">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Trending Threat Keywords</div>
+          <div class="ops-card-body" id="trending-keywords-list">
+            <div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Source Type Breakdown</div>
+          <div class="ops-card-body"><canvas id="osint-source-chart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">NGO / Govt Signals</div>
+          <div class="ops-card-body">
+            <div class="d-flex justify-content-between osint-stat-row"><span>Government Signals</span><strong id="govt-signal-count">0</strong></div>
+            <div class="d-flex justify-content-between osint-stat-row"><span>NGO Signals</span><strong id="ngo-signal-count">0</strong></div>
+            <div class="d-flex justify-content-between osint-stat-row"><span>Watchlist Keywords</span><strong id="watchlist-count">0</strong></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Reddit Spike Mentions</div>
+          <div class="ops-card-body">
+            <div class="reddit-spike" id="reddit-spike-count">0</div>
+            <div class="ops-muted">Signals detected in monitored subreddits (7-day rolling window)</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ops-card mb-3">
+      <div class="ops-card-header">Analyst Filters</div>
+      <div class="ops-card-body">
+        <form id="analyst-filter-form" class="row g-2">
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Search</label>
+            <input type="text" class="form-control form-control-sm ops-input" name="q" placeholder="keywords / gang / seizure">
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Species</label>
+            <select class="form-select form-select-sm ops-input" name="species" id="filter-species"><option value="">All</option></select>
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">State</label>
+            <select class="form-select form-select-sm ops-input" name="state" id="filter-state"><option value="">All</option></select>
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Date From</label>
+            <input type="date" class="form-control form-control-sm ops-input" name="date_from">
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Date To</label>
+            <input type="date" class="form-control form-control-sm ops-input" name="date_to">
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Crime Type</label>
+            <select class="form-select form-select-sm ops-input" name="crime_type" id="filter-crime"><option value="">All</option></select>
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Severity</label>
+            <select class="form-select form-select-sm ops-input" name="severity">
+              <option value="">All</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Source</label>
+            <select class="form-select form-select-sm ops-input" name="source" id="filter-source"><option value="">All</option></select>
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Min Confidence</label>
+            <input type="number" class="form-control form-control-sm ops-input" min="0" max="1" step="0.01" name="min_confidence" value="{{ min_score }}">
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <label class="form-label">Rows</label>
+            <input type="number" class="form-control form-control-sm ops-input" min="10" max="500" step="10" name="limit" value="120">
+          </div>
+          <div class="col-lg-2 col-md-4 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-sm btn-info w-100">Apply</button>
+          </div>
+          <div class="col-lg-2 col-md-4 d-flex align-items-end gap-2">
+            <button type="button" class="btn btn-sm btn-outline-light w-100" id="export-csv-btn">Export CSV</button>
+          </div>
+      <div class="col-lg-2 col-md-4 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-sm btn-outline-warning w-100" id="export-pdf-btn">Export PDF</button>
+      </div>
+      <div class="col-lg-2 col-md-4 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary w-100" id="export-excel-btn">Export Excel</button>
+      </div>
+      <div class="col-lg-2 col-md-4 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-sm btn-outline-success w-100" id="export-briefing-btn">Briefing Pack</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+    <section class="row g-3 mb-3">
+      <div class="col-lg-7">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Analyst Briefing</div>
+          <div class="ops-card-body feed-body" id="analyst-brief-list">
+            <div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Top Recommendations</div>
+          <div class="ops-card-body" id="top-recommendations-list">
+            <div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ops-card">
+      <div class="ops-card-header d-flex justify-content-between">
+        <span>Incident Table</span>
+        <span class="ops-muted">Auto refresh: 15s</span>
+      </div>
+      <div class="ops-card-body p-0">
+        <div class="table-responsive">
+          <table class="table ops-table mb-0 align-middle">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Risk</th>
+                <th>Species</th>
+                <th>State</th>
+                <th>District</th>
+                <th>Crime Type</th>
+                <th>Source</th>
+                <th>Confidence</th>
+                <th>Action Recommendation</th>
+                <th>Open Article</th>
+              </tr>
+            </thead>
+            <tbody id="incident-table-body">
+              <tr><td colspan="10"><div class="skeleton-line"></div><div class="skeleton-line"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" id="popup-alert-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const endpoints = {
+      syncStatus: "/api/sync-status",
+      dashboardSummary: "/api/dashboard-summary",
+      mapData: "/api/map-data",
+      chartData: "/api/chart-data",
+      filterNews: "/api/filter-news",
+      alerts: "/api/alerts?limit=60",
+      alertsPopup: "/api/alerts-popup",
+      osintFeed: "/api/osint-feed?limit=40",
+      trendingKeywords: "/api/trending-keywords?days=7&limit=12",
+      externalSignals: "/api/external-signals?limit=100",
+      watchlists: "/api/watchlists",
+      reports: "/api/reports?limit=60",
+      exportCsv: "/api/export/csv",
+      exportPdf: "/api/export/pdf",
+      exportExcel: "/api/export/excel",
+      exportBriefingPack: "/api/export/briefing-pack",
+    };
+
+    let map;
+    let markerLayer;
+    let timelineChart;
+    let statesChart;
+    let speciesChart;
+    let sourceChart;
+    let osintSourceChart;
+    let lastHighRiskAlertCount = Number({{ dashboard_summary.high_risk_alerts or 0 }});
+    let lastPopupAlertId = Number({{ dashboard_summary.latest_alert_id or 0 }});
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function resolveHref(primary, secondary = "") {
+      const value = String(primary || secondary || "").trim();
+      if (!value) return "#";
+      if (value.startsWith("/")) return value;
+      if (/^https?:\/\//i.test(value)) return value;
+      if (value.startsWith("www.")) return `https://${value}`;
+      return "#";
+    }
+
+    function fmtDate(value) {
+      if (!value) return "-";
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return value;
+      return dt.toLocaleString();
+    }
+
+    function severityClass(risk) {
+      if (risk > 80) return "sev-high";
+      if (risk >= 50) return "sev-medium";
+      return "sev-low";
+    }
+
+    function syncIndicatorText(syncRunning) {
+      return syncRunning ? "Sync: Running" : "Sync: Idle";
+    }
+
+    function setSummary(summary) {
+      document.getElementById("sync-indicator").textContent = syncIndicatorText(Boolean(summary.sync_running));
+      document.getElementById("last-sync-time").textContent = summary.last_sync_time ? fmtDate(summary.last_sync_time) : "-";
+      document.getElementById("top-total-incidents").textContent = summary.total_incidents ?? 0;
+      document.getElementById("top-high-risk-alerts").textContent = summary.high_risk_alerts ?? 0;
+      document.getElementById("kpi-total-incidents").textContent = summary.kpis?.total_incidents ?? 0;
+      document.getElementById("kpi-high-risk").textContent = summary.kpis?.high_risk ?? 0;
+      document.getElementById("kpi-states-active").textContent = summary.kpis?.states_active ?? 0;
+      document.getElementById("kpi-species-tracked").textContent = summary.kpis?.species_tracked ?? 0;
+      document.getElementById("kpi-sources-active").textContent = summary.kpis?.sources_active ?? 0;
+      document.getElementById("kpi-reports-today").textContent = summary.kpis?.reports_today ?? 0;
+
+      const highRisk = Number(summary.high_risk_alerts || 0);
+      const pill = document.getElementById("high-risk-pill");
+      if (highRisk > lastHighRiskAlertCount) {
+        pill.classList.add("alert-flash");
+      } else {
+        pill.classList.remove("alert-flash");
+      }
+      lastHighRiskAlertCount = highRisk;
+    }
+
+    function initMap() {
+      if (!window.L) {
+        const mapRoot = document.getElementById("india-map");
+        mapRoot.innerHTML = "<div class='ops-muted p-3'>Map library unavailable. Incident map is temporarily disabled.</div>";
+        return;
+      }
+      map = L.map("india-map", { zoomControl: true }).setView([{{ map_center.lat }}, {{ map_center.lng }}], 5);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 12,
+        attribution: "&copy; OpenStreetMap",
+      }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+
+    function updateMap(payload) {
+      if (!markerLayer || !window.L) return;
+      markerLayer.clearLayers();
+      for (const item of (payload.markers || [])) {
+        const color = item.severity === "high" ? "#ff3b3b" : (item.severity === "medium" ? "#ffb020" : "#22c55e");
+        const marker = L.circleMarker([item.lat, item.lng], {
+          radius: item.severity === "high" ? 7 : 5,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.75,
+          weight: 1,
+        });
+        marker.bindPopup(
+          `<div class="map-popup">` +
+          `<strong>${escapeHtml(item.title)}</strong><br>` +
+          `${escapeHtml(item.state)} / ${escapeHtml(item.district)}<br>` +
+          `Risk: ${Number(item.risk_score || 0)}<br>` +
+          `<a href="${escapeHtml(resolveHref(item.open_url, item.url))}" target="_blank" rel="noopener">Open article</a>` +
+          `</div>`
+        );
+        markerLayer.addLayer(marker);
+      }
+    }
+
+    function initCharts() {
+      if (!window.Chart) {
+        for (const id of ["timeline-chart", "states-chart", "species-chart", "source-chart", "osint-source-chart"]) {
+          const node = document.getElementById(id);
+          if (node && node.parentElement) {
+            node.parentElement.innerHTML = "<div class='ops-muted p-2'>Chart library unavailable. Visuals are temporarily disabled.</div>";
+          }
+        }
+        return;
+      }
+      const baseOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 700 },
+        plugins: { legend: { labels: { color: "#d6deeb" } } },
+        scales: {
+          x: { ticks: { color: "#a5b4cf" }, grid: { color: "rgba(84,98,129,0.15)" } },
+          y: { ticks: { color: "#a5b4cf" }, grid: { color: "rgba(84,98,129,0.15)" } },
+        },
+      };
+      timelineChart = new Chart(document.getElementById("timeline-chart"), {
+        type: "line",
+        data: { labels: [], datasets: [
+          { label: "Incidents", data: [], borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.18)", fill: true, tension: 0.35 },
+          { label: "High Risk", data: [], borderColor: "#ef4444", backgroundColor: "rgba(239,68,68,0.12)", fill: true, tension: 0.35 },
+        ]},
+        options: baseOpts,
+      });
+      statesChart = new Chart(document.getElementById("states-chart"), {
+        type: "bar",
+        data: { labels: [], datasets: [{ label: "Incidents", data: [], backgroundColor: "#f97316" }] },
+        options: baseOpts,
+      });
+      speciesChart = new Chart(document.getElementById("species-chart"), {
+        type: "doughnut",
+        data: { labels: [], datasets: [{ data: [], backgroundColor: ["#22c55e","#3b82f6","#f59e0b","#ef4444","#a855f7","#14b8a6","#64748b"] }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#d6deeb" } } },
+        },
+      });
+      sourceChart = new Chart(document.getElementById("source-chart"), {
+        type: "bar",
+        data: { labels: [], datasets: [{ label: "Reliability", data: [], backgroundColor: "#06b6d4" }] },
+        options: baseOpts,
+      });
+      osintSourceChart = new Chart(document.getElementById("osint-source-chart"), {
+        type: "bar",
+        data: { labels: [], datasets: [{ label: "Signals", data: [], backgroundColor: "#a855f7" }] },
+        options: baseOpts,
+      });
+    }
+
+    function updateCharts(data) {
+      if (!window.Chart) return;
+      if (!timelineChart || !statesChart || !speciesChart || !sourceChart) return;
+      timelineChart.data.labels = data.timeline?.labels || [];
+      timelineChart.data.datasets[0].data = data.timeline?.incidents || [];
+      timelineChart.data.datasets[1].data = data.timeline?.high_risk || [];
+      timelineChart.update();
+      const timelineTitle = document.getElementById("timeline-chart-title");
+      if (timelineTitle) {
+        const days = Number(data.timeline?.window_days || 30);
+        const granularity = String(data.timeline?.granularity || "daily");
+        const granularityLabel = granularity === "weekly" ? "Weekly" : "Daily";
+        timelineTitle.textContent = `Timeline Incidents (${granularityLabel}, ${days}-day window)`;
+      }
+
+      statesChart.data.labels = (data.top_states || []).map(x => x.state);
+      statesChart.data.datasets[0].data = (data.top_states || []).map(x => x.count);
+      statesChart.update();
+
+      speciesChart.data.labels = (data.species_distribution || []).map(x => x.species);
+      speciesChart.data.datasets[0].data = (data.species_distribution || []).map(x => x.count);
+      speciesChart.update();
+
+      sourceChart.data.labels = (data.source_rankings || []).map(x => x.source);
+      sourceChart.data.datasets[0].data = (data.source_rankings || []).map(x => Number(x.reliability_score || 0).toFixed(2));
+      sourceChart.update();
+    }
+
+    function setSelectOptions(selectId, values) {
+      const select = document.getElementById(selectId);
+      const current = select.value;
+      select.innerHTML = "<option value=''>All</option>";
+      for (const value of values || []) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      }
+      if ([...select.options].some(opt => opt.value === current)) {
+        select.value = current;
+      }
+    }
+
+    function setFilterOptions(filters) {
+      setSelectOptions("filter-species", filters?.species || []);
+      setSelectOptions("filter-state", filters?.states || []);
+      setSelectOptions("filter-crime", filters?.crime_types || []);
+      setSelectOptions("filter-source", filters?.sources || []);
+    }
+
+    function renderAlerts(alerts) {
+      const root = document.getElementById("alert-feed-list");
+      const skeleton = document.getElementById("alert-skeleton");
+      const badge = document.getElementById("new-alert-badge");
+      const list = (alerts || []).filter(item => {
+        const title = (item.title || "").toLowerCase();
+        return title.includes("tiger") || title.includes("elephant") || title.includes("rhino") || title.includes("gang") || (item.risk_score || 0) > 80;
+      });
+      skeleton.classList.add("d-none");
+      root.innerHTML = "";
+      for (const item of list.slice(0, 25)) {
+        const div = document.createElement("div");
+        div.className = `alert-item ${severityClass(Number(item.risk_score || 0))}`;
+        div.innerHTML = `
+          <div class="alert-title"><a href="${escapeHtml(resolveHref(item.open_url, item.url))}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></div>
+          <div class="alert-meta">${escapeHtml(item.state)} • ${escapeHtml(item.district)} • Risk ${Number(item.risk_score || 0)}</div>
+        `;
+        root.appendChild(div);
+      }
+      badge.textContent = `${list.length} live`;
+    }
+
+    function renderOSINTPanels(osintFeed, trending, watchlists) {
+      const feedRoot = document.getElementById("osint-feed-list");
+      const keywordRoot = document.getElementById("trending-keywords-list");
+      const feedItems = Array.isArray(osintFeed) ? osintFeed.slice(0, 25) : [];
+      const keywords = trending?.keywords || [];
+
+      feedRoot.innerHTML = "";
+      for (const item of feedItems) {
+        const severity = severityClass(Number(item.risk_score || 0));
+        const div = document.createElement("div");
+        div.className = `alert-item ${severity}`;
+        div.innerHTML = `
+          <div class="alert-title"><a href="${escapeHtml(resolveHref(item.open_url, item.url))}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></div>
+          <div class="alert-meta">${escapeHtml(item.source_type)} • ${escapeHtml(item.source_name)} • strength ${Number(item.signal_strength || 0).toFixed(2)}</div>
+        `;
+        feedRoot.appendChild(div);
+      }
+      if (!feedItems.length) {
+        feedRoot.innerHTML = "<div class='ops-muted'>No OSINT signals yet.</div>";
+      }
+
+      keywordRoot.innerHTML = "";
+      for (const item of keywords) {
+        const line = document.createElement("div");
+        line.className = "keyword-line d-flex justify-content-between";
+        line.innerHTML = `<span>${escapeHtml(item.keyword)}</span><strong>${Number(item.score || 0).toFixed(2)}</strong>`;
+        keywordRoot.appendChild(line);
+      }
+      if (!keywords.length) {
+        keywordRoot.innerHTML = "<div class='ops-muted'>No keyword trends yet.</div>";
+      }
+
+      const sourceBreakdown = trending?.source_breakdown || [];
+      if (osintSourceChart) {
+        osintSourceChart.data.labels = sourceBreakdown.map(x => x.source_type);
+        osintSourceChart.data.datasets[0].data = sourceBreakdown.map(x => x.count);
+        osintSourceChart.update();
+      }
+
+      document.getElementById("reddit-spike-count").textContent = Number(trending?.reddit_spike_mentions || 0);
+      document.getElementById("govt-signal-count").textContent = Number(trending?.ngo_govt_signals?.government || 0);
+      document.getElementById("ngo-signal-count").textContent = Number(trending?.ngo_govt_signals?.ngo || 0);
+      document.getElementById("watchlist-count").textContent = Array.isArray(watchlists) ? watchlists.filter(x => x.enabled).length : 0;
+    }
+
+    function renderTable(payload) {
+      const tbody = document.getElementById("incident-table-body");
+      const rows = payload.items || [];
+      if (!rows.length) {
+        tbody.innerHTML = "<tr><td colspan='10' class='ops-muted p-3'>No incidents found for current filters.</td></tr>";
+        return;
+      }
+      tbody.innerHTML = rows.map(item => `
+        <tr>
+          <td>${escapeHtml(item.date)}</td>
+          <td><span class="risk-pill ${severityClass(Number(item.risk_score || 0))}">${Number(item.risk_score || 0)}</span></td>
+          <td>${escapeHtml(item.species || "-")}</td>
+          <td>${escapeHtml(item.state || "-")}</td>
+          <td>${escapeHtml(item.district || "-")}</td>
+          <td>${escapeHtml(item.crime_type || "-")}</td>
+          <td>${escapeHtml(item.source || "-")}</td>
+          <td>${Number(item.confidence || 0).toFixed(2)}</td>
+          <td class="small">${escapeHtml(item.action_recommendation || "-")}</td>
+          <td><a class="btn btn-sm btn-outline-info" href="${escapeHtml(resolveHref(item.open_url, item.url))}" target="_blank" rel="noopener">Open</a></td>
+        </tr>
+      `).join("");
+    }
+
+    function renderAnalystPanels(reports) {
+      const briefRoot = document.getElementById("analyst-brief-list");
+      const recoRoot = document.getElementById("top-recommendations-list");
+      const items = Array.isArray(reports) ? reports.slice(0, 20) : [];
+
+      briefRoot.innerHTML = "";
+      for (const item of items.slice(0, 10)) {
+        const div = document.createElement("div");
+        div.className = `alert-item ${severityClass(Number(item.risk_score || 0))}`;
+        div.innerHTML = `
+          <div class="alert-title"><a href="${escapeHtml(resolveHref(item.open_url, item.url))}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></div>
+          <div class="alert-meta">${escapeHtml(item.state || "-")} • ${escapeHtml(item.district || "-")} • Risk ${Number(item.risk_score || 0)}</div>
+          <div class="small mt-1">${escapeHtml(item.summary || "-")}</div>
+        `;
+        briefRoot.appendChild(div);
+      }
+      if (!items.length) {
+        briefRoot.innerHTML = "<div class='ops-muted'>No analyst reports generated yet.</div>";
+      }
+
+      const recommendationCounts = {};
+      for (const item of items) {
+        const recommendation = String(item.recommendation || "").trim();
+        if (!recommendation) continue;
+        recommendationCounts[recommendation] = (recommendationCounts[recommendation] || 0) + 1;
+      }
+      const ranked = Object.entries(recommendationCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      recoRoot.innerHTML = "";
+      for (const [recommendation, count] of ranked) {
+        const row = document.createElement("div");
+        row.className = "keyword-line d-flex justify-content-between";
+        row.innerHTML = `<span>${escapeHtml(recommendation)}</span><strong>${count}</strong>`;
+        recoRoot.appendChild(row);
+      }
+      if (!ranked.length) {
+        recoRoot.innerHTML = "<div class='ops-muted'>No recommendations available yet.</div>";
+      }
+    }
+
+    async function fetchJson(url) {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    function buildFilterQuery() {
+      const form = new FormData(document.getElementById("analyst-filter-form"));
+      const qs = new URLSearchParams();
+      for (const [key, value] of form.entries()) {
+        if (String(value).trim() !== "") {
+          qs.set(key, value);
+        }
+      }
+      return qs.toString();
+    }
+
+    function resolveFileName(res, fallback) {
+      const cd = res.headers.get("content-disposition") || "";
+      const match = cd.match(/filename=([^;]+)/i);
+      if (!match) return fallback;
+      return match[1].replaceAll('"', "").trim() || fallback;
+    }
+
+    async function triggerExport(kind) {
+      const qs = buildFilterQuery();
+      let base = endpoints.exportCsv;
+      if (kind === "pdf") {
+        base = endpoints.exportPdf;
+      } else if (kind === "excel") {
+        base = endpoints.exportExcel;
+      } else if (kind === "briefing") {
+        base = endpoints.exportBriefingPack;
+      }
+      const url = qs ? `${base}?${qs}` : base;
+      try {
+        const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = "/login";
+          return;
+        }
+        if (!res.ok) {
+          alert(`Export failed (${res.status}).`);
+          return;
+        }
+        const blob = await res.blob();
+        const fallback = kind === "pdf"
+          ? "wildlife_intelligence_report.pdf"
+          : kind === "excel"
+            ? "wildlife_intelligence_report.xlsx"
+            : kind === "briefing"
+              ? "wildlife_analyst_briefing_pack.json"
+              : "wildlife_intelligence_report.csv";
+        const fileName = resolveFileName(res, fallback);
+        const objectUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        alert("Export failed due to a network error.");
+      }
+    }
+
+    async function refreshFilterTable() {
+      const qs = buildFilterQuery();
+      try {
+        const payload = await fetchJson(`${endpoints.filterNews}?${qs}`);
+        renderTable(payload);
+      } catch (err) {
+        const tbody = document.getElementById("incident-table-body");
+        tbody.innerHTML = "<tr><td colspan='10' class='ops-muted p-3'>Could not load incident table right now.</td></tr>";
+      }
+    }
+
+    async function refreshAll() {
+      const requests = {
+        summary: fetchJson(endpoints.dashboardSummary),
+        mapData: fetchJson(endpoints.mapData),
+        chartData: fetchJson(endpoints.chartData),
+        alerts: fetchJson(endpoints.alerts),
+        popupAlerts: fetchJson(`${endpoints.alertsPopup}?since_id=${lastPopupAlertId}&limit=20`),
+        osintFeed: fetchJson(endpoints.osintFeed),
+        trendingKeywords: fetchJson(endpoints.trendingKeywords),
+        watchlists: fetchJson(endpoints.watchlists),
+        reports: fetchJson(endpoints.reports),
+        syncStatus: fetchJson(endpoints.syncStatus),
+      };
+      const keys = Object.keys(requests);
+      const settled = await Promise.allSettled(Object.values(requests));
+      const payload = {};
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        const result = settled[i];
+        payload[key] = result.status === "fulfilled" ? result.value : null;
+      }
+
+      if (payload.summary) {
+        setSummary(payload.summary);
+      }
+      if (payload.mapData) {
+        updateMap(payload.mapData);
+      }
+      if (payload.chartData) {
+        updateCharts(payload.chartData);
+        setFilterOptions(payload.chartData.filters);
+      }
+      if (payload.alerts) {
+        renderAlerts(payload.alerts);
+      }
+      if (payload.popupAlerts) {
+        renderPopupAlerts(payload.popupAlerts);
+      }
+      if (payload.osintFeed || payload.trendingKeywords || payload.watchlists) {
+        renderOSINTPanels(payload.osintFeed || [], payload.trendingKeywords || {}, payload.watchlists || []);
+      }
+      if (payload.reports) {
+        renderAnalystPanels(payload.reports);
+      }
+
+      const statusBox = document.getElementById("sync-live-status");
+      const syncStatus = payload.syncStatus;
+      if (syncStatus && syncStatus.running) {
+        statusBox.className = "alert alert-info mb-3";
+        statusBox.textContent = syncStatus.message || "Sync is running...";
+      } else if (syncStatus && syncStatus.error) {
+        statusBox.className = "alert alert-danger mb-3";
+        statusBox.textContent = syncStatus.error;
+      } else if (settled.some(x => x.status === "rejected")) {
+        statusBox.className = "alert alert-warning mb-3";
+        statusBox.textContent = "Some live widgets could not be loaded. Retrying automatically.";
+      } else {
+        statusBox.className = "alert d-none mb-3";
+        statusBox.textContent = "";
+      }
+    }
+
+    function renderPopupAlerts(alerts) {
+      if (!Array.isArray(alerts) || alerts.length === 0) return;
+      if (!window.bootstrap || !window.bootstrap.Toast) return;
+      const container = document.getElementById("popup-alert-container");
+      for (const alert of alerts) {
+        lastPopupAlertId = Math.max(lastPopupAlertId, Number(alert.id || 0));
+        const wrap = document.createElement("div");
+        wrap.className = "toast text-bg-dark border border-danger-subtle";
+        wrap.role = "alert";
+        wrap.ariaLive = "assertive";
+        wrap.ariaAtomic = "true";
+        wrap.innerHTML = `
+          <div class="toast-header bg-danger text-white">
+            <strong class="me-auto">Wildlife Alert</strong>
+            <small>${escapeHtml(alert.severity.toUpperCase())}</small>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+          </div>
+          <div class="toast-body">
+            <div class="fw-semibold mb-1">${escapeHtml(alert.title)}</div>
+            <div class="small mb-1">${escapeHtml(alert.state)} / ${escapeHtml(alert.district)} • Risk ${Number(alert.risk_score || 0)}</div>
+            <a href="${escapeHtml(resolveHref(alert.open_url, alert.url))}" class="btn btn-sm btn-outline-light mt-1" target="_blank" rel="noopener">Open Incident</a>
+          </div>
+        `;
+        container.appendChild(wrap);
+        const toast = new bootstrap.Toast(wrap, { delay: 8000 });
+        toast.show();
+        wrap.addEventListener("hidden.bs.toast", () => wrap.remove());
+      }
+    }
+
+    async function initializeDashboard() {
+      initMap();
+      initCharts();
+      try {
+        await refreshAll();
+        await refreshFilterTable();
+      } catch (err) {
+        const statusBox = document.getElementById("sync-live-status");
+        statusBox.className = "alert alert-danger mb-3";
+        statusBox.textContent = "Dashboard initialization failed. Please refresh the page.";
+      }
+    }
+
+    document.getElementById("analyst-filter-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await refreshFilterTable();
+    });
+
+    document.getElementById("sync-form").addEventListener("submit", () => {
+      document.getElementById("sync-now-btn").disabled = true;
+    });
+    document.getElementById("export-csv-btn").addEventListener("click", async () => triggerExport("csv"));
+    document.getElementById("export-pdf-btn").addEventListener("click", async () => triggerExport("pdf"));
+    const excelBtn = document.getElementById("export-excel-btn");
+    if (excelBtn) {
+      excelBtn.addEventListener("click", async () => triggerExport("excel"));
+    }
+    const briefingBtn = document.getElementById("export-briefing-btn");
+    if (briefingBtn) {
+      briefingBtn.addEventListener("click", async () => triggerExport("briefing"));
+    }
+
+    initializeDashboard();
+    setInterval(async () => {
+      await refreshAll();
+      await refreshFilterTable();
+    }, 15000);
+  </script>
+</body>
+</html>
