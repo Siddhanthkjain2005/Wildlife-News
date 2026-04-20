@@ -48,6 +48,14 @@ QUERY_BY_LANGUAGE: dict[str, list[str]] = {
     "kn": ["ಭಾರತ ವನ್ಯಜೀವಿ ಕಳ್ಳಬೇಟೆ", "ಭಾರತ ವನ್ಯಜೀವಿ ಕಳ್ಳಸಾಗಣೆ", "ಭಾರತ ಆನೆ ದಂತ ವಶ"],
     "ta": ["இந்தியா வனவிலங்கு வேட்டை", "இந்தியா விலங்கு கடத்தல்"],
     "te": ["భారత్ వన్యప్రాణి వేట", "భారత్ అక్రమ వన్యప్రాణి రవాణా"],
+    "ml": ["ഇന്ത്യ വന്യജീവി വേട്ട", "ഇന്ത്യ വന്യജീവി കടത്ത്", "ഇന്ത്യ ആനക്കൊമ്പ് പിടിച്ചെടുത്തു"],
+    "bn": ["ভারত বন্যপ্রাণী শিকার", "ভারত বন্যপ্রাণী পাচার", "ভারত হাতির দাঁত জব্দ"],
+    "mr": ["भारत वन्यजीव शिकारी", "भारत वन्यजीव तस्करी", "भारत हस्तीदंत जप्त"],
+    "gu": ["ભારત વન્યજીવ શિકાર", "ભારત વન્યજીવ તસ્કરી", "ભારત હાથીદાંત જપ્ત"],
+    "pa": ["ਭਾਰਤ ਜੰਗਲੀ ਜੀਵ ਸ਼ਿਕਾਰ", "ਭਾਰਤ ਜੰਗਲੀ ਜੀਵ ਤਸਕਰੀ", "ਭਾਰਤ ਹਾਥੀ ਦਾਂਤ ਜ਼ਬਤ"],
+    "ur": ["بھارت جنگلی حیات کا شکار", "بھارت جنگلی حیات اسمگلنگ", "بھارت ہاتھی دانت ضبط"],
+    "or": ["ଭାରତ ବନ୍ୟଜୀବ ଶିକାର", "ଭାରତ ବନ୍ୟଜୀବ ତସକରି", "ଭାରତ ହାତୀଦାନ୍ତ ଜବତ"],
+    "as": ["ভাৰত বন্যপ্ৰাণী চোৰাশিকার", "ভাৰত বন্যপ্ৰাণী সৰবৰাহ", "ভাৰত হাতীদাঁত জব্দ"],
 }
 
 REGION_BY_LANGUAGE = {
@@ -56,6 +64,14 @@ REGION_BY_LANGUAGE = {
     "kn": ("kn", "IN", "IN:kn", "en-IN"),
     "ta": ("ta", "IN", "IN:ta", "en-IN"),
     "te": ("te", "IN", "IN:te", "en-IN"),
+    "ml": ("ml", "IN", "IN:ml", "en-IN"),
+    "bn": ("bn", "IN", "IN:bn", "en-IN"),
+    "mr": ("mr", "IN", "IN:mr", "en-IN"),
+    "gu": ("gu", "IN", "IN:gu", "en-IN"),
+    "pa": ("pa", "IN", "IN:pa", "en-IN"),
+    "ur": ("ur", "IN", "IN:ur", "en-IN"),
+    "or": ("or", "IN", "IN:or", "en-IN"),
+    "as": ("as", "IN", "IN:as", "en-IN"),
 }
 
 DEFAULT_OSINT_KEYWORDS = [
@@ -105,13 +121,13 @@ PROVIDER_QUERY_CAPS = {
     "x_adapter": 2,
 }
 PROVIDER_LANGUAGE_CAPS = {
-    "google_rss": 8,
+    "google_rss": 13,
     "bing_rss": 3,
     "gdelt": 3,
-    "newsapi": 2,
-    "gnews": 3,
+    "newsapi": 4,
+    "gnews": 6,
     "mediastack": 2,
-    "newsdata": 3,
+    "newsdata": 6,
 }
 
 
@@ -140,6 +156,7 @@ class NewsCollector:
         self._cooldown_notified: set[str] = set()
         self._provider_next_allowed_at: dict[str, float] = {}
         self._query_offsets: dict[tuple[str, str], int] = {}
+        self._language_offsets: dict[str, int] = {}
         self._rate_state_lock = Lock()
 
     @staticmethod
@@ -265,10 +282,19 @@ class NewsCollector:
 
     @staticmethod
     def _detect_language(title: str, summary: str, fallback: str) -> str:
+        fallback_lang = str(fallback or "").strip().lower() or "unknown"
+        text = f"{title}. {summary}".strip()
         try:
-            return detect(f"{title}. {summary}")
+            detected = detect(text).strip().lower()
         except LangDetectException:
-            return fallback or "unknown"
+            return fallback_lang
+        if not detected:
+            return fallback_lang
+        if fallback_lang not in {"", "unknown"} and fallback_lang != detected:
+            # For non-English query lanes, langdetect tends to over-predict English on short mixed snippets.
+            if fallback_lang != "en" and (detected == "en" or len(text) < 120):
+                return fallback_lang
+        return detected
 
     @staticmethod
     def _csv_list(raw_value: str) -> list[str]:
@@ -336,7 +362,7 @@ class NewsCollector:
         source_type = self._provider_source_type(provider)
         if source_type != "news":
             return ["en"]
-        ordered = []
+        ordered: list[str] = []
         for preferred in ("en", "hi"):
             if preferred in self._supported_languages():
                 ordered.append(preferred)
@@ -345,7 +371,12 @@ class NewsCollector:
             if normalized not in ordered:
                 ordered.append(normalized)
         max_languages = max(1, PROVIDER_LANGUAGE_CAPS.get(provider, len(ordered)))
-        return ordered[:max_languages] or ["en"]
+        if max_languages >= len(ordered):
+            return ordered or ["en"]
+        start = self._language_offsets.get(provider, 0) % len(ordered)
+        selected = [ordered[(start + index) % len(ordered)] for index in range(max_languages)]
+        self._language_offsets[provider] = (start + max_languages) % len(ordered)
+        return selected or ["en"]
 
     @staticmethod
     def _provider_has_required_key(provider: str) -> bool:
