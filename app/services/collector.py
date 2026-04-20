@@ -5,6 +5,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from threading import Lock
+from time import monotonic, sleep
 from urllib.parse import parse_qs, parse_qsl, quote_plus, unquote, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -112,6 +114,9 @@ class NewsCollector:
         self._failed_sources: list[dict[str, object]] = []
         self._provider_cooldowns: dict[str, datetime] = {}
         self._cooldown_notified: set[str] = set()
+        self._provider_next_allowed_at: dict[str, float] = {}
+        self._query_offsets: dict[tuple[str, str], int] = {}
+        self._rate_state_lock = Lock()
 
     @staticmethod
     def _parse_points(raw: str) -> list[str]:
@@ -290,31 +295,120 @@ class NewsCollector:
             return QUERY_BY_LANGUAGE[language]
         return QUERY_BY_LANGUAGE["en"]
 
+    def _active_languages_for_provider(self, provider: str) -> list[str]:
+        source_type = self._provider_source_type(provider)
+        if source_type != "news":
+            return ["en"]
+        active: list[str] = []
+        for lang in self._supported_languages():
+            normalized = lang if lang in QUERY_BY_LANGUAGE else "en"
+            if normalized not in active:
+                active.append(normalized)
+        return active or ["en"]
+
+    def _select_queries_for_cycle(self, *, provider: str, language: str, queries: list[str]) -> list[str]:
+        if not queries:
+            return []
+        max_queries = max(1, int(settings.max_queries_per_language))
+        if max_queries >= len(queries):
+            return list(queries)
+        key = (provider, language)
+        start = self._query_offsets.get(key, 0) % len(queries)
+        selected = [queries[(start + index) % len(queries)] for index in range(max_queries)]
+        self._query_offsets[key] = (start + len(selected)) % len(queries)
+        return selected
+
+    def _record_provider_failure(self, provider: str) -> None:
+        with self._rate_state_lock:
+            self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
+
+    @staticmethod
+    def _retry_after_seconds(header_value: str | None) -> int | None:
+        value = str(header_value or "").strip()
+        if not value:
+            return None
+        if value.isdigit():
+            return max(1, int(value))
+        try:
+            retry_at = date_parser.parse(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        delta = (retry_at.astimezone(UTC) - datetime.now(tz=UTC)).total_seconds()
+        return max(1, int(delta))
+
+    def _cooldown_seconds_from_response(self, response: requests.Response | None) -> int:
+        configured = max(30, int(settings.provider_rate_limit_cooldown_seconds))
+        if response is None:
+            return configured
+        parsed = self._retry_after_seconds(response.headers.get("Retry-After"))
+        if parsed is None:
+            return configured
+        return max(30, min(3600, parsed))
+
+    def _set_provider_cooldown(self, provider: str, seconds: int, reason: str) -> None:
+        cooldown_seconds = max(30, int(seconds))
+        cooldown_until = datetime.utcnow() + timedelta(seconds=cooldown_seconds)
+        with self._rate_state_lock:
+            previous = self._provider_cooldowns.get(provider)
+            if previous is None or previous < cooldown_until:
+                self._provider_cooldowns[provider] = cooldown_until
+                self._cooldown_notified.discard(provider)
+        logger.warning(
+            "Provider cooldown enabled: %s for %ss (%s) until %s UTC",
+            provider,
+            cooldown_seconds,
+            reason,
+            cooldown_until.isoformat(timespec="seconds"),
+        )
+
+    def _throttle_provider(self, provider: str) -> None:
+        interval_seconds = max(0.0, float(settings.provider_min_request_interval_seconds))
+        if interval_seconds <= 0:
+            return
+        wait_seconds = 0.0
+        with self._rate_state_lock:
+            now = monotonic()
+            next_allowed = self._provider_next_allowed_at.get(provider, now)
+            scheduled = max(now, next_allowed)
+            self._provider_next_allowed_at[provider] = scheduled + interval_seconds
+            wait_seconds = max(0.0, scheduled - now)
+        if wait_seconds > 0:
+            sleep(wait_seconds)
+
     def _provider_on_cooldown(self, provider: str) -> bool:
-        until = self._provider_cooldowns.get(provider)
+        with self._rate_state_lock:
+            until = self._provider_cooldowns.get(provider)
+            notified = provider in self._cooldown_notified
         if until is None:
             return False
         now = datetime.utcnow()
         if now >= until:
-            self._provider_cooldowns.pop(provider, None)
-            self._cooldown_notified.discard(provider)
+            with self._rate_state_lock:
+                self._provider_cooldowns.pop(provider, None)
+                self._cooldown_notified.discard(provider)
             return False
-        if provider not in self._cooldown_notified:
+        if not notified:
             logger.warning(
                 "Skipping provider %s due to temporary cooldown until %s UTC",
                 provider,
                 until.isoformat(timespec="seconds"),
             )
-            self._cooldown_notified.add(provider)
+            with self._rate_state_lock:
+                self._cooldown_notified.add(provider)
         return True
 
     @staticmethod
     def _region(language: str) -> tuple[str, str, str, str]:
         return REGION_BY_LANGUAGE.get(language, REGION_BY_LANGUAGE["en"])
 
-    def _http_get_json(self, url: str, params: dict[str, object]) -> dict[str, object]:
+    def _http_get_json(self, *, provider: str, url: str, params: dict[str, object]) -> dict[str, object]:
         def _call() -> requests.Response:
-            return self.http.get(url, params=params, timeout=settings.request_timeout_seconds)
+            response = self.http.get(url, params=params, timeout=settings.request_timeout_seconds)
+            if response.status_code >= 500:
+                response.raise_for_status()
+            return response
 
         response = retry_call(
             _call,
@@ -325,6 +419,9 @@ class NewsCollector:
                 "Retrying provider request (%s/%s): %s", attempt, 3, err
             ),
         )
+        if response.status_code == 429:
+            cooldown_seconds = self._cooldown_seconds_from_response(response)
+            self._set_provider_cooldown(provider=provider, seconds=cooldown_seconds, reason="rate_limit_429")
         response.raise_for_status()
         return response.json()
 
@@ -334,11 +431,13 @@ class NewsCollector:
         query: str,
         limit: int,
         fallback_source: str,
+        provider: str,
         language: str = "en",
     ) -> list[RawArticle]:
         items: list[RawArticle] = []
         query_tokens = [token.strip().lower() for token in query.split() if token.strip()]
         for feed_url in urls:
+            self._throttle_provider(provider)
             feed = feedparser.parse(feed_url)
             for entry in feed.entries[:limit]:
                 title = self._strip_html(getattr(entry, "title", ""))
@@ -366,6 +465,7 @@ class NewsCollector:
     def _fetch_reddit_osint(self, query: str, limit: int) -> list[RawArticle]:
         items: list[RawArticle] = []
         for subreddit in REDDIT_SUBREDDITS:
+            self._throttle_provider("reddit_osint")
             feed_url = (
                 f"https://www.reddit.com/r/{subreddit}/search.rss?"
                 f"q={quote_plus(query)}&restrict_sr=1&sort=new&t=week"
@@ -392,6 +492,7 @@ class NewsCollector:
             query=query,
             limit=limit,
             fallback_source="govt-notice",
+            provider="govt_notices",
             language="en",
         )
 
@@ -401,6 +502,7 @@ class NewsCollector:
             query=query,
             limit=limit,
             fallback_source="ngo-feed",
+            provider="ngo_feeds",
             language="en",
         )
 
@@ -464,7 +566,8 @@ class NewsCollector:
 
     def _fetch_gdelt(self, language: str, query: str, limit: int) -> list[RawArticle]:
         payload = self._http_get_json(
-            "https://api.gdeltproject.org/api/v2/doc/doc",
+            provider="gdelt",
+            url="https://api.gdeltproject.org/api/v2/doc/doc",
             params={
                 "query": f"({query}) AND sourcecountry:IN",
                 "mode": "ArtList",
@@ -500,7 +603,8 @@ class NewsCollector:
         if not api_lang:
             return []
         payload = self._http_get_json(
-            "https://newsapi.org/v2/everything",
+            provider="newsapi",
+            url="https://newsapi.org/v2/everything",
             params={
                 "apiKey": settings.newsapi_key,
                 "q": query,
@@ -534,7 +638,8 @@ class NewsCollector:
         if not settings.gnews_api_key:
             return []
         payload = self._http_get_json(
-            "https://gnews.io/api/v4/search",
+            provider="gnews",
+            url="https://gnews.io/api/v4/search",
             params={
                 "token": settings.gnews_api_key,
                 "q": query,
@@ -567,7 +672,8 @@ class NewsCollector:
         if not settings.mediastack_api_key:
             return []
         payload = self._http_get_json(
-            "http://api.mediastack.com/v1/news",
+            provider="mediastack",
+            url="http://api.mediastack.com/v1/news",
             params={
                 "access_key": settings.mediastack_api_key,
                 "keywords": query,
@@ -600,7 +706,8 @@ class NewsCollector:
         if not settings.newsdata_api_key:
             return []
         payload = self._http_get_json(
-            "https://newsdata.io/api/1/news",
+            provider="newsdata",
+            url="https://newsdata.io/api/1/news",
             params={
                 "apikey": settings.newsdata_api_key,
                 "q": query,
@@ -629,6 +736,7 @@ class NewsCollector:
     def _fetch_provider(self, provider: str, language: str, query: str, limit: int) -> list[RawArticle]:
         if self._provider_on_cooldown(provider):
             return []
+        self._throttle_provider(provider)
         try:
             if provider == "google_rss":
                 return self._fetch_google_rss(language, query, limit)
@@ -654,29 +762,16 @@ class NewsCollector:
                 return self._fetch_x_adapter(query, limit)
         except requests.RequestException as err:
             status_code = getattr(getattr(err, "response", None), "status_code", None)
-            if provider == "gdelt" and status_code == 429:
-                cooldown_until = datetime.utcnow() + timedelta(minutes=15)
-                previous = self._provider_cooldowns.get(provider)
-                if previous is None or previous < cooldown_until:
-                    self._provider_cooldowns[provider] = cooldown_until
-                    self._cooldown_notified.discard(provider)
-                logger.warning(
-                    "Provider request failed: %s (%s, %s): %s; enabling cooldown until %s UTC",
-                    provider,
-                    language,
-                    query,
-                    err,
-                    cooldown_until.isoformat(timespec="seconds"),
-                )
-                self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
-                self._push_failed_source(provider=provider, language=language, query=query, error=str(err))
-                return []
+            if status_code == 429:
+                response = getattr(err, "response", None)
+                cooldown_seconds = self._cooldown_seconds_from_response(response)
+                self._set_provider_cooldown(provider=provider, seconds=cooldown_seconds, reason="rate_limit_429")
             logger.warning("Provider request failed: %s (%s, %s): %s", provider, language, query, err)
-            self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
+            self._record_provider_failure(provider)
             self._push_failed_source(provider=provider, language=language, query=query, error=str(err))
         except ValueError as err:
             logger.warning("Provider payload parse failed: %s (%s, %s): %s", provider, language, query, err)
-            self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
+            self._record_provider_failure(provider)
             self._push_failed_source(provider=provider, language=language, query=query, error=str(err))
         return []
 
@@ -1076,7 +1171,7 @@ class NewsCollector:
                 try:
                     fetched[query] = future.result()
                 except Exception as err:  # noqa: BLE001
-                    self._provider_failures[provider] = self._provider_failures.get(provider, 0) + 1
+                    self._record_provider_failure(provider)
                     self._push_failed_source(provider=provider, language=language, query=query, error=str(err))
                     fetched[query] = []
         return fetched
@@ -1098,17 +1193,15 @@ class NewsCollector:
         provider_stats: dict[str, dict[str, int]] = {}
         district_spike_cache: dict[tuple[str, str], bool] = {}
         self._provider_failures = {}
-        self._provider_cooldowns = {}
-        self._cooldown_notified = set()
+        self._provider_next_allowed_at = {}
         start_from_utc = self._start_from_utc() if (settings.today_only or str(settings.start_from_date or "").strip()) else None
 
         for provider in self._enabled_providers():
             source_type = self._provider_source_type(provider)
             provider_stats.setdefault(provider, {"provider": provider, "scanned": 0, "kept": 0, "failed": 0})
-            for lang in self._supported_languages():
-                if source_type != "news" and lang != "en":
-                    continue
-                provider_queries = self._queries_for_language(lang) if source_type == "news" else self._osint_queries(db)
+            for lang in self._active_languages_for_provider(provider):
+                query_pool = self._queries_for_language(lang) if source_type == "news" else self._osint_queries(db)
+                provider_queries = self._select_queries_for_cycle(provider=provider, language=lang, queries=query_pool)
                 fetched_batches = self._fetch_batch_parallel(
                     provider=provider,
                     language=lang,

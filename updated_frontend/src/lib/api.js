@@ -13,8 +13,7 @@ export const ENDPOINTS = {
   exportCsv: withBase("/api/export/csv"),
   exportPdf: withBase("/api/export/pdf"),
   exportExcel: withBase("/api/export/excel"),
-  exportBriefing: withBase("/api/export/briefing-pack"),
-  sync: withBase("/sync")
+  exportBriefing: withBase("/api/export/briefing-pack")
 };
 
 export async function fetchJson(url) {

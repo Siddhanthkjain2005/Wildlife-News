@@ -91,6 +91,11 @@ TODAY_ONLY=true
 APP_TIMEZONE="Asia/Kolkata"
 START_FROM_DATE="2026-04-19"
 SYNC_INTERVAL_MINUTES=5
+MAX_ARTICLES_PER_QUERY=25
+MAX_QUERIES_PER_LANGUAGE=3
+PROVIDER_MIN_REQUEST_INTERVAL_SECONDS=1.2
+PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS=900
+SYNC_SCHEDULER_JITTER_SECONDS=20
 FRONTEND_ORIGIN="https://your-frontend-domain.vercel.app"
 ```
 
@@ -119,6 +124,11 @@ TODAY_ONLY=true
 APP_TIMEZONE=Asia/Kolkata
 START_FROM_DATE=2026-04-19
 SYNC_INTERVAL_MINUTES=5
+MAX_ARTICLES_PER_QUERY=25
+MAX_QUERIES_PER_LANGUAGE=3
+PROVIDER_MIN_REQUEST_INTERVAL_SECONDS=1.2
+PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS=900
+SYNC_SCHEDULER_JITTER_SECONDS=20
 FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
 ```
 
@@ -201,7 +211,6 @@ You can enable/disable providers with:
 ## API Endpoints
 
 - `GET /` dashboard
-- `POST /sync` manual live sync
 - `GET /api/news?lang=en&min_score=0.65&limit=100` filtered JSON data
 - `GET /api/live-incidents?since_id=120&limit=30` new incidents stream
 - `GET /api/officer-metrics` critical/high counters and latest ID
@@ -258,7 +267,6 @@ You can enable/disable providers with:
 ## Security and Ops Hardening
 
 - Optional admin protection for mutating routes:
-  - `POST /sync`
   - `POST /api/watchlists`
 - Export routes are protected:
   - `/api/export/*`
@@ -301,6 +309,12 @@ You can enable/disable providers with:
 9. OSINT connectors ingest Reddit + government notices + NGO feeds + X adapter signals.
 10. Analyst suite supports filtered CSV/PDF/briefing-pack exports and AI action recommendations with route/confidence rationale.
 11. Analyst report records are persisted in `reports` table with summary, intel points, recommendation, route hypothesis, and confidence reason.
+
+Rate-limit resilience:
+
+- Collector enforces provider-level request spacing (`PROVIDER_MIN_REQUEST_INTERVAL_SECONDS`).
+- On upstream `429`, provider requests are paused using `Retry-After` (or `PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS` fallback).
+- Query rotation limits per-cycle pressure via `MAX_QUERIES_PER_LANGUAGE` while preserving rolling coverage across sync cycles.
 
 ## SQL and Excel flow
 

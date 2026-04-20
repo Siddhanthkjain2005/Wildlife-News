@@ -137,19 +137,6 @@ export default function App() {
   const filterOptions = chartData?.filters || { states: [], species: [], crime_types: [], sources: [] };
   const lastSync = summary?.last_sync_time || syncStatus?.finished_at;
 
-  async function handleSyncNow() {
-    try {
-      const res = await fetch(ENDPOINTS.sync, { method: "POST", credentials: "same-origin" });
-      if (res.redirected) {
-        window.location.href = res.url;
-        return;
-      }
-      await loadDashboard();
-    } catch {
-      setError("Sync trigger failed.");
-    }
-  }
-
   function handleExport(kind) {
     const query = buildQuery(filters);
     const base =
@@ -189,7 +176,6 @@ export default function App() {
           activeSection={activeSection}
           busy={busy}
           onRefresh={loadDashboard}
-          onSync={handleSyncNow}
           onExport={handleExport}
           onToggleMenu={() => setMobileOpen((v) => !v)}
         />

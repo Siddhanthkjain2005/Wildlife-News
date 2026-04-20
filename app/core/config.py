@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     app_timezone: str = "Asia/Kolkata"
     start_from_date: str = ""
     max_articles_per_query: int = 25
+    max_queries_per_language: int = 3
     request_timeout_seconds: int = 20
     provider_parallel_workers: int = 6
+    provider_min_request_interval_seconds: float = 1.2
+    provider_rate_limit_cooldown_seconds: int = 900
+    sync_scheduler_jitter_seconds: int = 20
 
     # Intelligence thresholds
     ai_threshold: float = 0.62

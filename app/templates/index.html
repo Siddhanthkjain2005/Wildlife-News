@@ -22,9 +22,6 @@
           </div>
         </div>
         <div class="d-flex gap-2">
-        <form method="post" action="/sync" id="sync-form" class="d-flex gap-2">
-          <button class="btn btn-sm btn-outline-info" id="sync-now-btn">{{ texts.manual_sync }}</button>
-        </form>
           <a class="btn btn-sm btn-outline-light" href="/admin/settings">Admin Settings</a>
         </div>
       </div>
@@ -814,9 +811,6 @@
       await refreshFilterTable();
     });
 
-    document.getElementById("sync-form").addEventListener("submit", () => {
-      document.getElementById("sync-now-btn").disabled = true;
-    });
     document.getElementById("export-csv-btn").addEventListener("click", async () => triggerExport("csv"));
     document.getElementById("export-pdf-btn").addEventListener("click", async () => triggerExport("pdf"));
     const excelBtn = document.getElementById("export-excel-btn");

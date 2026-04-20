@@ -1,10 +1,9 @@
-import { Menu, RefreshCw, Zap, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Menu, RefreshCw, Download, FileSpreadsheet, FileText } from "lucide-react";
 
 export default function TopBar({
   activeSection,
   busy,
   onRefresh,
-  onSync,
   onExport,
   onToggleMenu
 }) {
@@ -63,10 +62,6 @@ export default function TopBar({
           </button>
         </div>
 
-        <button type="button" className="btn btn-primary" onClick={onSync}>
-          <Zap size={14} strokeWidth={2.4} />
-          <span>Run Sync</span>
-        </button>
       </div>
 
       <style>{`

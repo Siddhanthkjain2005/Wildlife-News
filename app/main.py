@@ -71,7 +71,6 @@ sync_state_store = SyncStateStore()
 runtime_diagnostics: dict[str, object] = {"ai_model_ready": False, "startup_time": None}
 rate_limiter = RateLimiter(settings.api_rate_limit_per_minute)
 login_rate_limiter = RateLimiter(settings.login_rate_limit_per_minute)
-sync_rate_limiter = RateLimiter(settings.sync_rate_limit_per_minute)
 api_cache = TTLCache(settings.cache_ttl_seconds)
 DEFAULT_WATCHLISTS = [
     ("poaching", "threat"),
@@ -1039,7 +1038,7 @@ def _complete_sync_error(trigger: str, error_message: str, duration: float) -> N
 
 
 def _sync_once(db: Session) -> tuple[dict[str, object], int]:
-    effective_limit = max(40, settings.max_articles_per_query)
+    effective_limit = max(1, settings.max_articles_per_query)
     stats = collector.collect_and_store(
         db=db,
         limit_per_query=effective_limit,
@@ -1144,6 +1143,9 @@ def _reschedule_sync_job(interval_minutes: int) -> None:
         id="poaching-news-sync",
         replace_existing=True,
         max_instances=1,
+        coalesce=True,
+        misfire_grace_time=max(60, int(interval_minutes) * 60),
+        jitter=max(0, int(settings.sync_scheduler_jitter_seconds)),
     )
 
 
@@ -1337,24 +1339,8 @@ def legacy_home(
 
 
 @app.post("/sync")
-def sync_now(request: Request):
-    ip = _client_ip(request)
-    try:
-        require_admin_access(request)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=303)
-    if not sync_rate_limiter.is_allowed(f"sync:{ip}"):
-        _audit(actor="admin", action="sync_trigger", status="blocked", ip=ip, notes="rate_limited")
-        raise HTTPException(status_code=429, detail="Sync trigger rate limit exceeded.")
-    if not _try_start_sync(trigger="manual"):
-        _audit(actor="admin", action="sync_trigger", status="blocked", ip=ip, notes="already_running")
-        query = urlencode({"sync": "error", "msg": "A sync job is already running."})
-        return RedirectResponse(url=f"/?{query}", status_code=303)
-
-    Thread(target=_run_sync_job, args=("manual",), daemon=True).start()
-    _audit(actor="admin", action="sync_trigger", status="ok", ip=ip, notes="manual sync started")
-    query = urlencode({"sync": "ok", "msg": "Sync started in background."})
-    return RedirectResponse(url=f"/?{query}", status_code=303)
+def sync_now():
+    raise HTTPException(status_code=410, detail="Manual sync is disabled. Scheduler runs automatically.")
 
 
 @app.get("/login")
