@@ -3,6 +3,7 @@ import { Menu, RefreshCw, Download, FileSpreadsheet, FileText } from "lucide-rea
 export default function TopBar({
   activeSection,
   busy,
+  syncStatus,
   onRefresh,
   onExport,
   onToggleMenu
@@ -16,6 +17,14 @@ export default function TopBar({
     osint: "OSINT Feed",
     reco: "Recommendations"
   };
+  const isSearching = Boolean(syncStatus?.running);
+  const syncLabel = isSearching ? "Search in progress" : "Auto search active";
+  const syncMessage = String(syncStatus?.message || "").trim();
+  const syncProgress = syncStatus?.progress || {};
+  const provider = typeof syncProgress.provider === "string" && syncProgress.provider !== "-" ? syncProgress.provider : "";
+  const language = typeof syncProgress.language === "string" && syncProgress.language !== "-" ? syncProgress.language : "";
+  const scope = [provider, language].filter(Boolean).join(" / ");
+  const syncMeta = isSearching ? (scope || syncMessage || "Collecting live reports") : "";
 
   return (
     <header className="topbar">
@@ -36,6 +45,12 @@ export default function TopBar({
       </div>
 
       <div className="topbar-right">
+        <div className={`sync-pill ${isSearching ? "is-running" : "is-idle"}`} role="status" aria-live="polite">
+          <span className="sync-pill-dot" aria-hidden="true" />
+          <span className="sync-pill-label">{syncLabel}</span>
+          {syncMeta ? <span className="sync-pill-meta">{syncMeta}</span> : null}
+        </div>
+
         <button
           type="button"
           className="btn btn-ghost"

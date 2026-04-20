@@ -372,6 +372,55 @@ button {
   flex-wrap: wrap;
 }
 
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-1);
+  color: var(--muted);
+  max-width: 420px;
+}
+
+.sync-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--dim);
+}
+
+.sync-pill-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sync-pill-meta {
+  font-size: 0.73rem;
+  color: var(--text);
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sync-pill.is-running {
+  border-color: var(--primary-border);
+  background: var(--primary-soft);
+  color: var(--primary-2);
+}
+
+.sync-pill.is-running .sync-pill-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.16);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
 .content {
   padding: 22px 22px 40px;
   display: grid;
@@ -1285,6 +1334,12 @@ tbody tr:hover {
   .topbar {
     padding: 12px 16px;
   }
+  .sync-pill {
+    max-width: 300px;
+  }
+  .sync-pill-meta {
+    max-width: 150px;
+  }
   .kpi-grid,
   .filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1297,6 +1352,9 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
   .topbar-right .btn-label {
+    display: none;
+  }
+  .sync-pill-meta {
     display: none;
   }
 }

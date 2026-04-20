@@ -325,8 +325,16 @@
       return "sev-low";
     }
 
-    function syncIndicatorText(syncRunning) {
-      return syncRunning ? "Sync: Running" : "Sync: Idle";
+    function syncIndicatorText(syncInput) {
+      const syncStatus = (typeof syncInput === "object" && syncInput !== null) ? syncInput : null;
+      const syncRunning = syncStatus ? Boolean(syncStatus.running) : Boolean(syncInput);
+      if (!syncRunning) return "Search: Idle";
+
+      const progress = syncStatus?.progress || {};
+      const provider = typeof progress.provider === "string" && progress.provider !== "-" ? progress.provider : "";
+      const language = typeof progress.language === "string" && progress.language !== "-" ? progress.language : "";
+      const scope = [provider, language].filter(Boolean).join(" / ");
+      return scope ? `Search: Running (${scope})` : "Search: Running";
     }
 
     function setSummary(summary) {
@@ -748,9 +756,20 @@
 
       const statusBox = document.getElementById("sync-live-status");
       const syncStatus = payload.syncStatus;
+      if (syncStatus) {
+        document.getElementById("sync-indicator").textContent = syncIndicatorText(syncStatus);
+      }
       if (syncStatus && syncStatus.running) {
+        const progress = syncStatus.progress || {};
+        const provider = typeof progress.provider === "string" && progress.provider !== "-" ? progress.provider : "";
+        const language = typeof progress.language === "string" && progress.language !== "-" ? progress.language : "";
+        const query = typeof progress.query === "string" && progress.query !== "-" ? progress.query : "";
+        const details = [];
+        const scope = [provider, language].filter(Boolean).join(" / ");
+        if (scope) details.push(scope);
+        if (query) details.push(`q: ${query}`);
         statusBox.className = "alert alert-info mb-3";
-        statusBox.textContent = syncStatus.message || "Sync is running...";
+        statusBox.textContent = `Search in progress... ${syncStatus.message || "Collecting live reports."}${details.length ? ` (${details.join(" • ")})` : ""}`;
       } else if (syncStatus && syncStatus.error) {
         statusBox.className = "alert alert-danger mb-3";
         statusBox.textContent = syncStatus.error;

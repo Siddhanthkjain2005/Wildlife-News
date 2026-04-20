@@ -136,6 +136,22 @@ export default function App() {
 
   const filterOptions = chartData?.filters || { states: [], species: [], crime_types: [], sources: [] };
   const lastSync = summary?.last_sync_time || syncStatus?.finished_at;
+  const syncProgressText = useMemo(() => {
+    if (!syncStatus?.running) return "";
+    const progress = syncStatus?.progress || {};
+    const provider = typeof progress.provider === "string" && progress.provider !== "-" ? progress.provider : "";
+    const language = typeof progress.language === "string" && progress.language !== "-" ? progress.language : "";
+    const query = typeof progress.query === "string" && progress.query !== "-" ? progress.query : "";
+    const scanned = Number.isFinite(Number(progress.scanned)) ? Number(progress.scanned) : null;
+    const kept = Number.isFinite(Number(progress.kept)) ? Number(progress.kept) : null;
+
+    const parts = [];
+    const scope = [provider, language].filter(Boolean).join(" / ");
+    if (scope) parts.push(scope);
+    if (query) parts.push(`q: ${query}`);
+    if (scanned !== null && kept !== null) parts.push(`scanned ${scanned}, kept ${kept}`);
+    return parts.join(" • ");
+  }, [syncStatus]);
 
   function handleExport(kind) {
     const query = buildQuery(filters);
@@ -175,6 +191,7 @@ export default function App() {
         <TopBar
           activeSection={activeSection}
           busy={busy}
+          syncStatus={syncStatus}
           onRefresh={loadDashboard}
           onExport={handleExport}
           onToggleMenu={() => setMobileOpen((v) => !v)}
@@ -190,7 +207,10 @@ export default function App() {
           {syncStatus?.running ? (
             <div className="status info" role="status">
               <Activity size={16} />
-              <span>{syncStatus.message || "Sync in progress…"}</span>
+              <span>
+                {syncStatus.message || "Search in progress…"}
+                {syncProgressText ? ` — ${syncProgressText}` : ""}
+              </span>
             </div>
           ) : null}
 
