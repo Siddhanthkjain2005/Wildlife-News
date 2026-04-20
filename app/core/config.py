@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # Providers
     enabled_providers: str = (
         "google_rss,bing_rss,gdelt,newsapi,gnews,mediastack,newsdata,"
-        "reddit_osint,govt_notices,ngo_feeds,x_adapter"
+        "reddit_osint,ngo_feeds,x_adapter"
     )
     supported_languages: str = "en,hi,kn,ta,te,ml,bn,mr,gu,pa,ur,or,as"
     newsapi_key: str | None = None

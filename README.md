@@ -216,7 +216,8 @@ Live event sheet columns include:
 
 You can enable/disable providers with:
 
-- `ENABLED_PROVIDERS="google_rss,bing_rss,gdelt,newsapi,gnews,mediastack,newsdata"`
+- `ENABLED_PROVIDERS="google_rss,bing_rss,gdelt,newsapi,gnews,mediastack,newsdata,reddit_osint,ngo_feeds,x_adapter"`
+- `govt_notices` is intentionally disabled in runtime because upstream feeds are unstable and can stall sync cycles.
 
 ## API Endpoints
 

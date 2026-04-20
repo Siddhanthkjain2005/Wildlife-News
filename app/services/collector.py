@@ -119,6 +119,7 @@ ALL_PROVIDER_ORDER = [
     "ngo_feeds",
     "x_adapter",
 ]
+DISABLED_PROVIDERS = {"govt_notices"}
 
 KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata"}
 PROVIDER_QUERY_CAPS = {
@@ -334,13 +335,12 @@ class NewsCollector:
 
     def _enabled_providers(self) -> list[str]:
         configured = self._csv_list(settings.enabled_providers)
-        if not configured:
-            return list(ALL_PROVIDER_ORDER)
         ordered: list[str] = []
-        for provider in [*configured, *ALL_PROVIDER_ORDER]:
+        for provider in ([*configured, *ALL_PROVIDER_ORDER] if configured else ALL_PROVIDER_ORDER):
             if provider and provider not in ordered:
                 ordered.append(provider)
-        return ordered
+        filtered = [provider for provider in ordered if provider not in DISABLED_PROVIDERS]
+        return filtered or [provider for provider in ALL_PROVIDER_ORDER if provider not in DISABLED_PROVIDERS]
 
     def _supported_languages(self) -> list[str]:
         configured = self._csv_list(settings.supported_languages)
