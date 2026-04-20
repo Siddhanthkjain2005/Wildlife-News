@@ -1,5 +1,6 @@
 import { Table, ExternalLink, SearchX } from "lucide-react";
 import { formatDate, riskLevel } from "../lib/format.js";
+import { resolveExternalUrl } from "../lib/api.js";
 
 export default function IncidentTable({ rows, loading }) {
   return (
@@ -46,7 +47,7 @@ export default function IncidentTable({ rows, loading }) {
                     <td className="cell-mono">{Number(row.confidence || 0).toFixed(2)}</td>
                     <td>
                       <a
-                        href={row.open_url || "#"}
+                        href={resolveExternalUrl(row.open_url, row.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="feed-link"

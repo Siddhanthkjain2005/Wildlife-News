@@ -3,6 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapPinned } from "lucide-react";
 import { riskLevel } from "../lib/format.js";
+import { resolveExternalUrl } from "../lib/api.js";
 
 export default function MapPanel({ mapData, onMapError }) {
   const nodeRef = useRef(null);
@@ -41,12 +42,13 @@ export default function MapPanel({ mapData, onMapError }) {
           weight: 1.5
         });
         const title = (item.title || "Incident").replace(/</g, "&lt;");
+        const articleHref = resolveExternalUrl(item.open_url, item.url).replace(/"/g, "&quot;");
         marker.bindPopup(
           `<div style="min-width:220px">
             <b>${title}</b>
             <div style="margin-top:4px;color:#94a3b8;font-size:11px">${item.state || "-"} · ${item.district || "-"}</div>
             <div style="margin-top:6px;font-size:12px">Risk <b style="color:${color}">${Number(item.risk_score || 0)}</b> · ${item.species || "—"}</div>
-            <a href="${item.open_url || "#"}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;color:#34d399">Open article →</a>
+            <a href="${articleHref}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;color:#34d399">Open article →</a>
           </div>`
         );
         marker.addTo(layer);

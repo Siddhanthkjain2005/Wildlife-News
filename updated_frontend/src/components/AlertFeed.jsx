@@ -1,5 +1,6 @@
 import { Radio, ExternalLink, Inbox } from "lucide-react";
 import { riskLevel } from "../lib/format.js";
+import { resolveExternalUrl } from "../lib/api.js";
 
 export default function AlertFeed({ alerts }) {
   return (
@@ -41,7 +42,7 @@ export default function AlertFeed({ alerts }) {
                     ) : null}
                   </div>
                   <a
-                    href={item.open_url || "#"}
+                    href={resolveExternalUrl(item.open_url, item.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="feed-link"

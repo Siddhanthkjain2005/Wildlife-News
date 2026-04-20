@@ -1,4 +1,5 @@
 import { Satellite, Lightbulb, ExternalLink, Inbox } from "lucide-react";
+import { resolveExternalUrl } from "../lib/api.js";
 
 export function OsintFeed({ items }) {
   return (
@@ -34,7 +35,7 @@ export function OsintFeed({ items }) {
                     <span>Signal strength</span>
                   </div>
                   <a
-                    href={item.open_url || item.url || "#"}
+                    href={resolveExternalUrl(item.open_url, item.url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="feed-link"

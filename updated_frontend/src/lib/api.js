@@ -16,6 +16,17 @@ export const ENDPOINTS = {
   exportBriefing: withBase("/api/export/briefing-pack")
 };
 
+export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {
+  const raw = String(primaryUrl || "").trim() || String(fallbackUrl || "").trim();
+  if (!raw) return "#";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("//")) return `https:${raw}`;
+  if (raw.startsWith("/")) return withBase(raw);
+  if (raw.startsWith("www.")) return `https://${raw}`;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return `https://${raw}`;
+  return "#";
+}
+
 export async function fetchJson(url) {
   const res = await fetch(url, { cache: "no-store", credentials: "same-origin" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
