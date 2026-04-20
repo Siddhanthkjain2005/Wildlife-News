@@ -381,7 +381,12 @@ class NewsCollector:
             .all()
         )
         values = [str(row).strip() for row in rows if str(row).strip()]
-        return values or DEFAULT_OSINT_KEYWORDS
+        merged: list[str] = []
+        for keyword in [*values, *DEFAULT_OSINT_KEYWORDS]:
+            cleaned = keyword.strip()
+            if cleaned and cleaned not in merged:
+                merged.append(cleaned)
+        return merged
 
     @staticmethod
     def _queries_for_language(language: str) -> list[str]:
@@ -555,10 +560,14 @@ class NewsCollector:
         language: str = "en",
     ) -> list[RawArticle]:
         items: list[RawArticle] = []
+        parse_failures = 0
         query_tokens = [token.strip().lower() for token in query.split() if token.strip()]
         for feed_url in urls:
             self._throttle_provider(provider)
             feed = feedparser.parse(feed_url)
+            if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
+                parse_failures += 1
+                continue
             for entry in feed.entries[:limit]:
                 title = self._strip_html(getattr(entry, "title", ""))
                 summary = self._strip_html(getattr(entry, "summary", ""))
@@ -580,10 +589,13 @@ class NewsCollector:
                 )
                 if len(items) >= limit:
                     return items
+        if not items and parse_failures >= len(urls):
+            raise ValueError(f"rss_parse_failure provider={provider} query={query[:80]}")
         return items
 
     def _fetch_reddit_osint(self, query: str, limit: int) -> list[RawArticle]:
         items: list[RawArticle] = []
+        parse_failures = 0
         for subreddit in REDDIT_SUBREDDITS:
             self._throttle_provider("reddit_osint")
             feed_url = (
@@ -591,6 +603,9 @@ class NewsCollector:
                 f"q={quote_plus(query)}&restrict_sr=1&sort=new&t=week"
             )
             feed = feedparser.parse(feed_url)
+            if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
+                parse_failures += 1
+                continue
             for entry in feed.entries[:max(2, limit // max(1, len(REDDIT_SUBREDDITS)))]:
                 items.append(
                     RawArticle(
@@ -604,6 +619,8 @@ class NewsCollector:
                 )
                 if len(items) >= limit:
                     return items
+        if not items and parse_failures >= len(REDDIT_SUBREDDITS):
+            raise ValueError(f"reddit_rss_parse_failure query={query[:80]}")
         return items
 
     def _fetch_govt_notices(self, query: str, limit: int) -> list[RawArticle]:
@@ -635,6 +652,8 @@ class NewsCollector:
         hl, gl, ceid, _ = self._region(language)
         feed_url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl={hl}&gl={gl}&ceid={ceid}"
         feed = feedparser.parse(feed_url)
+        if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
+            raise ValueError(f"google_rss_parse_failure language={language} query={query[:80]}")
         items: list[RawArticle] = []
         for entry in feed.entries[:limit]:
             article_url = self._normalize_url(getattr(entry, "link", "").strip())
@@ -672,6 +691,8 @@ class NewsCollector:
         _, _, _, mkt = self._region(language)
         rss_url = f"https://www.bing.com/news/search?q={quote_plus(query)}&format=rss&mkt={mkt}"
         feed = feedparser.parse(rss_url)
+        if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
+            raise ValueError(f"bing_rss_parse_failure language={language} query={query[:80]}")
         items: list[RawArticle] = []
         for entry in feed.entries[:limit]:
             items.append(
@@ -1328,7 +1349,18 @@ class NewsCollector:
 
         for provider in self._enabled_providers():
             source_type = self._provider_source_type(provider)
-            provider_stats.setdefault(provider, {"provider": provider, "scanned": 0, "kept": 0, "failed": 0})
+            provider_stats.setdefault(
+                provider,
+                {
+                    "provider": provider,
+                    "queries": 0,
+                    "fetched": 0,
+                    "scanned": 0,
+                    "kept": 0,
+                    "failed": 0,
+                    "rejected": 0,
+                },
+            )
             if provider in KEY_BASED_PROVIDERS and not self._provider_has_required_key(provider):
                 self._record_provider_failure(provider)
                 self._push_failed_source(
@@ -1345,6 +1377,7 @@ class NewsCollector:
             for lang in self._active_languages_for_provider(provider):
                 query_pool = self._queries_for_language(lang) if source_type == "news" else self._osint_queries(db)
                 provider_queries = self._select_queries_for_cycle(provider=provider, language=lang, queries=query_pool)
+                provider_stats[provider]["queries"] += len(provider_queries)
                 fetched_batches = self._fetch_batch_parallel(
                     provider=provider,
                     language=lang,
@@ -1356,6 +1389,7 @@ class NewsCollector:
                 )
                 for query in provider_queries:
                     articles = fetched_batches.get(query, [])
+                    provider_stats[provider]["fetched"] += len(articles)
                     for article in articles:
                         title = article.title.strip()
                         summary = article.summary.strip()
@@ -1363,11 +1397,14 @@ class NewsCollector:
                         source = article.source.strip() or provider
                         published = article.published_at
                         if not title or not url:
+                            provider_stats[provider]["rejected"] += 1
                             continue
                         if start_from_utc is not None and published < start_from_utc:
+                            provider_stats[provider]["rejected"] += 1
                             continue
                         seen_key = (provider, url)
                         if seen_key in seen_urls:
+                            provider_stats[provider]["rejected"] += 1
                             continue
                         seen_urls.add(seen_key)
 
@@ -1414,9 +1451,11 @@ class NewsCollector:
                         )
 
                         if not intel.is_poaching:
+                            provider_stats[provider]["rejected"] += 1
                             continue
                         if settings.india_only and not intel.is_india:
                             dropped_non_india += 1
+                            provider_stats[provider]["rejected"] += 1
                             continue
 
                         existing = None
