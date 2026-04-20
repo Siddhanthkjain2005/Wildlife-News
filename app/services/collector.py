@@ -154,6 +154,19 @@ class NewsCollector:
         return json.dumps(merged[:12], ensure_ascii=False)
 
     @staticmethod
+    def _merge_people(existing_people: str, incoming_people: list[str]) -> str:
+        merged: dict[str, str] = {}
+        for raw in existing_people.split(","):
+            cleaned = raw.strip()
+            if cleaned:
+                merged.setdefault(cleaned.lower(), cleaned)
+        for raw in incoming_people:
+            cleaned = str(raw).strip()
+            if cleaned:
+                merged.setdefault(cleaned.lower(), cleaned)
+        return ", ".join(merged.values())[:500]
+
+    @staticmethod
     def _merge_sources(existing_source: str, merged_sources: str, incoming_source: str) -> tuple[str, int]:
         values = {item.strip() for item in merged_sources.split(",") if item.strip()}
         if existing_source.strip():
@@ -1007,6 +1020,7 @@ class NewsCollector:
         state: str,
         district: str,
         location: str,
+        involved_persons: list[str],
     ) -> None:
         db.query(Entity).filter(Entity.news_id == news_id).delete()
         payload: list[tuple[str, str]] = []
@@ -1022,6 +1036,10 @@ class NewsCollector:
             payload.append(("district", district.strip().title()[:240]))
         if location.strip():
             payload.append(("location", location.strip()[:240]))
+        for person in involved_persons:
+            cleaned = person.strip()
+            if cleaned:
+                payload.append(("person", cleaned[:240]))
         for entity_type, entity_value in payload:
             db.add(Entity(news_id=news_id, entity_type=entity_type, entity_value=entity_value))
 
@@ -1088,6 +1106,7 @@ class NewsCollector:
         existing.state = existing.state or intel.state[:120]
         existing.district = existing.district or intel.district[:120]
         existing.location = existing.location or intel.location[:240]
+        existing.involved_persons = self._merge_people(existing.involved_persons, intel.involved_persons)
         existing.network_indicator = existing.network_indicator or intel.network_indicator
         existing.repeat_indicator = existing.repeat_indicator or intel.repeat_indicator
         existing.intel_summary = existing.intel_summary or intel.summary[:500]
@@ -1322,6 +1341,7 @@ class NewsCollector:
                                 state=intel.state[:120],
                                 district=intel.district[:120],
                                 location=intel.location[:240],
+                                involved_persons=", ".join(intel.involved_persons)[:500],
                                 network_indicator=intel.network_indicator,
                                 repeat_indicator=intel.repeat_indicator,
                                 intel_summary=intel.summary[:500],
@@ -1365,6 +1385,7 @@ class NewsCollector:
                             state=intel.state,
                             district=intel.district,
                             location=intel.location,
+                            involved_persons=intel.involved_persons,
                         )
                         normalized_species = [item.strip().lower() for item in intel.species]
                         has_priority_species = any(
@@ -1417,6 +1438,7 @@ class NewsCollector:
                                     "species": ", ".join(intel.species)[:300],
                                     "state": intel.state[:120],
                                     "district": intel.district[:120],
+                                    "involved_persons": ", ".join(intel.involved_persons)[:500],
                                     "likely_smuggling_route": intel.likely_smuggling_route[:500],
                                     "enforcement_recommendation": intel.enforcement_recommendation[:500],
                                     "confidence_explanation": intel.confidence_explanation[:500],

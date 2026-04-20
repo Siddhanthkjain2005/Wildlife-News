@@ -39,6 +39,7 @@ class NewsItem(Base):
     state: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     district: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     location: Mapped[str] = mapped_column(String(240), nullable=False, default="")
+    involved_persons: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     network_indicator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     repeat_indicator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     intel_summary: Mapped[str] = mapped_column(String(500), nullable=False, default="")

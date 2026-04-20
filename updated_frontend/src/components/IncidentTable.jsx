@@ -23,6 +23,7 @@ export default function IncidentTable({ rows, loading }) {
                 <th>Species</th>
                 <th>State</th>
                 <th>District</th>
+                <th>Involved persons</th>
                 <th>Crime type</th>
                 <th>Source</th>
                 <th>Conf.</th>
@@ -42,6 +43,7 @@ export default function IncidentTable({ rows, loading }) {
                     <td className="cell-muted">{row.species || "—"}</td>
                     <td className="cell-muted">{row.state || "—"}</td>
                     <td className="cell-muted">{row.district || "—"}</td>
+                    <td className="cell-muted">{row.involved_persons || "—"}</td>
                     <td className="cell-muted">{row.crime_type || "—"}</td>
                     <td className="cell-muted">{row.source || "—"}</td>
                     <td className="cell-mono">{Number(row.confidence || 0).toFixed(2)}</td>
@@ -61,7 +63,7 @@ export default function IncidentTable({ rows, loading }) {
               })}
               {!rows.length && !loading ? (
                 <tr>
-                  <td colSpan={10} className="empty-cell">
+                  <td colSpan={11} className="empty-cell">
                     <div className="empty-cell-icon">
                       <SearchX size={20} />
                     </div>

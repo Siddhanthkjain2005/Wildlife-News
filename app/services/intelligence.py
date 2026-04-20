@@ -92,6 +92,63 @@ STATE_ALIASES = {
     "orissa": "odisha",
 }
 
+DISTRICT_ALIASES = {
+    "navi mumbai": "maharashtra",
+    "virar": "maharashtra",
+    "palghar": "maharashtra",
+    "greater noida": "uttar pradesh",
+}
+
+PERSON_EXTRACTION_PATTERNS = [
+    re.compile(
+        r"\b(?:arrested|held|detained|booked|nabbed|caught|identified|named)\s+"
+        r"(?:the\s+)?(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused)?\s*"
+        r"(?:named|identified as)?\s*([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\b"
+    ),
+    re.compile(
+        r"\b([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\s+"
+        r"(?:was|were)?\s*(?:arrested|held|detained|booked|nabbed|accused|named|identified)\b"
+    ),
+    re.compile(r"\bidentified as\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\b"),
+]
+
+PERSON_NAME_STOPWORDS = {
+    "forest",
+    "official",
+    "officials",
+    "officer",
+    "officers",
+    "police",
+    "department",
+    "court",
+    "customs",
+    "wildlife",
+    "crime",
+    "bureau",
+    "wccb",
+    "team",
+    "unit",
+    "staff",
+    "agency",
+    "branch",
+    "station",
+    "range",
+    "times",
+    "india",
+    "suspect",
+    "suspects",
+    "accused",
+    "poacher",
+    "poachers",
+    "man",
+    "men",
+    "woman",
+    "women",
+    "person",
+    "persons",
+    "unknown",
+}
+
 
 @dataclass
 class IntelligenceResult:
@@ -104,6 +161,7 @@ class IntelligenceResult:
     state: str
     district: str
     location: str
+    involved_persons: list[str]
     network_indicator: bool
     repeat_indicator: bool
     summary: str
@@ -268,24 +326,66 @@ class HybridIntelligenceEngine:
         return species_hits
 
     @staticmethod
+    def _find_term_position(text: str, term: str) -> int | None:
+        match = re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text)
+        return match.start() if match else None
+
+    @classmethod
     def _extract_location(text: str) -> tuple[str, str, str]:
         district = ""
         state = ""
-        for district_name, mapped_state in DISTRICT_TO_STATE.items():
-            if district_name in text:
-                district = district_name
-                state = mapped_state
-                break
+
+        district_candidates = {**DISTRICT_TO_STATE, **DISTRICT_ALIASES}
+        district_match: tuple[int, str, str] | None = None
+        for district_name, mapped_state in district_candidates.items():
+            position = cls._find_term_position(text, district_name)
+            if position is None:
+                continue
+            if district_match is None or position < district_match[0]:
+                district_match = (position, district_name, mapped_state)
+        if district_match:
+            district = district_match[1]
+            state = district_match[2]
+
         if not state:
+            state_match: tuple[int, str] | None = None
             for state_name in INDIA_STATES:
-                if state_name in text:
-                    state = state_name
-                    break
+                position = cls._find_term_position(text, state_name)
+                if position is None:
+                    continue
+                if state_match is None or position < state_match[0]:
+                    state_match = (position, state_name)
+            if state_match:
+                state = state_match[1]
+
         if not state:
             for alias, mapped in STATE_ALIASES.items():
-                if re.search(rf"\b{re.escape(alias)}\b", text):
+                if cls._find_term_position(text, alias) is not None:
                     state = mapped
                     break
+
+        if not district:
+            for phrase_match in re.finditer(r"\b(?:in|at|near|from)\s+([a-z][a-z\s-]{2,60})", text):
+                raw_fragment = re.split(r"[,.;:()]", phrase_match.group(1), maxsplit=1)[0]
+                fragment = re.sub(r"\s+", " ", raw_fragment).strip(" -")
+                if not fragment:
+                    continue
+                words = fragment.split()
+                for size in range(min(4, len(words)), 0, -1):
+                    candidate = " ".join(words[:size])
+                    if candidate in district_candidates:
+                        district = candidate
+                        state = district_candidates[candidate]
+                        break
+                    if candidate in INDIA_STATES:
+                        state = candidate
+                        break
+                    if candidate in STATE_ALIASES:
+                        state = STATE_ALIASES[candidate]
+                        break
+                if district or state:
+                    break
+
         if district and state:
             location = f"{district.title()}, {state.title()}"
         elif state:
@@ -293,6 +393,43 @@ class HybridIntelligenceEngine:
         else:
             location = "India" if "india" in text or "bharat" in text else ""
         return state, district, location
+
+    @staticmethod
+    def _clean_person_candidate(raw_value: str) -> str:
+        value = re.sub(r"^[\"'`“”‘’\s-]+|[\"'`“”‘’,.;:\s-]+$", "", raw_value or "")
+        value = re.sub(r"\s+", " ", value).strip()
+        value = re.sub(r"^(?:mr|mrs|ms|dr|shri|smt)\.?\s+", "", value, flags=re.IGNORECASE)
+        if not value:
+            return ""
+        tokens = [token.strip() for token in value.split(" ") if token.strip()]
+        if not tokens or len(tokens) > 4:
+            return ""
+        lowered_tokens = [token.lower().strip(".") for token in tokens]
+        if any(token in PERSON_NAME_STOPWORDS for token in lowered_tokens):
+            return ""
+        if len(tokens) == 1 and len(tokens[0].strip(".")) < 3:
+            return ""
+        if not re.search(r"[A-Z]", value):
+            return ""
+        return " ".join(tokens)
+
+    @classmethod
+    def _extract_involved_persons(cls, text: str) -> list[str]:
+        if not text:
+            return []
+        found: list[str] = []
+        seen: set[str] = set()
+        for pattern in PERSON_EXTRACTION_PATTERNS:
+            for match in pattern.finditer(text):
+                candidate = cls._clean_person_candidate(match.group(1))
+                if not candidate:
+                    continue
+                key = candidate.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                found.append(candidate)
+        return found[:5]
 
     @staticmethod
     def _is_india(text: str, state: str, district: str, india_prob: float, outside_prob: float) -> tuple[bool, float]:
@@ -337,6 +474,7 @@ class HybridIntelligenceEngine:
         species: list[str],
         state: str,
         district: str,
+        involved_persons: list[str],
         network_indicator: bool,
         repeat_indicator: bool,
         confidence: float,
@@ -347,6 +485,7 @@ class HybridIntelligenceEngine:
             f"Confidence: {confidence:.2f}; Risk score: {risk_score}/100",
             f"Species detected: {', '.join(species) if species else 'not explicit'}",
             f"Location signal: district={district or 'unknown'}, state={state or 'unknown'}",
+            f"Involved persons: {', '.join(involved_persons) if involved_persons else 'not explicit'}",
         ]
         if network_indicator:
             points.append("Organized network indicator detected from text patterns.")
@@ -399,12 +538,13 @@ class HybridIntelligenceEngine:
         india_score: float,
         confidence: float,
         species_hits: int,
+        person_hits: int,
         network_indicator: bool,
         repeat_indicator: bool,
     ) -> str:
         return (
             f"Model confidence={confidence:.2f} (poaching signal={poach_prob:.2f}, rule score={rule_score:.2f}, india score={india_score:.2f}); "
-            f"species_hits={species_hits}, network_indicator={int(network_indicator)}, repeat_indicator={int(repeat_indicator)}."
+            f"species_hits={species_hits}, person_hits={person_hits}, network_indicator={int(network_indicator)}, repeat_indicator={int(repeat_indicator)}."
         )
 
     def analyze(
@@ -415,8 +555,9 @@ class HybridIntelligenceEngine:
         prior_district_hits: int = 0,
         prior_source_hits: int = 0,
     ) -> IntelligenceResult:
-        text = normalize_space(f"{title}. {summary}").lower()
-        if not text:
+        source_text = normalize_space(f"{title}. {summary}")
+        text = source_text.lower()
+        if not source_text:
             return IntelligenceResult(
                 is_poaching=False,
                 is_india=False,
@@ -427,6 +568,7 @@ class HybridIntelligenceEngine:
                 state="",
                 district="",
                 location="",
+                involved_persons=[],
                 network_indicator=False,
                 repeat_indicator=False,
                 summary=normalize_space(title),
@@ -477,6 +619,7 @@ class HybridIntelligenceEngine:
         keyword_hits = self._keyword_signal_hits(text)
         species = self._extract_species(text)
         state, district, location = self._extract_location(text)
+        involved_persons = self._extract_involved_persons(source_text)
         network_indicator = self._network_indicator(text)
         repeat_indicator = prior_district_hits >= 2 or prior_source_hits >= 4
         has_false_positive = self._has_false_positive(text)
@@ -550,6 +693,7 @@ class HybridIntelligenceEngine:
             species=species,
             state=state,
             district=district,
+            involved_persons=involved_persons,
             network_indicator=network_indicator,
             repeat_indicator=repeat_indicator,
             confidence=confidence,
@@ -574,6 +718,7 @@ class HybridIntelligenceEngine:
             india_score=india_score,
             confidence=confidence,
             species_hits=len(species),
+            person_hits=len(involved_persons),
             network_indicator=network_indicator,
             repeat_indicator=repeat_indicator,
         )
@@ -592,6 +737,7 @@ class HybridIntelligenceEngine:
             state=state,
             district=district,
             location=location,
+            involved_persons=involved_persons,
             network_indicator=network_indicator,
             repeat_indicator=repeat_indicator,
             summary=summary_text[:500],

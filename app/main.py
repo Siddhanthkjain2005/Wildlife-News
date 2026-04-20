@@ -814,6 +814,7 @@ def _to_export_payload(row: NewsItem) -> dict[str, object]:
         "species": row.species,
         "state": row.state,
         "district": row.district,
+        "involved_persons": row.involved_persons,
         "crime_type": row.crime_type,
         "source": row.source,
         "confidence": round(row.confidence, 4),
@@ -1603,6 +1604,7 @@ def get_news(
             "species": row.species,
             "state": row.state,
             "district": row.district,
+            "involved_persons": row.involved_persons,
             "location": row.location,
             "network_indicator": row.network_indicator,
             "repeat_indicator": row.repeat_indicator,
@@ -1663,6 +1665,7 @@ def live_incidents(
             "species": row.species,
             "state": row.state,
             "district": row.district,
+            "involved_persons": row.involved_persons,
             "two_line_summary": row.intel_summary,
             "key_intelligence_points": _parse_intel_points(row.intel_points),
             "likely_smuggling_route": row.likely_smuggling_route,
@@ -1889,6 +1892,7 @@ def filter_news(
                 "species": row.species,
                 "state": row.state,
                 "district": row.district,
+                "involved_persons": row.involved_persons,
                 "crime_type": row.crime_type,
                 "source": row.source,
                 "confidence": row.confidence,
@@ -1927,6 +1931,7 @@ def analyst_brief(db: Session = Depends(get_db), limit: int = 40):
             "two_line_summary": row.intel_summary,
             "intel_points": _parse_intel_points(row.intel_points),
             "key_intelligence_points": _parse_intel_points(row.intel_points),
+            "involved_persons": row.involved_persons,
             "likely_smuggling_route": row.likely_smuggling_route,
             "action_recommendation": row.enforcement_recommendation
             or _action_recommendation(
@@ -1978,6 +1983,7 @@ def get_reports(
             "risk_score": news.risk_score,
             "state": news.state,
             "district": news.district,
+            "involved_persons": news.involved_persons,
             "species": news.species,
             "crime_type": news.crime_type,
             "title": news.title,
@@ -2010,6 +2016,7 @@ def get_report(id: int, db: Session = Depends(get_db)):
             "species": news.species,
             "state": news.state,
             "district": news.district,
+            "involved_persons": news.involved_persons,
             "crime_type": news.crime_type,
             "source": news.source,
             "published_at": news.published_at.isoformat(),
@@ -2191,6 +2198,7 @@ def export_briefing_pack(
             "species": row.species,
             "state": row.state,
             "district": row.district,
+            "involved_persons": row.involved_persons,
             "crime_type": row.crime_type,
             "source": row.source,
             "open_url": f"/open/{row.id}",
@@ -2421,6 +2429,7 @@ def get_alerts(db: Session = Depends(get_db), limit: int = 100):
             "source": related_news.get(row.news_id).source if related_news.get(row.news_id) else "alert-engine",
             "state": related_news.get(row.news_id).state if related_news.get(row.news_id) else "",
             "district": related_news.get(row.news_id).district if related_news.get(row.news_id) else "",
+            "involved_persons": related_news.get(row.news_id).involved_persons if related_news.get(row.news_id) else "",
             "risk_score": related_news.get(row.news_id).risk_score if related_news.get(row.news_id) else 0,
             "open_url": f"/open/{row.news_id}",
         }
@@ -2461,6 +2470,7 @@ def get_alerts_popup(db: Session = Depends(get_db), since_id: int = 0, limit: in
                 "title": news.title,
                 "state": news.state,
                 "district": news.district,
+                "involved_persons": news.involved_persons,
                 "risk_score": news.risk_score,
                 "crime_type": news.crime_type,
                 "species": news.species,
@@ -2620,7 +2630,8 @@ def open_article(item_id: int, db: Session = Depends(get_db)):
     if not target:
         raise HTTPException(status_code=502, detail="Could not resolve article URL")
 
-    if target != (item.url or "").strip():
-        item.url = target[:1200]
-        db.commit()
-    return RedirectResponse(url=target, status_code=307)
+    redirect_target = _safe_outbound_url(target)
+    if not redirect_target:
+        raise HTTPException(status_code=502, detail="Could not resolve article URL")
+
+    return RedirectResponse(url=redirect_target, status_code=307)

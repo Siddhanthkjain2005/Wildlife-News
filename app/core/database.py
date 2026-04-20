@@ -69,6 +69,7 @@ def _ensure_news_items_schema() -> None:
         "state": "ALTER TABLE news_items ADD COLUMN state VARCHAR(120) NOT NULL DEFAULT ''",
         "district": "ALTER TABLE news_items ADD COLUMN district VARCHAR(120) NOT NULL DEFAULT ''",
         "location": "ALTER TABLE news_items ADD COLUMN location VARCHAR(240) NOT NULL DEFAULT ''",
+        "involved_persons": "ALTER TABLE news_items ADD COLUMN involved_persons VARCHAR(500) NOT NULL DEFAULT ''",
         "network_indicator": "ALTER TABLE news_items ADD COLUMN network_indicator BOOLEAN NOT NULL DEFAULT 0",
         "repeat_indicator": "ALTER TABLE news_items ADD COLUMN repeat_indicator BOOLEAN NOT NULL DEFAULT 0",
         "intel_summary": "ALTER TABLE news_items ADD COLUMN intel_summary VARCHAR(500) NOT NULL DEFAULT ''",
@@ -92,6 +93,7 @@ def _ensure_news_items_schema() -> None:
         "state": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS state VARCHAR(120) NOT NULL DEFAULT ''",
         "district": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS district VARCHAR(120) NOT NULL DEFAULT ''",
         "location": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS location VARCHAR(240) NOT NULL DEFAULT ''",
+        "involved_persons": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS involved_persons VARCHAR(500) NOT NULL DEFAULT ''",
         "network_indicator": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS network_indicator BOOLEAN NOT NULL DEFAULT FALSE",
         "repeat_indicator": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS repeat_indicator BOOLEAN NOT NULL DEFAULT FALSE",
         "intel_summary": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS intel_summary VARCHAR(500) NOT NULL DEFAULT ''",
@@ -139,6 +141,7 @@ def _ensure_news_items_schema() -> None:
         conn.execute(text("UPDATE news_items SET likely_smuggling_route = 'Potential interstate movement route not yet clear.' WHERE likely_smuggling_route = ''"))
         conn.execute(text("UPDATE news_items SET enforcement_recommendation = 'Review incident and deploy field verification.' WHERE enforcement_recommendation = ''"))
         conn.execute(text("UPDATE news_items SET confidence_explanation = ai_reason WHERE confidence_explanation = ''"))
+        conn.execute(text("UPDATE news_items SET involved_persons = '' WHERE involved_persons IS NULL"))
         conn.execute(text("UPDATE news_items SET merged_sources = source WHERE merged_sources = ''"))
         conn.execute(text("UPDATE news_items SET source_count = 1 WHERE source_count < 1"))
         conn.execute(text("UPDATE news_items SET report_count = 1 WHERE report_count < 1"))
