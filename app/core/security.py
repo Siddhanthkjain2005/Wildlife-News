@@ -23,24 +23,39 @@ class AdminSessionStore:
     def __init__(self) -> None:
         self._sessions: dict[str, _AdminSession] = {}
         self._lock = Lock()
+        self._next_cleanup_at = 0.0
+        self._cleanup_interval_seconds = 60.0
+
+    def _cleanup_expired_locked(self, now: float) -> None:
+        if now < self._next_cleanup_at:
+            return
+        expired = [key for key, value in self._sessions.items() if value.expires_at <= now]
+        for key in expired:
+            self._sessions.pop(key, None)
+        self._next_cleanup_at = now + self._cleanup_interval_seconds
 
     def create(self, username: str, password: str) -> str:
         if not authenticate_admin(username=username, password=password):
             raise HTTPException(status_code=401, detail="Invalid admin credentials.")
         token = secrets.token_urlsafe(32)
-        expires_at = time.time() + (max(5, settings.admin_session_minutes) * 60)
+        now = time.time()
+        expires_at = now + (max(5, settings.admin_session_minutes) * 60)
         with self._lock:
+            self._cleanup_expired_locked(now)
             self._sessions[token] = _AdminSession(token=token, expires_at=expires_at)
         return token
 
     def validate(self, token: str) -> bool:
         now = time.time()
         with self._lock:
-            expired = [key for key, value in self._sessions.items() if value.expires_at <= now]
-            for key in expired:
-                self._sessions.pop(key, None)
+            self._cleanup_expired_locked(now)
             session = self._sessions.get(token)
-            return bool(session and session.expires_at > now)
+            if session is None:
+                return False
+            if session.expires_at <= now:
+                self._sessions.pop(token, None)
+                return False
+            return True
 
     def destroy(self, token: str) -> None:
         with self._lock:
