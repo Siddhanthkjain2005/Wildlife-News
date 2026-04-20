@@ -331,7 +331,7 @@ class HybridIntelligenceEngine:
         return match.start() if match else None
 
     @classmethod
-    def _extract_location(text: str) -> tuple[str, str, str]:
+    def _extract_location(cls, text: str) -> tuple[str, str, str]:
         district = ""
         state = ""
 
