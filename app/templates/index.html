@@ -337,6 +337,24 @@
       return scope ? `Search: Running (${scope})` : "Search: Running";
     }
 
+    function syncDetails(syncStatus) {
+      const isRunning = Boolean(syncStatus && syncStatus.running);
+      const active = (isRunning ? syncStatus?.progress : syncStatus?.last_search) || {};
+      const stage = typeof active.stage === "string" && active.stage !== "-" ? active.stage : "";
+      const provider = typeof active.provider === "string" && active.provider !== "-" ? active.provider : "";
+      const language = typeof active.language === "string" && active.language !== "-" ? active.language : "";
+      const query = typeof active.query === "string" && active.query !== "-" ? active.query : "";
+      const scanned = Number.isFinite(Number(active.scanned)) ? Number(active.scanned) : null;
+      const kept = Number.isFinite(Number(active.kept)) ? Number(active.kept) : null;
+      const details = [];
+      if (stage) details.push(`stage: ${isRunning ? stage : `last ${stage}`}`);
+      const scope = [provider, language].filter(Boolean).join(" / ");
+      if (scope) details.push(`source: ${scope}`);
+      if (query) details.push(`query: ${query}`);
+      if (scanned !== null && kept !== null) details.push(`scanned ${scanned}, kept ${kept}`);
+      return details;
+    }
+
     function setSummary(summary) {
       document.getElementById("sync-indicator").textContent = syncIndicatorText(Boolean(summary.sync_running));
       document.getElementById("last-sync-time").textContent = summary.last_sync_time ? fmtDate(summary.last_sync_time) : "-";
@@ -757,27 +775,26 @@
       const statusBox = document.getElementById("sync-live-status");
       const syncStatus = payload.syncStatus;
       if (syncStatus) {
-        document.getElementById("sync-indicator").textContent = syncIndicatorText(syncStatus);
+        const indicatorDetails = syncDetails(syncStatus);
+        const indicatorSuffix = indicatorDetails.length ? ` (${indicatorDetails.join(" • ")})` : "";
+        document.getElementById("sync-indicator").textContent = `${syncIndicatorText(syncStatus)}${indicatorSuffix}`;
       }
       if (syncStatus && syncStatus.running) {
-        const progress = syncStatus.progress || {};
-        const stage = typeof progress.stage === "string" && progress.stage !== "-" ? progress.stage : "";
-        const provider = typeof progress.provider === "string" && progress.provider !== "-" ? progress.provider : "";
-        const language = typeof progress.language === "string" && progress.language !== "-" ? progress.language : "";
-        const query = typeof progress.query === "string" && progress.query !== "-" ? progress.query : "";
-        const scanned = Number.isFinite(Number(progress.scanned)) ? Number(progress.scanned) : null;
-        const kept = Number.isFinite(Number(progress.kept)) ? Number(progress.kept) : null;
-        const details = [];
-        if (stage) details.push(`stage: ${stage}`);
-        const scope = [provider, language].filter(Boolean).join(" / ");
-        if (scope) details.push(`source: ${scope}`);
-        if (query) details.push(`query: ${query}`);
-        if (scanned !== null && kept !== null) details.push(`scanned ${scanned}, kept ${kept}`);
+        const details = syncDetails(syncStatus);
         statusBox.className = "alert alert-info mb-3";
         statusBox.textContent = `Search in progress... ${syncStatus.message || "Collecting live reports."}${details.length ? ` (${details.join(" • ")})` : ""}`;
       } else if (syncStatus && syncStatus.error) {
         statusBox.className = "alert alert-danger mb-3";
         statusBox.textContent = syncStatus.error;
+      } else if (syncStatus) {
+        const details = syncDetails(syncStatus);
+        if (details.length) {
+          statusBox.className = "alert alert-secondary mb-3";
+          statusBox.textContent = `Auto search active. Last search details: ${details.join(" • ")}`;
+        } else {
+          statusBox.className = "alert d-none mb-3";
+          statusBox.textContent = "";
+        }
       } else if (settled.some(x => x.status === "rejected")) {
         statusBox.className = "alert alert-warning mb-3";
         statusBox.textContent = "Some live widgets could not be loaded. Retrying automatically.";

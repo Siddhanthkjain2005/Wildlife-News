@@ -14,13 +14,14 @@ class SyncRuntimeState:
     error: str = ""
     stats: dict[str, object] | None = None
     progress: dict[str, object] | None = None
+    last_search: dict[str, object] | None = None
     recent_incidents: list[dict[str, object]] | None = None
 
 
 class SyncStateStore:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._state = SyncRuntimeState(stats={}, progress={}, recent_incidents=[])
+        self._state = SyncRuntimeState(stats={}, progress={}, last_search={}, recent_incidents=[])
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
@@ -34,6 +35,7 @@ class SyncStateStore:
                 "error": self._state.error,
                 "stats": dict(self._state.stats or {}),
                 "progress": dict(self._state.progress or {}),
+                "last_search": dict(self._state.last_search or {}),
                 "recent_incidents": list(self._state.recent_incidents or []),
             }
 
@@ -50,6 +52,8 @@ class SyncStateStore:
             self._state.error = ""
             self._state.stats = {"live_events_written": 0}
             self._state.progress = {}
+            if self._state.last_search is None:
+                self._state.last_search = {}
             self._state.recent_incidents = []
             return True
 
@@ -59,6 +63,23 @@ class SyncStateStore:
                 return
             self._state.progress = payload
             self._state.message = message
+            provider = str(payload.get("provider", "")).strip()
+            language = str(payload.get("language", "")).strip()
+            query = str(payload.get("query", "")).strip()
+            if (
+                (provider and provider != "-")
+                or (language and language != "-")
+                or (query and query != "-")
+            ):
+                self._state.last_search = {
+                    "stage": str(payload.get("stage", "")).strip(),
+                    "provider": provider,
+                    "language": language,
+                    "query": query,
+                    "scanned": int(payload.get("scanned", 0) or 0),
+                    "kept": int(payload.get("kept", 0) or 0),
+                    "updated_at": datetime.now(tz=UTC).isoformat(),
+                }
 
     def append_incident(self, incident: dict[str, object]) -> None:
         with self._lock:
