@@ -52,11 +52,11 @@ export default function Kpis({ summary, loading }) {
     },
     {
       id: "today",
-      label: "Reports Today",
+      label: "Source Reports Today",
       value: data.reports_today ?? 0,
       icon: FileCheck2,
       tone: "warn",
-      hint: "Last 24 hours"
+      hint: "Merged source-article count"
     }
   ];
 

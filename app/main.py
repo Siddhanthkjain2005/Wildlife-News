@@ -1909,7 +1909,7 @@ def filter_news(
     crime_type: str = "",
     severity: str = "",
     source: str = "",
-    min_confidence: float = settings.ai_threshold,
+    min_confidence: float = 0.0,
     limit: int = 200,
 ):
     rows = _fetch_filtered_news_rows(

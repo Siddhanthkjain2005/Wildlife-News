@@ -118,7 +118,7 @@ export default function App() {
 
   const loadFilteredNews = useCallback(async () => {
     if (!authToken) return;
-    const query = buildQuery({ ...filters, limit: 120 });
+    const query = buildQuery({ ...filters, min_confidence: 0, limit: 120 });
     try {
       const data = await fetchJson(`${ENDPOINTS.filterNews}?${query}`);
       setNewsRows(Array.isArray(data.items) ? data.items : []);

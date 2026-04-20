@@ -8,9 +8,9 @@ export default function AlertFeed({ alerts }) {
       <div className="card-head">
         <div className="card-head-left">
           <Radio size={16} className="card-head-icon" />
-          <h2>Live Alert Feed</h2>
+          <h2>Live High-Risk Alerts</h2>
         </div>
-        <span className="card-count mono">{alerts.length} alerts</span>
+        <span className="card-count mono">{alerts.length} active</span>
       </div>
       <div className="card-body-flush">
         {alerts.length === 0 ? (
