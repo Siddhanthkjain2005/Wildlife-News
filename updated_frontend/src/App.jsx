@@ -158,10 +158,6 @@ export default function App() {
     if (!syncStatus?.running) return "";
     return formatSearchDetails(syncStatus?.progress, { last: false });
   }, [syncStatus, formatSearchDetails]);
-  const lastSearchText = useMemo(() => {
-    if (syncStatus?.running) return "";
-    return formatSearchDetails(syncStatus?.last_search, { last: true });
-  }, [syncStatus, formatSearchDetails]);
 
   function handleExport(kind) {
     const query = buildQuery(filters);
@@ -221,11 +217,6 @@ export default function App() {
                 {syncStatus.message || "Search in progress…"}
                 {syncProgressText ? ` — ${syncProgressText}` : ""}
               </span>
-            </div>
-          ) : lastSearchText ? (
-            <div className="status info" role="status">
-              <Activity size={16} />
-              <span>Auto search active — Last search: {lastSearchText}</span>
             </div>
           ) : null}
 
