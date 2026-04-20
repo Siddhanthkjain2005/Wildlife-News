@@ -98,6 +98,10 @@ def authenticate_admin(*, username: str, password: str) -> bool:
 
 
 def _extract_token(request: Request, x_admin_token: str | None, authorization: str | None) -> str:
+    if not isinstance(x_admin_token, str):
+        x_admin_token = None
+    if not isinstance(authorization, str):
+        authorization = None
     if x_admin_token:
         return x_admin_token.strip()
     if authorization and authorization.lower().startswith("bearer "):
