@@ -246,6 +246,15 @@ export default function App() {
     }
   }
 
+  async function handleLogout() {
+    try {
+      await postJson(ENDPOINTS.adminLogout, {}, { includeAuth: true });
+    } catch {
+      // Even if remote logout fails, clear local token to force re-auth.
+    }
+    handleUnauthorized("Signed out.");
+  }
+
   function handleNavSelect(id) {
     setActiveSection(id);
     setMobileOpen(false);
@@ -327,6 +336,7 @@ export default function App() {
           onRefresh={loadDashboard}
           onExport={handleExport}
           onToggleMenu={() => setMobileOpen((v) => !v)}
+          onLogout={handleLogout}
         />
 
         <div className="content">

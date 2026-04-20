@@ -251,6 +251,7 @@ You can enable/disable providers with:
 - `GET /api/source-rankings` source reliability rankings
 - `GET /api/sync-history` provider sync history
 - `POST /api/admin/login` admin login (returns bearer token + cookie)
+- `POST /api/admin/logout` admin logout (invalidates session token)
 - `GET /api/security-status` security runtime status
 - `GET /login` admin login page
 - `POST /login` create admin session cookie

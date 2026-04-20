@@ -26,7 +26,7 @@ from app.core.cache import TTLCache
 from app.core.database import SessionLocal, diagnose_database, get_db, init_database
 from app.core.logger import get_logger, init_logging
 from app.core.retry import retry_call
-from app.core.security import RateLimiter, admin_sessions, require_admin_access
+from app.core.security import RateLimiter, admin_sessions, extract_admin_token, require_admin_access
 from app.excel_exporter import append_live_event_to_excel, export_news_to_excel
 from app.i18n import UI_TEXT, get_ui_text
 from app.models import Alert, AuditLog, DistrictStat, Entity, ExternalSignal, NewsItem, Report, SourceStat, SpeciesStat, SyncLog, Watchlist
@@ -1432,6 +1432,16 @@ def admin_login(payload: AdminLoginPayload, request: Request, response: Response
     )
     _audit(actor=payload.username.strip() or "admin", action="login_attempt", status="ok", ip=ip, notes="api_session_created")
     return {"access_token": token, "token_type": "bearer", "expires_in_seconds": max(300, settings.admin_session_minutes * 60)}
+
+
+@app.post("/api/admin/logout")
+def admin_logout(request: Request, response: Response, _: None = Depends(require_admin_access)):
+    token = extract_admin_token(request)
+    if token and token != (settings.admin_token or ""):
+        admin_sessions.destroy(token)
+    _audit(actor="admin", action="api_logout", status="ok", ip=_client_ip(request), notes="session_cleared")
+    response.delete_cookie("admin_session")
+    return {"ok": True}
 
 
 @app.get("/api/security-status")

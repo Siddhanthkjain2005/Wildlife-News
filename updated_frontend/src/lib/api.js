@@ -4,6 +4,7 @@ const AUTH_TOKEN_KEY = "wildlife_admin_token";
 
 export const ENDPOINTS = {
   adminLogin: withBase("/api/admin/login"),
+  adminLogout: withBase("/api/admin/logout"),
   summary: withBase("/api/dashboard-summary"),
   chart: withBase("/api/chart-data"),
   map: withBase("/api/map-data"),

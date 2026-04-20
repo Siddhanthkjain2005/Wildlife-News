@@ -128,6 +128,14 @@ def _extract_token(request: Request, x_admin_token: str | None, authorization: s
     return from_cookie
 
 
+def extract_admin_token(request: Request) -> str:
+    return _extract_token(
+        request=request,
+        x_admin_token=request.headers.get("X-Admin-Token"),
+        authorization=request.headers.get("Authorization"),
+    )
+
+
 def require_admin_access(
     request: Request,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),

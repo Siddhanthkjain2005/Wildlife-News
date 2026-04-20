@@ -1,4 +1,4 @@
-import { Menu, RefreshCw, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut } from "lucide-react";
 
 export default function TopBar({
   activeSection,
@@ -6,7 +6,8 @@ export default function TopBar({
   syncStatus,
   onRefresh,
   onExport,
-  onToggleMenu
+  onToggleMenu,
+  onLogout
 }) {
   const titles = {
     overview: "Overview",
@@ -66,6 +67,11 @@ export default function TopBar({
         >
           <RefreshCw size={15} className={busy ? "spin" : ""} />
           <span className="btn-label">Refresh</span>
+        </button>
+
+        <button type="button" className="btn btn-ghost" onClick={onLogout} aria-label="Logout">
+          <LogOut size={15} />
+          <span className="btn-label">Logout</span>
         </button>
 
         <div className="btn-group" role="group" aria-label="Export options">
