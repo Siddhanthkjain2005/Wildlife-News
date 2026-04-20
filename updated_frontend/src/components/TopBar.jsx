@@ -21,10 +21,16 @@ export default function TopBar({
   const syncLabel = isSearching ? "Search in progress" : "Auto search active";
   const syncMessage = String(syncStatus?.message || "").trim();
   const syncProgress = syncStatus?.progress || {};
+  const stage = typeof syncProgress.stage === "string" && syncProgress.stage !== "-" ? syncProgress.stage : "";
   const provider = typeof syncProgress.provider === "string" && syncProgress.provider !== "-" ? syncProgress.provider : "";
   const language = typeof syncProgress.language === "string" && syncProgress.language !== "-" ? syncProgress.language : "";
+  const query = typeof syncProgress.query === "string" && syncProgress.query !== "-" ? syncProgress.query : "";
   const scope = [provider, language].filter(Boolean).join(" / ");
-  const syncMeta = isSearching ? (scope || syncMessage || "Collecting live reports") : "";
+  const syncMetaParts = [];
+  if (stage) syncMetaParts.push(stage);
+  if (scope) syncMetaParts.push(scope);
+  if (query) syncMetaParts.push(`q: ${query}`);
+  const syncMeta = isSearching ? (syncMetaParts.join(" • ") || syncMessage || "Collecting live reports") : "";
 
   return (
     <header className="topbar">

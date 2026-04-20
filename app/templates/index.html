@@ -761,13 +761,18 @@
       }
       if (syncStatus && syncStatus.running) {
         const progress = syncStatus.progress || {};
+        const stage = typeof progress.stage === "string" && progress.stage !== "-" ? progress.stage : "";
         const provider = typeof progress.provider === "string" && progress.provider !== "-" ? progress.provider : "";
         const language = typeof progress.language === "string" && progress.language !== "-" ? progress.language : "";
         const query = typeof progress.query === "string" && progress.query !== "-" ? progress.query : "";
+        const scanned = Number.isFinite(Number(progress.scanned)) ? Number(progress.scanned) : null;
+        const kept = Number.isFinite(Number(progress.kept)) ? Number(progress.kept) : null;
         const details = [];
+        if (stage) details.push(`stage: ${stage}`);
         const scope = [provider, language].filter(Boolean).join(" / ");
-        if (scope) details.push(scope);
-        if (query) details.push(`q: ${query}`);
+        if (scope) details.push(`source: ${scope}`);
+        if (query) details.push(`query: ${query}`);
+        if (scanned !== null && kept !== null) details.push(`scanned ${scanned}, kept ${kept}`);
         statusBox.className = "alert alert-info mb-3";
         statusBox.textContent = `Search in progress... ${syncStatus.message || "Collecting live reports."}${details.length ? ` (${details.join(" • ")})` : ""}`;
       } else if (syncStatus && syncStatus.error) {

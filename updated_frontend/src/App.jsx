@@ -139,6 +139,7 @@ export default function App() {
   const syncProgressText = useMemo(() => {
     if (!syncStatus?.running) return "";
     const progress = syncStatus?.progress || {};
+    const stage = typeof progress.stage === "string" && progress.stage !== "-" ? progress.stage : "";
     const provider = typeof progress.provider === "string" && progress.provider !== "-" ? progress.provider : "";
     const language = typeof progress.language === "string" && progress.language !== "-" ? progress.language : "";
     const query = typeof progress.query === "string" && progress.query !== "-" ? progress.query : "";
@@ -146,9 +147,10 @@ export default function App() {
     const kept = Number.isFinite(Number(progress.kept)) ? Number(progress.kept) : null;
 
     const parts = [];
+    if (stage) parts.push(`stage: ${stage}`);
     const scope = [provider, language].filter(Boolean).join(" / ");
-    if (scope) parts.push(scope);
-    if (query) parts.push(`q: ${query}`);
+    if (scope) parts.push(`source: ${scope}`);
+    if (query) parts.push(`query: ${query}`);
     if (scanned !== null && kept !== null) parts.push(`scanned ${scanned}, kept ${kept}`);
     return parts.join(" • ");
   }, [syncStatus]);

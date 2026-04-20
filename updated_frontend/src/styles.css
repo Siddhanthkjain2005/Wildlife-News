@@ -403,7 +403,7 @@ button {
 .sync-pill-meta {
   font-size: 0.73rem;
   color: var(--text);
-  max-width: 240px;
+  max-width: 320px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
