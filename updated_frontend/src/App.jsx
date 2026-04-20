@@ -11,7 +11,7 @@ import {
   Legend,
   Filler
 } from "chart.js";
-import { AlertCircle, Activity } from "lucide-react";
+import { AlertCircle, Activity, Lock, ShieldCheck } from "lucide-react";
 
 import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
@@ -23,7 +23,15 @@ import FilterBar from "./components/FilterBar.jsx";
 import IncidentTable from "./components/IncidentTable.jsx";
 import { OsintFeed, Recommendations } from "./components/BottomPanels.jsx";
 
-import { ENDPOINTS, fetchJson, buildQuery } from "./lib/api.js";
+import {
+  ENDPOINTS,
+  fetchJson,
+  buildQuery,
+  postJson,
+  getStoredToken,
+  setStoredToken,
+  clearStoredToken
+} from "./lib/api.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, BarElement, Tooltip, Legend, Filler);
 
@@ -44,6 +52,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [authToken, setAuthToken] = useState(() => getStoredToken());
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [credentials, setCredentials] = useState({ username: "", password: "" });
 
   const [summary, setSummary] = useState(null);
   const [chartData, setChartData] = useState(null);
@@ -58,7 +70,17 @@ export default function App() {
   const [activeSection, setActiveSection] = useState("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const handleUnauthorized = useCallback((message = "Please log in to continue.") => {
+    clearStoredToken();
+    setAuthToken("");
+    setAuthError(message);
+    setError("");
+    setBusy(false);
+    setLoading(false);
+  }, []);
+
   const loadDashboard = useCallback(async () => {
+    if (!authToken) return;
     setBusy(true);
     const tasks = await Promise.allSettled([
       fetchJson(ENDPOINTS.summary),
@@ -69,6 +91,13 @@ export default function App() {
       fetchJson(ENDPOINTS.osint),
       fetchJson(ENDPOINTS.syncStatus)
     ]);
+    const unauthorized = tasks.some(
+      (task) => task.status === "rejected" && Number(task.reason?.status) === 401
+    );
+    if (unauthorized) {
+      handleUnauthorized("Session expired. Please sign in again.");
+      return;
+    }
     const [summaryRes, chartRes, mapRes, alertRes, reportRes, osintRes, syncRes] = tasks;
     if (summaryRes.status === "fulfilled") setSummary(summaryRes.value);
     if (chartRes.status === "fulfilled") setChartData(chartRes.value);
@@ -85,15 +114,27 @@ export default function App() {
     }
     setLoading(false);
     setBusy(false);
-  }, []);
+  }, [authToken, handleUnauthorized]);
 
   const loadFilteredNews = useCallback(async () => {
+    if (!authToken) return;
     const query = buildQuery({ ...filters, limit: 120 });
-    const data = await fetchJson(`${ENDPOINTS.filterNews}?${query}`);
-    setNewsRows(Array.isArray(data.items) ? data.items : []);
-  }, [filters]);
+    try {
+      const data = await fetchJson(`${ENDPOINTS.filterNews}?${query}`);
+      setNewsRows(Array.isArray(data.items) ? data.items : []);
+    } catch (err) {
+      if (Number(err?.status) === 401) {
+        handleUnauthorized("Session expired. Please sign in again.");
+      }
+    }
+  }, [authToken, filters, handleUnauthorized]);
 
   useEffect(() => {
+    if (!authToken) {
+      setLoading(false);
+      return undefined;
+    }
+    setLoading(true);
     loadDashboard();
     loadFilteredNews().catch(() => {});
     const timer = window.setInterval(() => {
@@ -101,7 +142,7 @@ export default function App() {
       loadFilteredNews().catch(() => {});
     }, AUTO_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [loadDashboard, loadFilteredNews]);
+  }, [authToken, loadDashboard, loadFilteredNews]);
 
   // Track active section via scroll
   useEffect(() => {
@@ -160,7 +201,8 @@ export default function App() {
   }, [syncStatus, formatSearchDetails]);
 
   function handleExport(kind) {
-    const query = buildQuery(filters);
+    if (!authToken) return;
+    const query = buildQuery({ ...filters, admin_token: authToken });
     const base =
       kind === "pdf"
         ? ENDPOINTS.exportPdf
@@ -172,9 +214,93 @@ export default function App() {
     window.location.href = query ? `${base}?${query}` : base;
   }
 
+  async function handleLoginSubmit(event) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const payload = await postJson(
+        ENDPOINTS.adminLogin,
+        { username: credentials.username.trim(), password: credentials.password },
+        { includeAuth: false }
+      );
+      const token = String(payload?.access_token || "").trim();
+      if (!token) {
+        setAuthError("Login failed. Missing access token.");
+        return;
+      }
+      setStoredToken(token);
+      setAuthToken(token);
+      setCredentials({ username: "", password: "" });
+      setLoading(true);
+    } catch (err) {
+      if (Number(err?.status) === 401) {
+        setAuthError("Invalid username or password.");
+      } else if (Number(err?.status) === 429) {
+        setAuthError("Too many login attempts. Try again in a minute.");
+      } else {
+        setAuthError("Unable to login right now.");
+      }
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
   function handleNavSelect(id) {
     setActiveSection(id);
     setMobileOpen(false);
+  }
+
+  if (!authToken) {
+    return (
+      <div className="auth-shell">
+        <article className="card auth-card">
+          <div className="card-head">
+            <div className="card-head-left">
+              <ShieldCheck size={16} className="card-head-icon" />
+              <h2>Authorized Access</h2>
+            </div>
+          </div>
+          <div className="card-body auth-card-body">
+            <div className="auth-brand">
+              <h1>Wildlife Crime Intelligence Center</h1>
+              <p>Sign in with authorized credentials to continue.</p>
+            </div>
+            <form className="auth-form" onSubmit={handleLoginSubmit}>
+              <label className="auth-field">
+                <span>Username</span>
+                <input
+                  value={credentials.username}
+                  onChange={(event) => setCredentials((prev) => ({ ...prev, username: event.target.value }))}
+                  autoComplete="username"
+                  required
+                />
+              </label>
+              <label className="auth-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={credentials.password}
+                  onChange={(event) => setCredentials((prev) => ({ ...prev, password: event.target.value }))}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              {authError ? (
+                <div className="status error auth-status" role="alert">
+                  <AlertCircle size={16} />
+                  <span>{authError}</span>
+                </div>
+              ) : null}
+              <button className="btn btn-primary auth-submit" type="submit" disabled={authBusy}>
+                <Lock size={14} />
+                {authBusy ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
+          </div>
+        </article>
+      </div>
+    );
   }
 
   return (

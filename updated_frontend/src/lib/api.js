@@ -1,7 +1,9 @@
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 const withBase = (path) => (API_BASE ? `${API_BASE}${path}` : path);
+const AUTH_TOKEN_KEY = "wildlife_admin_token";
 
 export const ENDPOINTS = {
+  adminLogin: withBase("/api/admin/login"),
   summary: withBase("/api/dashboard-summary"),
   chart: withBase("/api/chart-data"),
   map: withBase("/api/map-data"),
@@ -28,9 +30,47 @@ export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {
 }
 
 export async function fetchJson(url) {
-  const res = await fetch(url, { cache: "no-store", credentials: "same-origin" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const token = getStoredToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const res = await fetch(url, { cache: "no-store", credentials: "same-origin", headers });
+  if (!res.ok) {
+    const error = new Error(`HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
+}
+
+export async function postJson(url, payload, { includeAuth = true } = {}) {
+  const token = includeAuth ? getStoredToken() : "";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers,
+    body: JSON.stringify(payload || {})
+  });
+  if (!res.ok) {
+    const error = new Error(`HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export function getStoredToken() {
+  return String(localStorage.getItem(AUTH_TOKEN_KEY) || "").trim();
+}
+
+export function setStoredToken(token) {
+  const value = String(token || "").trim();
+  if (!value) return;
+  localStorage.setItem(AUTH_TOKEN_KEY, value);
+}
+
+export function clearStoredToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
 export function buildQuery(params) {

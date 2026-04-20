@@ -294,6 +294,11 @@ class AdminLoginPayload(BaseModel):
 async def api_rate_limiter(request: Request, call_next):
     path = request.url.path
     if path.startswith("/api") and path != "/api/admin/login":
+        if request.method.upper() != "OPTIONS":
+            try:
+                require_admin_access(request)
+            except HTTPException as err:
+                return JSONResponse(status_code=err.status_code, content={"detail": err.detail})
         client = request.client.host if request.client else "unknown"
         key = f"{client}:{path}"
         if not rate_limiter.is_allowed(key):

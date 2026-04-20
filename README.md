@@ -151,6 +151,16 @@ VITE_API_BASE_URL=https://<railway-backend>.up.railway.app
 
 5. Redeploy frontend, then copy the final Vercel domain and set it in Railway `FRONTEND_ORIGIN`.
 
+6. Enable admin auth on Railway so Vercel frontend requires login:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=<pbkdf2_sha256 hash>
+ADMIN_SESSION_MINUTES=480
+```
+
+After deployment, the Vercel app shows a native login screen and stores the bearer token for authenticated API calls.
+
 Notes:
 
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
