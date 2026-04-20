@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     # Models
     model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+    person_ner_enabled: bool = True
+    person_ner_model_name: str = "Babelscape/wikineural-multilingual-ner"
+    person_ner_min_score: float = 0.70
 
     # Providers
     enabled_providers: str = (

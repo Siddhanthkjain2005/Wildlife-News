@@ -250,6 +250,65 @@ PERSON_NAME_STOPWORDS = {
     "crimebranch",
 }
 
+PERSON_ACTION_TERMS = {
+    "arrested",
+    "detained",
+    "held",
+    "booked",
+    "nabbed",
+    "caught",
+    "identified",
+    "named",
+    "accused",
+    "गिरफ्तार",
+    "गिरफ़्तार",
+    "ಬಂಧನ",
+    "ಬಂಧಿಸಲಾಗಿದೆ",
+    "கைது",
+    "அடையாளம்",
+    "అరెస్ట్",
+    "గుర్తించారు",
+    "গ্রেফতার",
+    "আটক",
+    "گرفتار",
+    "حراست",
+    "ଗିରଫ",
+    "ଚିହ୍ନଟ",
+    "પકડાયો",
+    "ધીરપકડ",
+    "ਗ੍ਰਿਫ਼ਤਾਰ",
+    "ਹਿਰਾਸਤ",
+}
+
+PERSON_CONTEXT_TERMS = {
+    *PERSON_ACTION_TERMS,
+    "poacher",
+    "poachers",
+    "trafficker",
+    "traffickers",
+    "suspect",
+    "suspects",
+    "wildlife crime",
+    "smuggling",
+    "seizure",
+    "raid",
+}
+
+GEO_STOP_TERMS = {
+    *INDIA_STATES,
+    *DISTRICT_TO_STATE.keys(),
+    *DISTRICT_ALIASES.keys(),
+    *STATE_ALIASES.keys(),
+}
+
+SPECIES_STOP_TERMS = {
+    species.lower() for species in SPECIES_KEYWORDS
+} | {
+    alias.lower()
+    for aliases in SPECIES_KEYWORDS.values()
+    for alias in aliases
+}
+
 AGENCY_TERMS = [
     "wccb",
     "wildlife crime control bureau",
@@ -303,9 +362,11 @@ class IntelligenceResult:
 class HybridIntelligenceEngine:
     def __init__(self) -> None:
         self._classifier = None
+        self._person_ner = None
         self._lock = Lock()
         self._model_ready = False
         self._logged_fallback_notice = False
+        self._logged_ner_notice = False
 
     @property
     def model_ready(self) -> bool:
@@ -356,6 +417,41 @@ class HybridIntelligenceEngine:
                         model=settings.model_name,
                     )
         return self._classifier
+
+    def _get_person_ner(self):
+        if not settings.person_ner_enabled:
+            self._person_ner = False
+            return self._person_ner
+        if self._person_ner is False:
+            return self._person_ner
+        if self._person_ner is None:
+            with self._lock:
+                if self._person_ner is None:
+                    if hf_pipeline is None:
+                        if not self._logged_ner_notice:
+                            logger.warning(
+                                "transformers unavailable (%s); person NER fallback will use regex only.",
+                                _TRANSFORMERS_IMPORT_ERROR,
+                            )
+                            self._logged_ner_notice = True
+                        self._person_ner = False
+                        return self._person_ner
+                    try:
+                        self._person_ner = hf_pipeline(
+                            "token-classification",
+                            model=settings.person_ner_model_name,
+                            aggregation_strategy="simple",
+                        )
+                    except Exception as err:  # noqa: BLE001
+                        if not self._logged_ner_notice:
+                            logger.warning(
+                                "Person NER model unavailable (%s); falling back to regex-only person extraction.",
+                                err,
+                            )
+                            self._logged_ner_notice = True
+                        self._person_ner = False
+                        return self._person_ner
+        return self._person_ner
 
     @classmethod
     def _fallback_score_map(cls, text: str) -> dict[str, float]:
@@ -565,9 +661,12 @@ class HybridIntelligenceEngine:
         lowered_tokens = [token.lower().strip(".") for token in tokens]
         if any(token in PERSON_NAME_STOPWORDS for token in lowered_tokens):
             return ""
+        normalized = " ".join(lowered_tokens)
+        if normalized in GEO_STOP_TERMS or normalized in SPECIES_STOP_TERMS:
+            return ""
         if len(tokens) == 1 and len(tokens[0].strip(".")) < 3:
             return ""
-        if not re.search(r"[A-Z]", value):
+        if not re.search(r"[A-Z]", value) and not re.search(r"[^\x00-\x7F]", value):
             return ""
         return " ".join(tokens)
 
@@ -580,24 +679,75 @@ class HybridIntelligenceEngine:
             return [raw_value]
         return [chunk for chunk in chunks if chunk]
 
-    @classmethod
-    def _extract_involved_persons(cls, text: str) -> list[str]:
+    @staticmethod
+    def _person_sentences(text: str) -> list[str]:
         if not text:
             return []
-        found: list[str] = []
-        seen: set[str] = set()
-        for pattern in PERSON_EXTRACTION_PATTERNS:
-            for match in pattern.finditer(text):
-                for chunk in cls._split_person_candidates(match.group(1)):
-                    candidate = cls._clean_person_candidate(chunk)
-                    if not candidate:
-                        continue
-                    key = candidate.lower()
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    found.append(candidate)
-        return found[:5]
+        chunks = re.split(r"(?<=[.!?।])\s+|\n+", text)
+        return [re.sub(r"\s+", " ", chunk).strip() for chunk in chunks if chunk and chunk.strip()]
+
+    @classmethod
+    def _person_context_sentences(cls, text: str) -> list[str]:
+        sentences = cls._person_sentences(text)
+        if not sentences:
+            return []
+        contextual = []
+        for sentence in sentences[:32]:
+            lower = sentence.lower()
+            if any(term in lower for term in PERSON_CONTEXT_TERMS):
+                contextual.append(sentence)
+        return (contextual or sentences)[:14]
+
+    def _extract_ner_person_candidates(self, sentences: list[str]) -> list[str]:
+        ner = self._get_person_ner()
+        if ner is False:
+            return []
+        candidates: list[str] = []
+        for sentence in sentences[:10]:
+            try:
+                entities = ner(sentence[:450])
+            except Exception as err:  # noqa: BLE001
+                if not self._logged_ner_notice:
+                    logger.warning("Person NER inference failed: %s", err)
+                    self._logged_ner_notice = True
+                self._person_ner = False
+                return []
+            for entity in entities:
+                label = str(entity.get("entity_group") or entity.get("entity") or "").upper()
+                if "PER" not in label and "PERSON" not in label:
+                    continue
+                score = float(entity.get("score") or 0.0)
+                if score < settings.person_ner_min_score:
+                    continue
+                candidate = self._clean_person_candidate(str(entity.get("word") or ""))
+                if candidate:
+                    candidates.append(candidate)
+        return candidates
+
+    def _extract_involved_persons(self, text: str) -> list[str]:
+        if not text:
+            return []
+        sentences = self._person_context_sentences(text)
+        candidate_scores: dict[str, int] = {}
+        display_names: dict[str, str] = {}
+        for sentence in sentences:
+            lower_sentence = sentence.lower()
+            context_bonus = 2 if any(term in lower_sentence for term in PERSON_ACTION_TERMS) else 1
+            for pattern in PERSON_EXTRACTION_PATTERNS:
+                for match in pattern.finditer(sentence):
+                    for chunk in self._split_person_candidates(match.group(1)):
+                        candidate = self._clean_person_candidate(chunk)
+                        if not candidate:
+                            continue
+                        key = candidate.lower()
+                        display_names.setdefault(key, candidate)
+                        candidate_scores[key] = candidate_scores.get(key, 0) + (2 + context_bonus)
+        for candidate in self._extract_ner_person_candidates(sentences):
+            key = candidate.lower()
+            display_names.setdefault(key, candidate)
+            candidate_scores[key] = candidate_scores.get(key, 0) + 2
+        ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
+        return [display_names[name] for name, score in ranked if score >= 2][:6]
 
     @staticmethod
     def _is_india(text: str, state: str, district: str, india_prob: float, outside_prob: float) -> tuple[bool, float]:

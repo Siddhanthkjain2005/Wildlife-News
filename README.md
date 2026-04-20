@@ -273,6 +273,7 @@ Export endpoints include all incidents by default (`min_confidence=0`) so downlo
 ## Accuracy Notes
 
 - With `requirements-ai.txt` installed, the multilingual model can classify poaching context in different languages.
+- Involved-person extraction uses multilingual regex + optional transformer NER (`PERSON_NER_ENABLED=true`) for better name precision.
 - Without transformer dependencies, the app automatically uses rule-based fallback intelligence (lighter deploy footprint).
 - Filtering combines model/rule confidence with wildlife/crime term validation.
 - India-only mode (`INDIA_ONLY=true`) keeps incidents with strong India context.
