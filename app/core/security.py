@@ -19,6 +19,11 @@ class _AdminSession:
     expires_at: float
 
 
+@dataclass
+class _CacheItem:
+    expires_at: float
+
+
 class AdminSessionStore:
     def __init__(self) -> None:
         self._sessions: dict[str, _AdminSession] = {}
@@ -81,7 +86,43 @@ class RateLimiter:
             return True
 
 
+class SuccessfulLoginCache:
+    def __init__(self, ttl_seconds: int = 180) -> None:
+        self._ttl_seconds = max(30, int(ttl_seconds))
+        self._items: dict[str, _CacheItem] = {}
+        self._lock = Lock()
+        self._next_cleanup_at = 0.0
+        self._cleanup_interval_seconds = 30.0
+
+    def _cleanup_locked(self, now: float) -> None:
+        if now < self._next_cleanup_at:
+            return
+        expired = [key for key, item in self._items.items() if item.expires_at <= now]
+        for key in expired:
+            self._items.pop(key, None)
+        self._next_cleanup_at = now + self._cleanup_interval_seconds
+
+    def is_valid(self, key: str) -> bool:
+        now = time.time()
+        with self._lock:
+            self._cleanup_locked(now)
+            item = self._items.get(key)
+            if item is None:
+                return False
+            if item.expires_at <= now:
+                self._items.pop(key, None)
+                return False
+            return True
+
+    def remember(self, key: str) -> None:
+        now = time.time()
+        with self._lock:
+            self._cleanup_locked(now)
+            self._items[key] = _CacheItem(expires_at=now + self._ttl_seconds)
+
+
 admin_sessions = AdminSessionStore()
+successful_login_cache = SuccessfulLoginCache()
 
 
 def build_password_hash(password: str, *, iterations: int = 260000) -> str:
@@ -102,11 +143,23 @@ def verify_password(password: str, encoded_hash: str) -> bool:
     return hmac.compare_digest(digest.hex(), raw_hash)
 
 
+def _login_cache_key(username: str, password: str) -> str:
+    payload = f"{username}\0{password}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def authenticate_admin(*, username: str, password: str) -> bool:
-    if username.strip() != settings.admin_username:
+    username_value = username.strip()
+    if username_value != settings.admin_username:
         return False
     if settings.admin_password_hash:
-        return verify_password(password=password, encoded_hash=settings.admin_password_hash)
+        cache_key = _login_cache_key(username_value, password)
+        if successful_login_cache.is_valid(cache_key):
+            return True
+        is_valid = verify_password(password=password, encoded_hash=settings.admin_password_hash)
+        if is_valid:
+            successful_login_cache.remember(cache_key)
+        return is_valid
     if settings.admin_password:
         return hmac.compare_digest(password, settings.admin_password)
     return False
