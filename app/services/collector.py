@@ -108,26 +108,26 @@ OSINT_SOURCE_TYPE = {
 
 KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata"}
 PROVIDER_QUERY_CAPS = {
-    "google_rss": 8,
-    "bing_rss": 4,
-    "gdelt": 4,
-    "newsapi": 2,
-    "gnews": 2,
-    "mediastack": 2,
-    "newsdata": 2,
-    "reddit_osint": 4,
-    "govt_notices": 4,
-    "ngo_feeds": 4,
+    "google_rss": 4,
+    "bing_rss": 2,
+    "gdelt": 2,
+    "newsapi": 1,
+    "gnews": 1,
+    "mediastack": 1,
+    "newsdata": 1,
+    "reddit_osint": 2,
+    "govt_notices": 2,
+    "ngo_feeds": 2,
     "x_adapter": 2,
 }
 PROVIDER_LANGUAGE_CAPS = {
-    "google_rss": 13,
-    "bing_rss": 3,
-    "gdelt": 3,
-    "newsapi": 4,
-    "gnews": 6,
+    "google_rss": 8,
+    "bing_rss": 2,
+    "gdelt": 2,
+    "newsapi": 1,
+    "gnews": 1,
     "mediastack": 2,
-    "newsdata": 6,
+    "newsdata": 1,
 }
 
 
@@ -396,6 +396,9 @@ class NewsCollector:
         max_queries = max(1, int(settings.max_queries_per_language))
         provider_cap = max(1, int(PROVIDER_QUERY_CAPS.get(provider, max_queries)))
         max_queries = min(max_queries, provider_cap)
+        if provider == "google_rss":
+            # Keep non-English lanes active every cycle instead of letting English dominate volume.
+            max_queries = min(max_queries, 4 if language == "en" else 3)
         if max_queries >= len(queries):
             return list(queries)
         key = (provider, language)
@@ -1285,7 +1288,7 @@ class NewsCollector:
         updated = 0
         dropped_non_india = 0
         pending_writes = 0
-        seen_urls: set[str] = set()
+        seen_urls: set[tuple[str, str]] = set()
         provider_stats: dict[str, dict[str, int]] = {}
         district_spike_cache: dict[tuple[str, str], bool] = {}
         self._provider_failures = {}
@@ -1332,9 +1335,10 @@ class NewsCollector:
                             continue
                         if start_from_utc is not None and published < start_from_utc:
                             continue
-                        if url in seen_urls:
+                        seen_key = (provider, url)
+                        if seen_key in seen_urls:
                             continue
-                        seen_urls.add(url)
+                        seen_urls.add(seen_key)
 
                         scanned += 1
                         provider_stats[provider]["scanned"] += 1
