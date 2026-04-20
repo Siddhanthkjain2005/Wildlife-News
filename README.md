@@ -234,10 +234,14 @@ You can enable/disable providers with:
 - `GET /api/export/csv` analyst CSV intelligence export
 - `GET /api/export/pdf` analyst PDF intelligence export
 - `GET /api/export/excel` executive formatted Excel intelligence export
+- `GET /api/export/excel-incidents-reports` two-sheet Excel export (`Total Incidents` + `Reports Today`)
 - `GET /api/export/briefing-pack` analyst briefing pack (JSON)
 - `GET /export/csv` CSV export alias
 - `GET /export/pdf` PDF export alias
 - `GET /export/excel` Excel export alias
+- `GET /export/excel-incidents-reports` two-sheet Excel export alias
+
+Export endpoints include all incidents by default (`min_confidence=0`) so downloaded CSV/PDF/Excel align with dashboard totals unless you pass a stricter filter.
 - `GET /api/sync-status` live sync progress, duration, and latest stats
 - `GET /api/alerts` alert events
 - `GET /api/alerts-popup?since_id=0` high-risk popup stream

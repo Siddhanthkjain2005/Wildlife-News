@@ -202,12 +202,14 @@ export default function App() {
 
   function handleExport(kind) {
     if (!authToken) return;
-    const query = buildQuery({ ...filters, admin_token: authToken });
+    const query = buildQuery({ ...filters, min_confidence: 0, admin_token: authToken });
     const base =
       kind === "pdf"
         ? ENDPOINTS.exportPdf
         : kind === "excel"
           ? ENDPOINTS.exportExcel
+          : kind === "excel_incidents_reports"
+            ? ENDPOINTS.exportExcelIncidentsReports
           : kind === "briefing"
             ? ENDPOINTS.exportBriefing
             : ENDPOINTS.exportCsv;

@@ -83,6 +83,10 @@ export default function TopBar({
             <FileSpreadsheet size={14} />
             <span className="btn-label">Excel</span>
           </button>
+          <button type="button" className="btn" onClick={() => onExport("excel_incidents_reports")}>
+            <FileSpreadsheet size={14} />
+            <span className="btn-label">Excel 2-Sheet</span>
+          </button>
           <button type="button" className="btn" onClick={() => onExport("pdf")}>
             <FileText size={14} />
             <span className="btn-label">PDF</span>

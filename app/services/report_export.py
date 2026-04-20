@@ -15,6 +15,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 def build_csv_bytes(rows: list[dict[str, object]]) -> bytes:
     fields = [
         "date",
+        "report_count",
         "risk_score",
         "species",
         "state",
@@ -98,6 +99,7 @@ def build_excel_bytes(rows: list[dict[str, object]], title: str = "Wildlife Inte
 
     incident_fields = [
         "date",
+        "report_count",
         "risk_score",
         "species",
         "state",
@@ -122,19 +124,20 @@ def build_excel_bytes(rows: list[dict[str, object]], title: str = "Wildlife Inte
         ws_incidents.append([row.get(key, "") for key in incident_fields])
     widths = {
         "A": 18,
-        "B": 10,
-        "C": 20,
-        "D": 18,
-        "E": 20,
+        "B": 12,
+        "C": 10,
+        "D": 20,
+        "E": 18,
         "F": 20,
-        "G": 22,
-        "H": 12,
-        "I": 48,
-        "J": 52,
-        "K": 54,
-        "L": 48,
+        "G": 20,
+        "H": 22,
+        "I": 12,
+        "J": 48,
+        "K": 52,
+        "L": 54,
         "M": 48,
-        "N": 52,
+        "N": 48,
+        "O": 52,
     }
     for column, width in widths.items():
         ws_incidents.column_dimensions[column].width = width
@@ -159,6 +162,131 @@ def build_excel_bytes(rows: list[dict[str, object]], title: str = "Wildlife Inte
     return buffer.getvalue()
 
 
+def build_excel_incidents_reports_bytes(
+    rows: list[dict[str, object]],
+    title: str = "Wildlife Intelligence Incident Export",
+) -> bytes:
+    wb = Workbook()
+    ws_incidents = wb.active
+    ws_incidents.title = "Total Incidents"
+    ws_reports = wb.create_sheet("Reports Today")
+
+    heading_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    heading_font = Font(color="FFFFFF", bold=True)
+
+    incident_fields = [
+        "date",
+        "report_count",
+        "risk_score",
+        "species",
+        "state",
+        "district",
+        "crime_type",
+        "source",
+        "confidence",
+        "title",
+        "two_line_summary",
+        "key_intelligence_points",
+        "likely_smuggling_route",
+        "action_recommendation",
+        "confidence_explanation",
+    ]
+    ws_incidents.append(incident_fields)
+    for col_idx in range(1, len(incident_fields) + 1):
+        cell = ws_incidents.cell(row=1, column=col_idx)
+        cell.fill = heading_fill
+        cell.font = heading_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for row in rows:
+        ws_incidents.append([row.get(key, "") for key in incident_fields])
+    for column, width in {
+        "A": 18,
+        "B": 12,
+        "C": 10,
+        "D": 20,
+        "E": 18,
+        "F": 20,
+        "G": 20,
+        "H": 22,
+        "I": 12,
+        "J": 48,
+        "K": 52,
+        "L": 54,
+        "M": 48,
+        "N": 48,
+        "O": 52,
+    }.items():
+        ws_incidents.column_dimensions[column].width = width
+    for row in ws_incidents.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    report_total = int(sum(int(row.get("report_count", 0) or 0) for row in rows))
+    ws_reports["A1"] = title
+    ws_reports["A1"].font = Font(size=15, bold=True)
+    ws_reports["A3"] = "Total Incidents"
+    ws_reports["B3"] = len(rows)
+    ws_reports["A4"] = "Source Reports Today"
+    ws_reports["B4"] = report_total
+    ws_reports["A5"] = "Date Range"
+    ws_reports["B5"] = _date_range(rows)
+
+    headers = [
+        "date",
+        "report_count",
+        "risk_score",
+        "state",
+        "district",
+        "species",
+        "crime_type",
+        "source",
+        "title",
+    ]
+    start_row = 7
+    for idx, name in enumerate(headers, start=1):
+        cell = ws_reports.cell(row=start_row, column=idx, value=name)
+        cell.fill = heading_fill
+        cell.font = heading_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    reports_rows = sorted(
+        rows,
+        key=lambda row: (int(row.get("report_count", 0) or 0), str(row.get("date", ""))),
+        reverse=True,
+    )
+    write_row = start_row + 1
+    for row in reports_rows:
+        ws_reports.cell(row=write_row, column=1, value=row.get("date", ""))
+        ws_reports.cell(row=write_row, column=2, value=int(row.get("report_count", 0) or 0))
+        ws_reports.cell(row=write_row, column=3, value=int(row.get("risk_score", 0) or 0))
+        ws_reports.cell(row=write_row, column=4, value=row.get("state", ""))
+        ws_reports.cell(row=write_row, column=5, value=row.get("district", ""))
+        ws_reports.cell(row=write_row, column=6, value=row.get("species", ""))
+        ws_reports.cell(row=write_row, column=7, value=row.get("crime_type", ""))
+        ws_reports.cell(row=write_row, column=8, value=row.get("source", ""))
+        ws_reports.cell(row=write_row, column=9, value=row.get("title", ""))
+        write_row += 1
+    for column, width in {
+        "A": 18,
+        "B": 14,
+        "C": 10,
+        "D": 18,
+        "E": 20,
+        "F": 20,
+        "G": 20,
+        "H": 24,
+        "I": 56,
+    }.items():
+        ws_reports.column_dimensions[column].width = width
+    for row in ws_reports.iter_rows(min_row=start_row + 1):
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
 def build_pdf_bytes(rows: list[dict[str, object]], title: str = "Wildlife Intelligence Report") -> bytes:
     buf = BytesIO()
     pdf = canvas.Canvas(buf, pagesize=A4)
@@ -172,6 +300,9 @@ def build_pdf_bytes(rows: list[dict[str, object]], title: str = "Wildlife Intell
     pdf.drawString(2 * cm, y, f"Date range: {_date_range(rows)}")
     y -= 0.55 * cm
     pdf.drawString(2 * cm, y, f"Total incidents: {len(rows)}")
+    y -= 0.8 * cm
+    report_total = int(sum(int(row.get("report_count", 0) or 0) for row in rows))
+    pdf.drawString(2 * cm, y, f"Source reports today: {report_total}")
     y -= 0.8 * cm
     high_risk = sum(1 for row in rows if int(row.get("risk_score", 0) or 0) > 80)
     pdf.drawString(2 * cm, y, f"High-risk incidents (>80): {high_risk}")

@@ -16,6 +16,7 @@ export const ENDPOINTS = {
   exportCsv: withBase("/api/export/csv"),
   exportPdf: withBase("/api/export/pdf"),
   exportExcel: withBase("/api/export/excel"),
+  exportExcelIncidentsReports: withBase("/api/export/excel-incidents-reports"),
   exportBriefing: withBase("/api/export/briefing-pack")
 };
 

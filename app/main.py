@@ -35,7 +35,12 @@ from app.services.audit import record_audit
 from app.services.collector import NewsCollector
 from app.services.dedupe import DedupeEngine
 from app.services.intelligence import HybridIntelligenceEngine
-from app.services.report_export import build_csv_bytes, build_excel_bytes, build_pdf_bytes
+from app.services.report_export import (
+    build_csv_bytes,
+    build_excel_bytes,
+    build_excel_incidents_reports_bytes,
+    build_pdf_bytes,
+)
 from app.services.reports import upsert_report_for_news
 from app.utils.india_geo import INDIA_CENTER, centroid_for_state
 from app.workers.sync_manager import SyncStateStore
@@ -840,6 +845,7 @@ def _fetch_filtered_news_rows(
 def _to_export_payload(row: NewsItem) -> dict[str, object]:
     return {
         "date": row.published_at.isoformat(sep=" ", timespec="seconds"),
+        "report_count": max(1, int(row.report_count or 1)),
         "risk_score": row.risk_score,
         "species": row.species,
         "state": row.state,
@@ -2080,7 +2086,7 @@ def export_csv(
     crime_type: str = "",
     severity: str = "",
     source: str = "",
-    min_confidence: float = settings.ai_threshold,
+    min_confidence: float = 0.0,
     limit: int = 500,
     _: None = Depends(require_admin_access),
 ):
@@ -2120,7 +2126,7 @@ def export_pdf(
     crime_type: str = "",
     severity: str = "",
     source: str = "",
-    min_confidence: float = settings.ai_threshold,
+    min_confidence: float = 0.0,
     limit: int = 300,
     _: None = Depends(require_admin_access),
 ):
@@ -2160,7 +2166,7 @@ def export_excel(
     crime_type: str = "",
     severity: str = "",
     source: str = "",
-    min_confidence: float = settings.ai_threshold,
+    min_confidence: float = 0.0,
     limit: int = 500,
     _: None = Depends(require_admin_access),
 ):
@@ -2187,6 +2193,52 @@ def export_excel(
     )
 
 
+@app.get("/api/export/excel-incidents-reports")
+@app.get("/export/excel-incidents-reports")
+def export_excel_incidents_reports(
+    request: Request,
+    db: Session = Depends(get_db),
+    q: str = "",
+    species: str = "",
+    state: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    crime_type: str = "",
+    severity: str = "",
+    source: str = "",
+    min_confidence: float = 0.0,
+    limit: int = 1000,
+    _: None = Depends(require_admin_access),
+):
+    rows = _fetch_filtered_news_rows(
+        db=db,
+        q=q,
+        species=species,
+        state=state,
+        date_from=date_from,
+        date_to=date_to,
+        crime_type=crime_type,
+        severity=severity,
+        source=source,
+        min_confidence=min_confidence,
+        limit=limit,
+    )
+    payload = [_to_export_payload(row) for row in rows]
+    excel_bytes = build_excel_incidents_reports_bytes(payload, title="Total Incidents and Reports Today")
+    _audit(
+        actor="admin",
+        action="export_excel_incidents_reports",
+        status="ok",
+        ip=_client_ip(request),
+        notes=f"rows={len(payload)}",
+    )
+    return StreamingResponse(
+        iter([excel_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=wildlife_incidents_reports_today.xlsx"},
+    )
+
+
 @app.get("/api/export/briefing-pack")
 def export_briefing_pack(
     request: Request,
@@ -2199,7 +2251,7 @@ def export_briefing_pack(
     crime_type: str = "",
     severity: str = "",
     source: str = "",
-    min_confidence: float = settings.ai_threshold,
+    min_confidence: float = 0.0,
     limit: int = 200,
     _: None = Depends(require_admin_access),
 ):
