@@ -22,10 +22,65 @@ logger = get_logger("app.intelligence")
 
 
 CRIME_TYPES: dict[str, set[str]] = {
-    "poaching": {"poaching", "poached", "hunted", "shikar", "illegal hunting", "snaring"},
-    "smuggling": {"smuggling", "trafficking", "interstate transport", "cross-border"},
-    "illegal_wildlife_trade": {"wildlife trade", "illegal wildlife trade", "trade network", "online sale"},
-    "ivory_trade": {"ivory", "tusk", "elephant tusk"},
+    "poaching": {
+        "poaching",
+        "poached",
+        "hunted",
+        "shikar",
+        "illegal hunting",
+        "snaring",
+        "वन्यजीव शिकार",
+        "वन्यजीव शिकारी",
+        "ಕಳ್ಳಬೇಟೆ",
+        "வனவிலங்கு வேட்டை",
+        "వన్యప్రాణి వేట",
+        "বন্যপ্রাণী শিকার",
+        "বন্যপ্ৰাণী চোৰাশিকার",
+        "جنگلی حیات کا شکار",
+        "ବନ୍ୟଜୀବ ଶିକାର",
+        "વન્યજીવ શિકાર",
+        "ਜੰਗਲੀ ਜੀਵ ਸ਼ਿਕਾਰ",
+    },
+    "smuggling": {
+        "smuggling",
+        "trafficking",
+        "interstate transport",
+        "cross-border",
+        "वन्यजीव तस्करी",
+        "तस्करी",
+        "ಕಳ್ಳಸಾಗಣೆ",
+        "விலங்கு கடத்தல்",
+        "అక్రమ వన్యప్రాణి రవాణా",
+        "বন্যপ্রাণী পাচার",
+        "বন্যপ্ৰাণী সৰবৰাহ",
+        "جنگلی حیات اسمگلنگ",
+        "ବନ୍ୟଜୀବ ତସକରି",
+        "વન્યજીવ તસ્કરી",
+        "ਜੰਗਲੀ ਜੀਵ ਤਸਕਰੀ",
+    },
+    "illegal_wildlife_trade": {
+        "wildlife trade",
+        "illegal wildlife trade",
+        "trade network",
+        "online sale",
+        "वन्यजीव व्यापार",
+        "अवैध वन्यजीव व्यापार",
+        "वन्यजीव अपराध",
+    },
+    "ivory_trade": {
+        "ivory",
+        "tusk",
+        "elephant tusk",
+        "हाथी दांत",
+        "हस्तीदंत",
+        "ആനക്കൊമ്പ്",
+        "হাতির দাঁত",
+        "হাতীদাঁত",
+        "ਹਾਥੀ ਦਾਂਤ",
+        "ہاتھی دانت",
+        "ହାତୀଦାନ୍ତ",
+        "હાથીદાંત",
+    },
     "tiger_skin_seizure": {"tiger skin", "tiger hide", "tiger pelt"},
     "rhino_horn_trafficking": {"rhino horn", "rhinoceros horn"},
     "exotic_bird_trafficking": {"exotic bird", "parrot trafficking", "macaw", "cockatoo"},
@@ -34,11 +89,11 @@ CRIME_TYPES: dict[str, set[str]] = {
 }
 
 SPECIES_KEYWORDS: dict[str, set[str]] = {
-    "tiger": {"tiger", "tigress", "big cat"},
+    "tiger": {"tiger", "tigress", "big cat", "बाघ", "व्याघ्र", "ಹುಲಿ", "புலி", "పులి", "বাঘ", "বাঘ", "ਬਾਘ", "شیر", "ବାଘ", "વાઘ"},
     "leopard": {"leopard", "panther"},
-    "elephant": {"elephant", "tusk", "ivory"},
-    "rhino": {"rhino", "rhinoceros"},
-    "pangolin": {"pangolin", "scales"},
+    "elephant": {"elephant", "tusk", "ivory", "हाथी", "ಆನೆ", "யானை", "ఏనుగు", "হাতি", "হাতী", "ہاتھی", "ହାତୀ", "હાથી"},
+    "rhino": {"rhino", "rhinoceros", "गैंडा", "ಖಡ್ಗಮೃಗ", "காண்டாமிருகம்", "ఖడ్గమృగం", "গণ্ডার", "گینڈا", "ଗଣ୍ଡମୃଗ", "ગેંડો"},
+    "pangolin": {"pangolin", "scales", "पैंगोलिन", "ಪ್ಯಾಂಗೋಲಿನ್", "பாங்கோலின்", "ప్యాంగోలిన్", "প্যাঙ্গোলিন", "پینگولن", "ପ୍ୟାଙ୍ଗୋଲିନ", "પેંગોલિન"},
     "bear": {"bear"},
     "deer": {"deer", "sambar", "chital", "antler"},
     "bird": {"parrot", "owl", "eagle", "hornbill", "falcon", "macaw", "cockatoo", "bird"},
@@ -80,6 +135,42 @@ ARTICLE_SIGNAL_TERMS = {
     "horns",
     "ivory",
     "scales",
+    "गिरफ्तार",
+    "गिरफ़्तार",
+    "जब्त",
+    "जप्त",
+    "ಬಂಧನ",
+    "ವಶ",
+    "கைது",
+    "பறிமுதல்",
+    "అరెస్ట్",
+    "సీజ్",
+    "গ্রেফতার",
+    "জব্দ",
+    "گرفتار",
+    "ضبط",
+    "ଗିରଫ",
+    "ଜବତ",
+    "પકડાયો",
+    "જપ્ત",
+    "ਗ੍ਰਿਫ਼ਤਾਰ",
+    "ਜ਼ਬਤ",
+}
+
+INDIA_HINT_TERMS = {
+    "india",
+    "bharat",
+    "भारत",
+    "ಭಾರತ",
+    "இந்தியா",
+    "భారత్",
+    "ভারত",
+    "ভাৰত",
+    "ഭാരത",
+    "بھارت",
+    "ଭାରତ",
+    "ભારત",
+    "ਭਾਰਤ",
 }
 
 STATE_ALIASES = {
@@ -291,7 +382,7 @@ class HybridIntelligenceEngine:
 
         poach_signal = min(1.0, rule_score + min(0.35, keyword_hits * 0.08) + (0.08 if species else 0.0))
         india_signal = 0.0
-        if "india" in text or "bharat" in text:
+        if any(term in text for term in INDIA_HINT_TERMS):
             india_signal += 0.55
         if state:
             india_signal += 0.30
@@ -511,7 +602,7 @@ class HybridIntelligenceEngine:
     @staticmethod
     def _is_india(text: str, state: str, district: str, india_prob: float, outside_prob: float) -> tuple[bool, float]:
         rule_score = 0.0
-        if "india" in text or "bharat" in text:
+        if any(term in text for term in INDIA_HINT_TERMS):
             rule_score += 0.5
         if state:
             rule_score += 0.35

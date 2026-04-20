@@ -106,6 +106,20 @@ OSINT_SOURCE_TYPE = {
     "x_adapter": "x_adapter",
 }
 
+ALL_PROVIDER_ORDER = [
+    "google_rss",
+    "bing_rss",
+    "gdelt",
+    "newsapi",
+    "gnews",
+    "mediastack",
+    "newsdata",
+    "reddit_osint",
+    "govt_notices",
+    "ngo_feeds",
+    "x_adapter",
+]
+
 KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata"}
 PROVIDER_QUERY_CAPS = {
     "google_rss": 4,
@@ -319,11 +333,28 @@ class NewsCollector:
         return start_local.astimezone(UTC).replace(tzinfo=None)
 
     def _enabled_providers(self) -> list[str]:
-        return self._csv_list(settings.enabled_providers)
+        configured = self._csv_list(settings.enabled_providers)
+        if not configured:
+            return list(ALL_PROVIDER_ORDER)
+        ordered: list[str] = []
+        for provider in [*configured, *ALL_PROVIDER_ORDER]:
+            if provider and provider not in ordered:
+                ordered.append(provider)
+        return ordered
 
     def _supported_languages(self) -> list[str]:
         configured = self._csv_list(settings.supported_languages)
-        return configured or ["en", "hi", "kn", "ta", "te"]
+        ordered: list[str] = []
+        for lang in configured:
+            normalized = lang if lang in QUERY_BY_LANGUAGE else ("en" if lang else "")
+            if normalized and normalized not in ordered:
+                ordered.append(normalized)
+        if not ordered:
+            ordered = ["en", "hi", "kn", "ta", "te"]
+        for lang in QUERY_BY_LANGUAGE:
+            if lang not in ordered:
+                ordered.append(lang)
+        return ordered
 
     @property
     def queue_backlog(self) -> int:
