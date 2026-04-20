@@ -4,7 +4,7 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 from threading import Thread
-from time import perf_counter
+from time import perf_counter, sleep
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -320,6 +320,10 @@ def _client_ip(request: Request | None) -> str:
     return str(request.client.host or "")[:64]
 
 
+_AUDIT_LOCK_LOG_INTERVAL_SECONDS = 60.0
+_last_audit_lock_log_at = 0.0
+
+
 def _audit(
     *,
     actor: str,
@@ -328,12 +332,28 @@ def _audit(
     ip: str = "",
     notes: str = "",
 ) -> None:
-    try:
-        with SessionLocal() as db:
-            record_audit(db, actor=actor, action=action, status=status, ip=ip, notes=notes)
-            db.commit()
-    except Exception as err:  # noqa: BLE001
-        app_logger.warning("Audit write failed for %s: %s", action, err)
+    global _last_audit_lock_log_at
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            with SessionLocal() as db:
+                record_audit(db, actor=actor, action=action, status=status, ip=ip, notes=notes)
+                db.commit()
+            return
+        except Exception as err:  # noqa: BLE001
+            error_text = str(err).lower()
+            locked = "database is locked" in error_text or "database table is locked" in error_text
+            if locked and attempt < max_attempts - 1:
+                sleep(0.03 * (attempt + 1))
+                continue
+            if locked:
+                now = perf_counter()
+                if now - _last_audit_lock_log_at >= _AUDIT_LOCK_LOG_INTERVAL_SECONDS:
+                    _last_audit_lock_log_at = now
+                    app_logger.warning("Audit write skipped due to database lock (action=%s).", action)
+                return
+            app_logger.warning("Audit write failed for %s: %s", action, err)
+            return
 
 
 def _cache_key(base: str, **kwargs: object) -> str:
