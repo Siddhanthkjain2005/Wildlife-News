@@ -35,7 +35,14 @@ export async function fetchJson(url) {
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
   const res = await fetch(url, { cache: "no-store", credentials: "same-origin", headers });
   if (!res.ok) {
-    const error = new Error(`HTTP ${res.status}`);
+    let detail = "";
+    try {
+      const payload = await res.json();
+      detail = String(payload?.detail || "").trim();
+    } catch {
+      detail = "";
+    }
+    const error = new Error(detail || `HTTP ${res.status}`);
     error.status = res.status;
     throw error;
   }
@@ -53,7 +60,14 @@ export async function postJson(url, payload, { includeAuth = true } = {}) {
     body: JSON.stringify(payload || {})
   });
   if (!res.ok) {
-    const error = new Error(`HTTP ${res.status}`);
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = String(body?.detail || "").trim();
+    } catch {
+      detail = "";
+    }
+    const error = new Error(detail || `HTTP ${res.status}`);
     error.status = res.status;
     throw error;
   }

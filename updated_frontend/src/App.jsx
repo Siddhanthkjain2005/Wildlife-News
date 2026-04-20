@@ -239,7 +239,7 @@ export default function App() {
       } else if (Number(err?.status) === 429) {
         setAuthError("Too many login attempts. Try again in a minute.");
       } else {
-        setAuthError("Unable to login right now.");
+        setAuthError(String(err?.message || "Unable to login right now."));
       }
     } finally {
       setAuthBusy(false);

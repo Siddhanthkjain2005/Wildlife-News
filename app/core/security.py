@@ -87,7 +87,7 @@ class RateLimiter:
 
 
 class SuccessfulLoginCache:
-    def __init__(self, ttl_seconds: int = 180) -> None:
+    def __init__(self, ttl_seconds: int = 900) -> None:
         self._ttl_seconds = max(30, int(ttl_seconds))
         self._items: dict[str, _CacheItem] = {}
         self._lock = Lock()
@@ -159,7 +159,10 @@ def authenticate_admin(*, username: str, password: str) -> bool:
         is_valid = verify_password(password=password, encoded_hash=settings.admin_password_hash)
         if is_valid:
             successful_login_cache.remember(cache_key)
-        return is_valid
+            return True
+        if settings.admin_password:
+            return hmac.compare_digest(password, settings.admin_password)
+        return False
     if settings.admin_password:
         return hmac.compare_digest(password, settings.admin_password)
     return False

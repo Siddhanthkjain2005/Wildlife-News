@@ -1366,7 +1366,8 @@ def login_submit(
     password: str = Form(...),
 ):
     ip = _client_ip(request)
-    if not login_rate_limiter.is_allowed(f"login:{ip}"):
+    login_actor = (username.strip().lower() or "unknown")[:80]
+    if not login_rate_limiter.is_allowed(f"login:{ip}:{login_actor}"):
         _audit(actor=username.strip() or "unknown", action="login_attempt", status="blocked", ip=ip, notes="rate_limited")
         return templates.TemplateResponse(
             "login.html",
@@ -1414,7 +1415,8 @@ def logout_get(request: Request):
 @app.post("/api/admin/login")
 def admin_login(payload: AdminLoginPayload, request: Request, response: Response):
     ip = _client_ip(request)
-    if not login_rate_limiter.is_allowed(f"api-login:{ip}"):
+    login_actor = (payload.username.strip().lower() or "unknown")[:80]
+    if not login_rate_limiter.is_allowed(f"api-login:{ip}:{login_actor}"):
         _audit(actor=payload.username.strip() or "unknown", action="login_attempt", status="blocked", ip=ip, notes="api_rate_limited")
         raise HTTPException(status_code=429, detail="Too many login attempts.")
     try:
