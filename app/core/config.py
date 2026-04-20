@@ -11,21 +11,21 @@ class Settings(BaseSettings):
     excel_path: str = "./data/wildlife_poaching_news.xlsx"
 
     # Sync
-    sync_interval_minutes: int = 5
-    today_only: bool = True
+    sync_interval_minutes: int = 3
+    today_only: bool = False
     app_timezone: str = "Asia/Kolkata"
     start_from_date: str = ""
-    max_articles_per_query: int = 25
-    max_queries_per_language: int = 3
-    request_timeout_seconds: int = 20
-    provider_parallel_workers: int = 6
-    provider_min_request_interval_seconds: float = 1.2
-    provider_rate_limit_cooldown_seconds: int = 900
+    max_articles_per_query: int = 60
+    max_queries_per_language: int = 8
+    request_timeout_seconds: int = 25
+    provider_parallel_workers: int = 8
+    provider_min_request_interval_seconds: float = 1.0
+    provider_rate_limit_cooldown_seconds: int = 600
     sync_scheduler_jitter_seconds: int = 20
 
     # Intelligence thresholds
-    ai_threshold: float = 0.62
-    india_threshold: float = 0.55
+    ai_threshold: float = 0.50
+    india_threshold: float = 0.45
     india_only: bool = True
     risk_alert_threshold: int = 80
     dedupe_title_similarity_threshold: float = 0.92
