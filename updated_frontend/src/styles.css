@@ -421,6 +421,31 @@ button {
   animation: pulse 1.6s ease-in-out infinite;
 }
 
+.sync-pill.is-idle {
+  border-color: rgba(16, 185, 129, 0.26);
+  background: rgba(16, 185, 129, 0.1);
+  color: #86efac;
+}
+
+.sync-pill.is-idle .sync-pill-dot {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
+  animation: pulse-idle 2.2s ease-in-out infinite;
+}
+
+.sync-pill.is-idle .sync-pill-meta {
+  color: #d1fae5;
+}
+
+@keyframes pulse-idle {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.03);
+  }
+}
+
 .content {
   padding: 22px 22px 40px;
   display: grid;
