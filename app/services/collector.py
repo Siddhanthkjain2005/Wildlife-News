@@ -90,6 +90,30 @@ OSINT_SOURCE_TYPE = {
     "x_adapter": "x_adapter",
 }
 
+KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata"}
+PROVIDER_QUERY_CAPS = {
+    "google_rss": 8,
+    "bing_rss": 4,
+    "gdelt": 4,
+    "newsapi": 2,
+    "gnews": 2,
+    "mediastack": 2,
+    "newsdata": 2,
+    "reddit_osint": 4,
+    "govt_notices": 4,
+    "ngo_feeds": 4,
+    "x_adapter": 2,
+}
+PROVIDER_LANGUAGE_CAPS = {
+    "google_rss": 8,
+    "bing_rss": 3,
+    "gdelt": 3,
+    "newsapi": 2,
+    "gnews": 3,
+    "mediastack": 2,
+    "newsdata": 3,
+}
+
 
 @dataclass
 class RawArticle:
@@ -312,17 +336,35 @@ class NewsCollector:
         source_type = self._provider_source_type(provider)
         if source_type != "news":
             return ["en"]
-        active: list[str] = []
+        ordered = []
+        for preferred in ("en", "hi"):
+            if preferred in self._supported_languages():
+                ordered.append(preferred)
         for lang in self._supported_languages():
             normalized = lang if lang in QUERY_BY_LANGUAGE else "en"
-            if normalized not in active:
-                active.append(normalized)
-        return active or ["en"]
+            if normalized not in ordered:
+                ordered.append(normalized)
+        max_languages = max(1, PROVIDER_LANGUAGE_CAPS.get(provider, len(ordered)))
+        return ordered[:max_languages] or ["en"]
+
+    @staticmethod
+    def _provider_has_required_key(provider: str) -> bool:
+        if provider == "newsapi":
+            return bool(settings.newsapi_key)
+        if provider == "gnews":
+            return bool(settings.gnews_api_key)
+        if provider == "mediastack":
+            return bool(settings.mediastack_api_key)
+        if provider == "newsdata":
+            return bool(settings.newsdata_api_key)
+        return True
 
     def _select_queries_for_cycle(self, *, provider: str, language: str, queries: list[str]) -> list[str]:
         if not queries:
             return []
         max_queries = max(1, int(settings.max_queries_per_language))
+        provider_cap = max(1, int(PROVIDER_QUERY_CAPS.get(provider, max_queries)))
+        max_queries = min(max_queries, provider_cap)
         if max_queries >= len(queries):
             return list(queries)
         key = (provider, language)
@@ -551,7 +593,9 @@ class NewsCollector:
                 RawArticle(
                     title=self._strip_html(getattr(entry, "title", "")),
                     summary=self._strip_html(getattr(entry, "summary", "")),
-                    source=self._strip_html(getattr(entry.source, "title", "Google News")),
+                    source=self._strip_html(
+                        getattr(getattr(entry, "source", None), "title", "Google News")
+                    ),
                     url=article_url,
                     published_at=self._parse_date(getattr(entry, "published", "")),
                     language=language,
@@ -569,7 +613,9 @@ class NewsCollector:
                 RawArticle(
                     title=self._strip_html(getattr(entry, "title", "")),
                     summary=self._strip_html(getattr(entry, "summary", "")),
-                    source=self._strip_html(getattr(entry.source, "title", "Bing News")),
+                    source=self._strip_html(
+                        getattr(getattr(entry, "source", None), "title", "Bing News")
+                    ),
                     url=self._normalize_url(getattr(entry, "link", "").strip()),
                     published_at=self._parse_date(getattr(entry, "published", "")),
                     language=language,
@@ -1218,6 +1264,19 @@ class NewsCollector:
         for provider in self._enabled_providers():
             source_type = self._provider_source_type(provider)
             provider_stats.setdefault(provider, {"provider": provider, "scanned": 0, "kept": 0, "failed": 0})
+            if provider in KEY_BASED_PROVIDERS and not self._provider_has_required_key(provider):
+                self._record_provider_failure(provider)
+                self._push_failed_source(
+                    provider=provider,
+                    language="-",
+                    query="-",
+                    error="missing_api_key",
+                )
+                logger.warning(
+                    "Provider skipped due to missing API key: %s. Configure corresponding key in environment.",
+                    provider,
+                )
+                continue
             for lang in self._active_languages_for_provider(provider):
                 query_pool = self._queries_for_language(lang) if source_type == "news" else self._osint_queries(db)
                 provider_queries = self._select_queries_for_cycle(provider=provider, language=lang, queries=query_pool)
