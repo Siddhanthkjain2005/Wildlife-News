@@ -1821,6 +1821,8 @@ def chart_data(db: Session = Depends(get_db)):
 
         timeline: dict[str, dict[str, int]] = {}
         state_totals: dict[str, int] = {}
+        species_totals: dict[str, int] = {}
+        source_totals: dict[str, dict[str, float]] = {}
         crime_types: set[str] = set()
         for row in rows:
             if aggregate_weekly:
@@ -1829,24 +1831,44 @@ def chart_data(db: Session = Depends(get_db)):
             else:
                 day = row.published_at.date().isoformat()
             bucket = timeline.setdefault(day, {"incidents": 0, "high_risk": 0})
-            bucket["incidents"] += max(1, row.report_count)
+            bucket["incidents"] += 1
             if row.risk_score > settings.risk_alert_threshold:
-                bucket["high_risk"] += max(1, row.report_count)
+                bucket["high_risk"] += 1
             state_key = (row.state or "Unknown").strip().title() or "Unknown"
-            state_totals[state_key] = state_totals.get(state_key, 0) + max(1, row.report_count)
+            state_totals[state_key] = state_totals.get(state_key, 0) + 1
+            source_name = (row.source or "Unknown").strip() or "Unknown"
+            source_bucket = source_totals.setdefault(source_name, {"count": 0.0, "confidence_sum": 0.0})
+            source_bucket["count"] += 1.0
+            source_bucket["confidence_sum"] += float(row.confidence or 0.0)
+            incident_species = {
+                item.strip().lower()
+                for item in str(row.species or "").split(",")
+                if item.strip()
+            }
+            for species_name in incident_species:
+                species_totals[species_name] = species_totals.get(species_name, 0) + 1
             if row.crime_type:
                 crime_types.add(row.crime_type)
 
-        species_rows = (
-            db.execute(select(SpeciesStat).order_by(SpeciesStat.count.desc()).limit(12))
-            .scalars()
-            .all()
-        )
-        source_rows = (
-            db.execute(select(SourceStat).order_by(SourceStat.reliability_score.desc()).limit(12))
-            .scalars()
-            .all()
-        )
+        species_rows = sorted(
+            [{"species": species, "count": count} for species, count in species_totals.items()],
+            key=lambda item: item["count"],
+            reverse=True,
+        )[:12]
+        source_rows = sorted(
+            [
+                {
+                    "source": source,
+                    "reliability_score": round(
+                        stats["confidence_sum"] / stats["count"], 4
+                    ) if stats["count"] > 0 else 0.0,
+                    "article_count": int(stats["count"]),
+                }
+                for source, stats in source_totals.items()
+            ],
+            key=lambda item: (item["reliability_score"], item["article_count"]),
+            reverse=True,
+        )[:12]
 
         all_states = db.execute(
             _apply_today_news_scope(
@@ -1872,7 +1894,7 @@ def chart_data(db: Session = Depends(get_db)):
                 .order_by(NewsItem.crime_type.asc())
             )
         ).scalars().all()
-        all_species = db.execute(select(SpeciesStat.species).order_by(SpeciesStat.species.asc())).scalars().all()
+        all_species = sorted(species_totals.keys())
 
         timeline_labels = sorted(timeline.keys())
         return {
@@ -1888,11 +1910,8 @@ def chart_data(db: Session = Depends(get_db)):
                 key=lambda item: item["count"],
                 reverse=True,
             )[:10],
-            "species_distribution": [{"species": row.species, "count": row.count} for row in species_rows],
-            "source_rankings": [
-                {"source": row.source_name, "reliability_score": row.reliability_score, "article_count": row.article_count}
-                for row in source_rows
-            ],
+            "species_distribution": species_rows,
+            "source_rankings": source_rows,
             "filters": {
                 "states": [str(value) for value in all_states if value],
                 "species": [str(value) for value in all_species if value],
