@@ -5,17 +5,13 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '10000')))"
     healthCheckPath: /health
-    disk:
-      name: wildlife-data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: DATABASE_URL
-        value: sqlite:////data/news.db
+        value: sqlite:///./data/news.db
       - key: EXCEL_PATH
-        value: /data/wildlife_poaching_news.xlsx
+        value: ./data/wildlife_poaching_news.xlsx
       - key: LOG_DIR
-        value: /data/logs
+        value: ./logs
       - key: TODAY_ONLY
         value: "false"
       - key: APP_TIMEZONE

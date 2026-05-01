@@ -114,13 +114,12 @@ Behavior:
    - Environment: `Python 3`
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '10000')))"`.
-3. Add a **persistent disk** and mount it at `/data` (required for SQLite + Excel persistence across deploys/restarts).
-4. Set these Render environment variables:
+3. Set these Render environment variables:
 
 ```env
-DATABASE_URL=sqlite:////data/news.db
-EXCEL_PATH=/data/wildlife_poaching_news.xlsx
-LOG_DIR=/data/logs
+DATABASE_URL=sqlite:///./data/news.db
+EXCEL_PATH=./data/wildlife_poaching_news.xlsx
+LOG_DIR=./logs
 TODAY_ONLY=false
 APP_TIMEZONE=Asia/Kolkata
 START_FROM_DATE=2026-04-19
@@ -133,13 +132,17 @@ SYNC_SCHEDULER_JITTER_SECONDS=20
 FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
 ```
 
-5. Deploy and verify:
+4. Deploy and verify:
    - `https://<your-render-backend>.onrender.com/health`
    - `https://<your-render-backend>.onrender.com/api/sync-status`
 
-6. Optional data restore (if you exported SQLite from Railway):
-   - Open **Render Shell** and place your backup at `/data/news.db`.
-   - Ensure `DATABASE_URL=sqlite:////data/news.db`, then restart the service.
+5. If you are on a paid plan with persistent disk, mount disk at `/data` and switch to:
+
+```env
+DATABASE_URL=sqlite:////data/news.db
+EXCEL_PATH=/data/wildlife_poaching_news.xlsx
+LOG_DIR=/data/logs
+```
 
 ### Vercel (frontend)
 
@@ -171,7 +174,8 @@ Notes:
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
 - For Vercel deployment, use `npm run build` (default static SPA build).
 - This repo also includes a `render.yaml` blueprint to prefill Render settings.
-- If you see `sqlite3.OperationalError: unable to open database file`, verify volume mount path is `/data` and `DATABASE_URL=sqlite:////data/news.db`.
+- On Render free plan, filesystem data is ephemeral (cleared on restart/redeploy), so SQLite/Excel history is not durable.
+- If you see `sqlite3.OperationalError: unable to open database file`, use writable local paths (`./data`, `./logs`) or mount a `/data` disk on paid plans.
 
 ## Data Output
 
