@@ -105,16 +105,17 @@ Behavior:
 - APIs and dashboard queries are filtered to the same start-date floor.
 - Older rows are **not auto-deleted** at startup or during sync.
 
-## 24/7 deployment (Railway backend + Vercel frontend)
+## 24/7 deployment (Render backend + Vercel frontend)
 
-### Railway (backend, always-on sync)
+### Render (backend, always-on sync)
 
-1. Push this repo to GitHub and create a Railway project from that repo.
-2. Railway root directory: repository root (`/`).
-3. Keep build mode on **Dockerfile** (this repo includes a slim `Dockerfile` to stay under Railway image-size limits).
-4. Railway start command: `python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '8000')))"` (already in `Procfile`).
-5. Add a Railway volume and mount it at `/data`.
-6. Set these Railway environment variables:
+1. Push this repo to GitHub and create a **Render Web Service** from this repository (root directory: `/`).
+2. Runtime/build:
+   - Environment: `Python 3`
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '10000')))"`.
+3. Add a **persistent disk** and mount it at `/data` (required for SQLite + Excel persistence across deploys/restarts).
+4. Set these Render environment variables:
 
 ```env
 DATABASE_URL=sqlite:////data/news.db
@@ -132,9 +133,13 @@ SYNC_SCHEDULER_JITTER_SECONDS=20
 FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
 ```
 
-7. Deploy and verify:
-   - `https://<railway-backend>/health`
-   - `https://<railway-backend>/api/sync-status`
+5. Deploy and verify:
+   - `https://<your-render-backend>.onrender.com/health`
+   - `https://<your-render-backend>.onrender.com/api/sync-status`
+
+6. Optional data restore (if you exported SQLite from Railway):
+   - Open **Render Shell** and place your backup at `/data/news.db`.
+   - Ensure `DATABASE_URL=sqlite:////data/news.db`, then restart the service.
 
 ### Vercel (frontend)
 
@@ -146,12 +151,12 @@ FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
 4. Add Vercel environment variable:
 
 ```env
-VITE_API_BASE_URL=https://<railway-backend>.up.railway.app
+VITE_API_BASE_URL=https://<your-render-backend>.onrender.com
 ```
 
-5. Redeploy frontend, then copy the final Vercel domain and set it in Railway `FRONTEND_ORIGIN`.
+5. Redeploy frontend, then copy the final Vercel domain and set it in Render `FRONTEND_ORIGIN`.
 
-6. Enable admin auth on Railway so Vercel frontend requires login:
+6. Enable admin auth on Render so Vercel frontend requires login:
 
 ```env
 ADMIN_USERNAME=admin
@@ -165,7 +170,7 @@ Notes:
 
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
 - For Vercel deployment, use `npm run build` (default static SPA build).
-- If Railway still shows image-size errors, clear old failed deployments and redeploy so it rebuilds from the new Dockerfile.
+- This repo also includes a `render.yaml` blueprint to prefill Render settings.
 - If you see `sqlite3.OperationalError: unable to open database file`, verify volume mount path is `/data` and `DATABASE_URL=sqlite:////data/news.db`.
 
 ## Data Output

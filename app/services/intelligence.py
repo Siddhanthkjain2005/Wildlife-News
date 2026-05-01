@@ -190,21 +190,27 @@ DISTRICT_ALIASES = {
     "greater noida": "uttar pradesh",
 }
 
+PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'’-]*|[^\W\d_]{2,})"
+PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,3}}"
+PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,4}}"
+
 PERSON_EXTRACTION_PATTERNS = [
     re.compile(
-        r"\b(?:arrested|held|detained|booked|nabbed|caught|identified|named)\s+"
-        r"(?:the\s+)?(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused)?\s*"
-        r"(?:named|identified as)?\s*([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\b"
+        rf"\b(?:arrested|held|detained|booked|nabbed|caught|identified|named|questioned)\s+"
+        rf"(?:the\s+)?(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused|individual(?:s)?)?\s*"
+        rf"(?:named|identified as)?\s*({PERSON_NAME_PATTERN})\b"
     ),
     re.compile(
-        r"\b([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\s+"
-        r"(?:was|were)?\s*(?:arrested|held|detained|booked|nabbed|accused|named|identified)\b"
+        rf"\b({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+"
+        rf"(?:was|were|has been|have been)?\s*(?:arrested|held|detained|booked|nabbed|accused|named|identified|questioned)\b"
     ),
-    re.compile(r"\bidentified as\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\b"),
+    re.compile(rf"\bidentified as\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\b"),
     re.compile(
-        r"\b(?:named|identified as|arrested)\s+"
-        r"([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3}"
-        r"(?:\s*(?:,|and|&)\s*[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3}){1,4})\b"
+        rf"\b(?:named|identified as|arrested)\s+({PERSON_NAME_LIST_PATTERN})\b"
+    ),
+    re.compile(
+        rf"\b(?:arrest|detention|questioning)\s+(?:of\s+)?({PERSON_NAME_PATTERN})\b",
+        re.IGNORECASE,
     ),
 ]
 
@@ -249,6 +255,28 @@ PERSON_NAME_STOPWORDS = {
     "no",
     "crimebranch",
 }
+
+PERSON_COUNT_WORDS = {
+    "an": 1,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "duo": 2,
+    "trio": 3,
+}
+
+PERSON_COUNT_PATTERN = re.compile(
+    r"\b(?:(?P<digits>\d{1,2})|(?P<word>an|one|two|three|four|five|six|seven|eight|nine|ten|duo|trio))\s+"
+    r"(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused|persons?|individuals?)\b",
+    re.IGNORECASE,
+)
 
 PERSON_ACTION_TERMS = {
     "arrested",
@@ -651,6 +679,14 @@ class HybridIntelligenceEngine:
         value = re.sub(r"\([^)]{1,20}\)", "", value).strip()
         value = re.sub(r"\baged\s+\d{1,2}\b", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\balias\b.*$", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(
+            r"^(?:the\s+)?(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused)\s+",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        )
+        value = re.sub(r",?\s*(?:resident(?:s)?|r/o|s/o|d/o|w/o)\b.*$", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"\b(?:son|daughter|wife)\s+of\b.*$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\s+", " ", value).strip()
         value = re.sub(r"^(?:mr|mrs|ms|dr|shri|smt)\.?\s+", "", value, flags=re.IGNORECASE)
         if not value:
@@ -674,7 +710,11 @@ class HybridIntelligenceEngine:
     def _split_person_candidates(cls, raw_value: str) -> list[str]:
         if not raw_value:
             return []
-        chunks = re.split(r"\s*(?:,| and | & )\s*", raw_value.strip(), flags=re.IGNORECASE)
+        chunks = re.split(
+            r"\s*(?:,|;|/| and | & |और|एवं|तथा|और|ও|এবং|و|ਅਤੇ)\s*",
+            raw_value.strip(),
+            flags=re.IGNORECASE,
+        )
         if len(chunks) <= 1:
             return [raw_value]
         return [chunk for chunk in chunks if chunk]
@@ -724,9 +764,25 @@ class HybridIntelligenceEngine:
                     candidates.append(candidate)
         return candidates
 
+    @staticmethod
+    def _extract_involved_count_hint(text: str) -> int:
+        if not text:
+            return 0
+        max_count = 0
+        for match in PERSON_COUNT_PATTERN.finditer(text.lower()):
+            digits = match.group("digits")
+            if digits:
+                count = int(digits)
+            else:
+                count = PERSON_COUNT_WORDS.get((match.group("word") or "").strip().lower(), 0)
+            if count > max_count:
+                max_count = count
+        return max_count
+
     def _extract_involved_persons(self, text: str) -> list[str]:
         if not text:
             return []
+        involved_count_hint = self._extract_involved_count_hint(text)
         sentences = self._person_context_sentences(text)
         candidate_scores: dict[str, int] = {}
         display_names: dict[str, str] = {}
@@ -747,7 +803,12 @@ class HybridIntelligenceEngine:
             display_names.setdefault(key, candidate)
             candidate_scores[key] = candidate_scores.get(key, 0) + 2
         ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
-        return [display_names[name] for name, score in ranked if score >= 2][:6]
+        involved_persons = [display_names[name] for name, score in ranked if score >= 2][:6]
+        if 0 < involved_count_hint <= 20 and involved_count_hint > len(involved_persons) and len(involved_persons) < 6:
+            remaining = involved_count_hint - len(involved_persons)
+            suffix = "other unnamed suspect" if remaining == 1 else "other unnamed suspects"
+            involved_persons.append(f"{remaining} {suffix}")
+        return involved_persons[:6]
 
     @staticmethod
     def _is_india(text: str, state: str, district: str, india_prob: float, outside_prob: float) -> tuple[bool, float]:

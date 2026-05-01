@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: wildlife-news-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '10000')))"
+    healthCheckPath: /health
+    disk:
+      name: wildlife-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////data/news.db
+      - key: EXCEL_PATH
+        value: /data/wildlife_poaching_news.xlsx
+      - key: LOG_DIR
+        value: /data/logs
+      - key: TODAY_ONLY
+        value: "false"
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: START_FROM_DATE
+        value: "2026-04-19"
+      - key: SYNC_INTERVAL_MINUTES
+        value: "3"
+      - key: MAX_ARTICLES_PER_QUERY
+        value: "60"
+      - key: MAX_QUERIES_PER_LANGUAGE
+        value: "8"
+      - key: PROVIDER_MIN_REQUEST_INTERVAL_SECONDS
+        value: "1.0"
+      - key: PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS
+        value: "600"
+      - key: SYNC_SCHEDULER_JITTER_SECONDS
+        value: "20"
+      - key: FRONTEND_ORIGIN
+        value: https://your-frontend-domain.vercel.app
