@@ -105,16 +105,13 @@ Behavior:
 - APIs and dashboard queries are filtered to the same start-date floor.
 - Older rows are **not auto-deleted** at startup or during sync.
 
-## 24/7 deployment (Render backend + Vercel frontend)
+## 24/7 deployment (Railway backend + Vercel frontend)
 
-### Render (backend, always-on sync)
+### Railway (backend, always-on sync)
 
-1. Push this repo to GitHub and create a **Render Web Service** from this repository (root directory: `/`).
-2. Runtime/build:
-   - Environment: `Python 3`
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `python -c "import os, uvicorn; uvicorn.run('app.main:app', host='0.0.0.0', port=int(os.getenv('PORT', '10000')))"`.
-3. Set these Render environment variables:
+1. Push this repo to GitHub and create a **Railway service** from the repository root (`/`).
+2. This repo now includes `railway.json` for deploy config and healthcheck (`/health`).
+3. Set these Railway environment variables:
 
 ```env
 DATABASE_URL=sqlite:///./data/news.db
@@ -129,20 +126,27 @@ MAX_QUERIES_PER_LANGUAGE=8
 PROVIDER_MIN_REQUEST_INTERVAL_SECONDS=1.0
 PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS=600
 SYNC_SCHEDULER_JITTER_SECONDS=20
-FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app
+FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app,https://*.vercel.app
 ```
 
 4. Deploy and verify:
-   - `https://<your-render-backend>.onrender.com/health`
-   - `https://<your-render-backend>.onrender.com/api/sync-status`
+   - `https://<your-railway-backend>.up.railway.app/health`
+   - `https://<your-railway-backend>.up.railway.app/api/sync-status`
 
-5. If you are on a paid plan with persistent disk, mount disk at `/data` and switch to:
+5. For persistent SQLite/Excel storage, attach a Railway Volume at `/data` and switch to:
 
 ```env
 DATABASE_URL=sqlite:////data/news.db
 EXCEL_PATH=/data/wildlife_poaching_news.xlsx
 LOG_DIR=/data/logs
 ```
+
+6. This repository includes GitHub deployment automation at `.github/workflows/railway-deploy.yml`.
+   Configure these GitHub repository secrets:
+   - `RAILWAY_TOKEN` (required, project token)
+   - `RAILWAY_SERVICE` (required, service name or ID)
+   - `RAILWAY_ENVIRONMENT` (optional, environment name or ID)
+   - `RAILWAY_PROJECT` (optional, project ID)
 
 ### Vercel (frontend)
 
@@ -154,12 +158,14 @@ LOG_DIR=/data/logs
 4. Add Vercel environment variable:
 
 ```env
-VITE_API_BASE_URL=https://<your-render-backend>.onrender.com
+VITE_API_BASE_URL=https://<your-railway-backend>.up.railway.app
 ```
 
-5. Redeploy frontend, then copy the final Vercel domain and set it in Render `FRONTEND_ORIGIN`.
+5. Redeploy frontend, then copy the final Vercel domain and set it in Railway `FRONTEND_ORIGIN`.
+   - You can use comma-separated origins and wildcards, for example:
+     - `https://your-frontend-domain.vercel.app,https://*.vercel.app`
 
-6. Enable admin auth on Render so Vercel frontend requires login:
+6. Enable admin auth so Vercel frontend requires login:
 
 ```env
 ADMIN_USERNAME=admin
@@ -173,8 +179,8 @@ Notes:
 
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
 - For Vercel deployment, use `npm run build` (default static SPA build).
-- This repo also includes a `render.yaml` blueprint to prefill Render settings.
-- On Render free plan, filesystem data is ephemeral (cleared on restart/redeploy), so SQLite/Excel history is not durable.
+- This repo includes `railway.json` to keep Railway deploy settings in source control.
+- Without a Railway Volume, filesystem data is ephemeral (cleared on restart/redeploy), so SQLite/Excel history is not durable.
 - If you see `sqlite3.OperationalError: unable to open database file`, use writable local paths (`./data`, `./logs`) or mount a `/data` disk on paid plans.
 
 ## Data Output
@@ -282,13 +288,14 @@ Export endpoints include all incidents by default (`min_confidence=0`) so downlo
 
 ## Accuracy Notes
 
-- With `requirements-ai.txt` installed, the multilingual model can classify poaching context in different languages.
+- With `requirements-ai.txt` installed, the multilingual model classifies poaching context across languages.
 - Involved-person extraction uses multilingual regex + optional transformer NER (`PERSON_NER_ENABLED=true`) for better name precision.
 - Without transformer dependencies, the app automatically uses rule-based fallback intelligence (lighter deploy footprint).
 - Filtering combines model/rule confidence with wildlife/crime term validation.
 - India-only mode (`INDIA_ONLY=true`) keeps incidents with strong India context.
-- You can tighten precision by increasing `AI_THRESHOLD` in `.env` (example: `0.70`).
-- You can tighten India geolocation strictness via `INDIA_THRESHOLD`.
+- Strict precision mode is available but disabled by default (`STRICT_AI_MODE=false`) to preserve broader incident capture while retaining accuracy defaults.
+- Default thresholds are tuned for balance (`AI_THRESHOLD=0.62`, `INDIA_THRESHOLD=0.55`).
+- You can enable stricter filtering by setting `STRICT_AI_MODE=true` and/or increasing `AI_THRESHOLD` (example: `0.70`) and `INDIA_THRESHOLD`.
 
 ## Security and Ops Hardening
 

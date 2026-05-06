@@ -1,0 +1,51 @@
+name: Deploy to Railway
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT }}
+          RAILWAY_PROJECT: ${{ secrets.RAILWAY_PROJECT }}
+        run: |
+          if [ -z "${RAILWAY_TOKEN:-}" ]; then
+            echo "Missing required secret: RAILWAY_TOKEN"
+            exit 1
+          fi
+          if [ -z "${RAILWAY_SERVICE:-}" ]; then
+            echo "Missing required secret: RAILWAY_SERVICE"
+            exit 1
+          fi
+
+          CMD=(railway up --ci --service "$RAILWAY_SERVICE")
+          if [ -n "${RAILWAY_ENVIRONMENT:-}" ]; then
+            CMD+=(--environment "$RAILWAY_ENVIRONMENT")
+          fi
+          if [ -n "${RAILWAY_PROJECT:-}" ]; then
+            CMD+=(--project "$RAILWAY_PROJECT")
+          fi
+
+          "${CMD[@]}"

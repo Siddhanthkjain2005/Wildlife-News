@@ -46,16 +46,48 @@ from app.utils.india_geo import INDIA_CENTER, centroid_for_state
 from app.workers.sync_manager import SyncStateStore
 
 app = FastAPI(title=settings.app_name)
-allowed_origins = [origin.strip() for origin in settings.frontend_origin.split(",") if origin.strip()]
-if allowed_origins:
-    allow_credentials = "*" not in allowed_origins
+DEFAULT_FRONTEND_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://*.vercel.app",
+]
+
+
+def _origin_pattern_to_regex(origin_pattern: str) -> str:
+    escaped = re.escape(origin_pattern).replace(r"\*", ".*")
+    return f"^{escaped}$"
+
+
+def _configure_cors() -> None:
+    configured = [origin.strip() for origin in settings.frontend_origin.split(",") if origin.strip()]
+    raw_origins = configured or DEFAULT_FRONTEND_ORIGINS
+    explicit_origins: list[str] = []
+    origin_patterns: list[str] = []
+    allow_all = False
+
+    for origin in raw_origins:
+        if origin == "*":
+            allow_all = True
+            continue
+        if "*" in origin:
+            origin_patterns.append(_origin_pattern_to_regex(origin))
+            continue
+        explicit_origins.append(origin)
+
+    if any(origin.endswith(".vercel.app") for origin in explicit_origins):
+        origin_patterns.append(r"^https://.*\.vercel\.app$")
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,
-        allow_credentials=allow_credentials,
+        allow_origins=["*"] if allow_all else explicit_origins,
+        allow_origin_regex="|".join(origin_patterns) if origin_patterns else None,
+        allow_credentials=not allow_all,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+_configure_cors()
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -815,6 +847,12 @@ def _fetch_filtered_news_rows(
             func.lower(NewsItem.title).like(q_like)
             | func.lower(NewsItem.summary).like(q_like)
             | func.lower(NewsItem.intel_summary).like(q_like)
+            | func.lower(NewsItem.involved_persons).like(q_like)
+            | func.lower(NewsItem.species).like(q_like)
+            | func.lower(NewsItem.crime_type).like(q_like)
+            | func.lower(NewsItem.state).like(q_like)
+            | func.lower(NewsItem.district).like(q_like)
+            | func.lower(NewsItem.source).like(q_like)
         )
     if species.strip():
         stmt = stmt.where(func.lower(NewsItem.species).like(f"%{species.strip().lower()}%"))

@@ -1144,11 +1144,19 @@ class HybridIntelligenceEngine:
         network_indicator = self._network_indicator(text)
         repeat_indicator = prior_district_hits >= 2 or prior_source_hits >= 4
         has_false_positive = self._has_false_positive(text)
-        strong_rule_signal = (
-            rule_score >= 0.5
-            or keyword_hits >= 3
-            or (len(species) > 0 and (poach_prob >= 0.45 or network_indicator))
-        )
+        strict_mode = settings.strict_ai_mode
+        if strict_mode:
+            strong_rule_signal = (
+                rule_score >= 0.6
+                or keyword_hits >= 4
+                or (len(species) > 0 and poach_prob >= 0.55)
+            )
+        else:
+            strong_rule_signal = (
+                rule_score >= 0.5
+                or keyword_hits >= 3
+                or (len(species) > 0 and (poach_prob >= 0.45 or network_indicator))
+            )
 
         # Choose crime type from strongest zero-shot crime label, fallback to rule.
         zs_crime = max(
@@ -1172,14 +1180,15 @@ class HybridIntelligenceEngine:
         if crime_type == "unknown" and (poach_prob >= 0.55 or keyword_hits >= 4):
             crime_type = "poaching"
 
+        outside_prob = score_map.get("incident outside India", 0.0)
         is_india, india_score = self._is_india(
             text=text,
             state=state,
             district=district,
             india_prob=score_map.get("incident in India", 0.0),
-            outside_prob=score_map.get("incident outside India", 0.0),
+            outside_prob=outside_prob,
         )
-        if not is_india and (state or district) and strong_rule_signal:
+        if not is_india and (state or district) and strong_rule_signal and (not strict_mode or outside_prob < 0.55):
             is_india = True
             india_score = max(india_score, settings.india_threshold)
 
@@ -1206,15 +1215,29 @@ class HybridIntelligenceEngine:
             evidence_strength=evidence_strength,
             operational_details=operational_details,
         )
-        baseline_accept = confidence >= settings.ai_threshold and crime_type != "unknown"
-        fallback_accept = (
-            crime_type != "unknown"
-            and not_wildlife_prob < 0.78
-            and strong_rule_signal
-            and poach_prob >= 0.28
-        )
+        if strict_mode:
+            effective_ai_threshold = min(0.98, settings.ai_threshold + 0.04)
+            baseline_accept = confidence >= effective_ai_threshold and crime_type != "unknown"
+            fallback_accept = (
+                crime_type != "unknown"
+                and not_wildlife_prob < 0.65
+                and strong_rule_signal
+                and poach_prob >= 0.45
+                and evidence_strength >= 0.55
+                and keyword_hits >= 3
+            )
+        else:
+            baseline_accept = confidence >= settings.ai_threshold and crime_type != "unknown"
+            fallback_accept = (
+                crime_type != "unknown"
+                and not_wildlife_prob < 0.78
+                and strong_rule_signal
+                and poach_prob >= 0.28
+            )
         is_poaching = baseline_accept or fallback_accept
         if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:
+            is_poaching = False
+        if strict_mode and not_wildlife_prob >= 0.62 and evidence_strength < 0.75 and poach_prob < 0.70:
             is_poaching = False
 
         risk_score = self._compute_risk(
