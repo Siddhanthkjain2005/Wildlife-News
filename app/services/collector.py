@@ -105,6 +105,7 @@ OSINT_SOURCE_TYPE = {
     "ngo_feeds": "ngo",
     "x_adapter": "x_adapter",
 }
+AGGREGATOR_HOSTS = {"news.google.com", "www.news.google.com", "google.com", "www.google.com", "bing.com", "www.bing.com"}
 
 ALL_PROVIDER_ORDER = [
     "google_rss",
@@ -310,6 +311,75 @@ class NewsCollector:
             if fallback_lang != "en" and (detected == "en" or len(text) < 120):
                 return fallback_lang
         return detected
+
+    def _extract_article_text(self, url: str) -> str:
+        target = self._normalize_url(url)
+        parsed = urlparse(target)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            return ""
+        try:
+            response = self.http.get(
+                target,
+                timeout=max(5, int(settings.article_fetch_timeout_seconds)),
+                headers={"User-Agent": "WildlifeNewsBot/1.0 (+https://wildlife-news.vercel.app/)"},
+                allow_redirects=True,
+            )
+        except requests.RequestException:
+            return ""
+        if response.status_code >= 400:
+            return ""
+        content_type = str(response.headers.get("Content-Type", "")).lower()
+        if "html" not in content_type:
+            return ""
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for node in soup.select("script,style,noscript,svg,form,nav,footer,header,aside"):
+            node.decompose()
+
+        article_chunks: list[str] = []
+        content_selectors = [
+            "article",
+            "main",
+            "[itemprop='articleBody']",
+            ".article-body",
+            ".post-content",
+            ".entry-content",
+            ".story-body",
+            "#article-body",
+        ]
+        for selector in content_selectors:
+            for block in soup.select(selector):
+                text = block.get_text(" ", strip=True)
+                if text:
+                    article_chunks.append(text)
+            if article_chunks:
+                break
+        if not article_chunks:
+            for paragraph in soup.select("p"):
+                text = paragraph.get_text(" ", strip=True)
+                if text:
+                    article_chunks.append(text)
+
+        combined = " ".join(part.strip() for part in article_chunks if part.strip())
+        normalized = " ".join(combined.split())
+        return normalized[: max(500, int(settings.article_enrichment_max_chars))]
+
+    def _build_analysis_summary(self, *, summary: str, url: str, allow_enrichment: bool) -> str:
+        cleaned_summary = " ".join((summary or "").split())
+        if not allow_enrichment or not settings.article_enrichment_enabled:
+            return cleaned_summary
+        if len(cleaned_summary) >= int(settings.article_enrichment_min_chars):
+            return cleaned_summary[: max(500, int(settings.article_enrichment_max_chars))]
+
+        article_text = self._extract_article_text(url)
+        if not article_text:
+            return cleaned_summary
+        if not cleaned_summary:
+            return article_text
+        if cleaned_summary.lower() in article_text.lower():
+            return article_text
+        enriched = f"{cleaned_summary}\n\n{article_text}"
+        return enriched[: max(500, int(settings.article_enrichment_max_chars))]
 
     @staticmethod
     def _csv_list(raw_value: str) -> list[str]:
@@ -570,19 +640,24 @@ class NewsCollector:
                 continue
             for entry in feed.entries[:limit]:
                 title = self._strip_html(getattr(entry, "title", ""))
-                summary = self._strip_html(getattr(entry, "summary", ""))
+                summary_html = str(getattr(entry, "summary", "") or "")
+                summary = self._strip_html(summary_html)
                 haystack = f"{title} {summary}".lower()
                 if query_tokens and not any(token in haystack for token in query_tokens):
                     continue
                 source_name = fallback_source
                 if hasattr(entry, "source") and hasattr(entry.source, "title"):
                     source_name = self._strip_html(str(entry.source.title or fallback_source))
+                article_url = self._normalize_url(getattr(entry, "link", "").strip())
+                extracted_url = self._extract_external_link_from_html(summary_html, blocked_hosts=AGGREGATOR_HOSTS)
+                if extracted_url:
+                    article_url = extracted_url
                 items.append(
                     RawArticle(
                         title=title,
                         summary=summary,
                         source=source_name,
-                        url=self._normalize_url(getattr(entry, "link", "").strip()),
+                        url=article_url,
                         published_at=self._parse_date(getattr(entry, "published", "")),
                         language=language,
                     )
@@ -1410,17 +1485,26 @@ class NewsCollector:
 
                         scanned += 1
                         provider_stats[provider]["scanned"] += 1
-                        detected_language = self._detect_language(title=title, summary=summary, fallback=article.language)
+                        analysis_summary = self._build_analysis_summary(
+                            summary=summary,
+                            url=url,
+                            allow_enrichment=(source_type == "news"),
+                        )
+                        detected_language = self._detect_language(
+                            title=title,
+                            summary=(analysis_summary or summary),
+                            fallback=article.language,
+                        )
                         prior_source = self._prior_source_hits(db, source)
                         initial_intel = self.intelligence_engine.analyze(
                             title=title,
-                            summary=summary,
+                            summary=(analysis_summary or summary),
                             prior_source_hits=prior_source,
                         )
                         prior_district = self._prior_district_hits(db, initial_intel.district)
                         intel = self.intelligence_engine.analyze(
                             title=title,
-                            summary=summary,
+                            summary=(analysis_summary or summary),
                             prior_district_hits=prior_district,
                             prior_source_hits=prior_source,
                         )
@@ -1429,7 +1513,7 @@ class NewsCollector:
                             db=db,
                             url=url,
                             title=title,
-                            summary=summary,
+                            summary=(analysis_summary or summary),
                             published_at=published,
                             source=source,
                             state=intel.state,
@@ -1471,7 +1555,7 @@ class NewsCollector:
                             self._merge_into_incident(
                                 existing=existing,
                                 title=title,
-                                summary=summary,
+                                summary=(analysis_summary or summary),
                                 source=source,
                                 language=detected_language,
                                 published=published,
@@ -1489,7 +1573,7 @@ class NewsCollector:
                         else:
                             new_item = NewsItem(
                                 title=title[:600],
-                                summary=(summary or title)[:4000],
+                                summary=((analysis_summary or summary or title)[:4000]),
                                 source=source[:160],
                                 url=url[:1200],
                                 language=detected_language[:16],

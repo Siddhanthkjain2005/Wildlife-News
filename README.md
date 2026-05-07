@@ -96,7 +96,7 @@ MAX_QUERIES_PER_LANGUAGE=8
 PROVIDER_MIN_REQUEST_INTERVAL_SECONDS=1.0
 PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS=600
 SYNC_SCHEDULER_JITTER_SECONDS=20
-FRONTEND_ORIGIN="https://your-frontend-domain.vercel.app"
+FRONTEND_ORIGIN="https://wildlife-news.vercel.app,https://*.vercel.app"
 ```
 
 Behavior:
@@ -105,13 +105,14 @@ Behavior:
 - APIs and dashboard queries are filtered to the same start-date floor.
 - Older rows are **not auto-deleted** at startup or during sync.
 
-## 24/7 deployment (Railway backend + Vercel frontend)
+## 24/7 deployment (Oracle Cloud backend + Vercel frontend)
 
-### Railway (backend, always-on sync)
+### Oracle Cloud Always Free (backend, always-on sync)
 
-1. Push this repo to GitHub and create a **Railway service** from the repository root (`/`).
-2. This repo now includes `railway.json` for deploy config and healthcheck (`/health`).
-3. Set these Railway environment variables:
+1. Create an **Oracle Cloud Always Free Ubuntu VM** (VM.Standard.E2.1.Micro is sufficient to start).
+2. Open inbound port `8000` in your VCN Security List / NSG (or use a reverse proxy on 80/443).
+3. Install Docker on the VM and keep your `.env` file in the app directory.
+4. Set these backend environment variables:
 
 ```env
 DATABASE_URL=sqlite:///./data/news.db
@@ -126,14 +127,14 @@ MAX_QUERIES_PER_LANGUAGE=8
 PROVIDER_MIN_REQUEST_INTERVAL_SECONDS=1.0
 PROVIDER_RATE_LIMIT_COOLDOWN_SECONDS=600
 SYNC_SCHEDULER_JITTER_SECONDS=20
-FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app,https://*.vercel.app
+FRONTEND_ORIGIN=https://wildlife-news.vercel.app,https://*.vercel.app
 ```
 
 4. Deploy and verify:
-   - `https://<your-railway-backend>.up.railway.app/health`
-   - `https://<your-railway-backend>.up.railway.app/api/sync-status`
+   - `http://<your-oracle-public-ip>:8000/health`
+   - `http://<your-oracle-public-ip>:8000/api/sync-status`
 
-5. For persistent SQLite/Excel storage, attach a Railway Volume at `/data` and switch to:
+5. Keep persistent SQLite/Excel storage on VM disk or attach OCI Block Volume and switch to:
 
 ```env
 DATABASE_URL=sqlite:////data/news.db
@@ -141,12 +142,14 @@ EXCEL_PATH=/data/wildlife_poaching_news.xlsx
 LOG_DIR=/data/logs
 ```
 
-6. This repository includes GitHub deployment automation at `.github/workflows/railway-deploy.yml`.
+6. This repository includes GitHub deployment automation at `.github/workflows/oracle-deploy.yml`.
    Configure these GitHub repository secrets:
-   - `RAILWAY_TOKEN` (required, project token)
-   - `RAILWAY_SERVICE` (required, service name or ID)
-   - `RAILWAY_ENVIRONMENT` (optional, environment name or ID)
-   - `RAILWAY_PROJECT` (optional, project ID)
+   - `ORACLE_HOST` (required, VM public IP)
+   - `ORACLE_USER` (required, SSH user, usually `ubuntu`)
+   - `ORACLE_SSH_KEY` (required, private key for SSH)
+   - `ORACLE_APP_DIR` (optional, default `/opt/wildlife-news`)
+   - `ORACLE_BRANCH` (optional, default `main`)
+   - `ORACLE_GIT_URL` (optional, default `https://github.com/Siddhanthkjain2005/Wildlife-News.git`)
 
 ### Vercel (frontend)
 
@@ -158,12 +161,13 @@ LOG_DIR=/data/logs
 4. Add Vercel environment variable:
 
 ```env
-VITE_API_BASE_URL=https://<your-railway-backend>.up.railway.app
+VITE_API_BASE_URL=http://<your-oracle-public-ip>:8000
 ```
 
-5. Redeploy frontend, then copy the final Vercel domain and set it in Railway `FRONTEND_ORIGIN`.
+5. Redeploy frontend, then copy the final Vercel domain and set it in backend `FRONTEND_ORIGIN`.
    - You can use comma-separated origins and wildcards, for example:
-     - `https://your-frontend-domain.vercel.app,https://*.vercel.app`
+      - `https://your-frontend-domain.vercel.app,https://*.vercel.app`
+   - Your deployed frontend is: `https://wildlife-news.vercel.app/`
 
 6. Enable admin auth so Vercel frontend requires login:
 
@@ -179,9 +183,8 @@ Notes:
 
 - For local FastAPI-served frontend, run `npm run build:embed` inside `updated_frontend`.
 - For Vercel deployment, use `npm run build` (default static SPA build).
-- This repo includes `railway.json` to keep Railway deploy settings in source control.
-- Without a Railway Volume, filesystem data is ephemeral (cleared on restart/redeploy), so SQLite/Excel history is not durable.
-- If you see `sqlite3.OperationalError: unable to open database file`, use writable local paths (`./data`, `./logs`) or mount a `/data` disk on paid plans.
+- Oracle Always Free gives persistent VM disk; use `/data` mount if you attach extra OCI Block Volume.
+- If you see `sqlite3.OperationalError: unable to open database file`, ensure target path is writable (`./data`, `./logs`, or mounted `/data`).
 
 ## Data Output
 
@@ -289,12 +292,13 @@ Export endpoints include all incidents by default (`min_confidence=0`) so downlo
 ## Accuracy Notes
 
 - With `requirements-ai.txt` installed, the multilingual model classifies poaching context across languages.
-- Involved-person extraction uses multilingual regex + optional transformer NER (`PERSON_NER_ENABLED=true`) for better name precision.
+- Involved-person extraction now uses feed summary + full article body enrichment, then multilingual regex + transformer NER (`PERSON_NER_ENABLED=true`) for stronger name detection.
 - Without transformer dependencies, the app automatically uses rule-based fallback intelligence (lighter deploy footprint).
 - Filtering combines model/rule confidence with wildlife/crime term validation.
 - India-only mode (`INDIA_ONLY=true`) keeps incidents with strong India context.
 - Strict precision mode is available but disabled by default (`STRICT_AI_MODE=false`) to preserve broader incident capture while retaining accuracy defaults.
 - Default thresholds are tuned for balance (`AI_THRESHOLD=0.62`, `INDIA_THRESHOLD=0.55`).
+- Article intelligence enrichment is enabled by default (`ARTICLE_ENRICHMENT_ENABLED=true`), with tunable limits via `ARTICLE_ENRICHMENT_MIN_CHARS`, `ARTICLE_ENRICHMENT_MAX_CHARS`, and `ARTICLE_FETCH_TIMEOUT_SECONDS`.
 - You can enable stricter filtering by setting `STRICT_AI_MODE=true` and/or increasing `AI_THRESHOLD` (example: `0.70`) and `INDIA_THRESHOLD`.
 
 ## Security and Ops Hardening

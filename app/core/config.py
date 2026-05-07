@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     max_articles_per_query: int = 60
     max_queries_per_language: int = 8
     request_timeout_seconds: int = 25
+    article_fetch_timeout_seconds: int = 12
     provider_parallel_workers: int = 8
     provider_min_request_interval_seconds: float = 1.0
     provider_rate_limit_cooldown_seconds: int = 600
@@ -37,7 +38,10 @@ class Settings(BaseSettings):
     model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
     person_ner_enabled: bool = True
     person_ner_model_name: str = "Babelscape/wikineural-multilingual-ner"
-    person_ner_min_score: float = 0.70
+    person_ner_min_score: float = 0.65
+    article_enrichment_enabled: bool = True
+    article_enrichment_min_chars: int = 280
+    article_enrichment_max_chars: int = 3500
 
     # Providers
     enabled_providers: str = (
