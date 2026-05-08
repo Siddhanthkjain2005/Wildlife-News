@@ -1370,26 +1370,33 @@ def startup_event() -> None:
     init_database()
     db_file = _database_file_path()
     if db_file:
-        integrity = sqlite_integrity_check(db_file)
-        runtime_diagnostics["db_integrity"] = integrity
-        if not integrity.get("ok"):
-            app_logger.error("Database integrity check failed: %s", integrity)
-        else:
-            app_logger.info("Database integrity check: %s", integrity)
-    _seed_watchlists()
-    db_diag = diagnose_database()
-    app_logger.info("Database diagnostics: %s", db_diag)
+        db_diag = diagnose_database()
+        app_logger.info("Database diagnostic on startup: db_file=%s, diag=%s", db_file, db_diag)
 
-    repaired = _repair_stored_urls()
-    if repaired:
-        app_logger.info("URL normalization repair updated %d rows", repaired)
+    def _background_startup_tasks():
+        app_logger.info("Starting background DB tasks and AI model warmup...")
+        try:
+            if db_file:
+                integrity = sqlite_integrity_check(db_file)
+                if not integrity.get("ok"):
+                    app_logger.error("Database integrity check failed: %s", integrity)
+                else:
+                    app_logger.info("Database integrity check: %s", integrity)
+            normalized = _repair_stored_urls()
+            if normalized > 0:
+                app_logger.info("Normalized %d stored URLs at startup.", normalized)
+            _seed_watchlists()
+            reports_seeded = _seed_reports_snapshot()
+            if reports_seeded > 0:
+                app_logger.info("Seeded %d legacy incidents into reports table.", reports_seeded)
+            
+            # Download and warmup model in background to not block port binding
+            runtime_diagnostics["ai_model_ready"] = intelligence_engine.warmup()
+            app_logger.info("AI model warmup ready=%s", runtime_diagnostics["ai_model_ready"])
+        except Exception as e:
+            app_logger.error("Background startup tasks failed: %s", e)
 
-    reports_seeded = _seed_reports_snapshot()
-    if reports_seeded:
-        app_logger.info("Generated/updated %d analyst reports", reports_seeded)
-
-    runtime_diagnostics["ai_model_ready"] = intelligence_engine.warmup()
-    app_logger.info("AI model warmup ready=%s", runtime_diagnostics["ai_model_ready"])
+    Thread(target=_background_startup_tasks, daemon=True).start()
 
     if not scheduler.running:
         _reschedule_sync_job(settings.sync_interval_minutes)
