@@ -42,6 +42,7 @@ from app.services.report_export import (
     build_pdf_bytes,
 )
 from app.services.reports import upsert_report_for_news
+from app.services.predictor import predictor as wildlife_predictor
 from app.utils.india_geo import INDIA_CENTER, centroid_for_state
 from app.workers.sync_manager import SyncStateStore
 
@@ -1177,6 +1178,13 @@ def _run_sync_job(trigger: str) -> None:
             _persist_sync_logs(db=db, started_at=started_at, ended_at=datetime.utcnow(), stats=stats)
         duration = perf_counter() - started
         _complete_sync_success(trigger=trigger, stats=stats, excel_rows=rows, duration=duration)
+        # Retrain predictive model with new data
+        try:
+            with SessionLocal() as pred_db:
+                wildlife_predictor.train(pred_db)
+                sync_logger.info("Predictive model retrained after sync")
+        except Exception as pred_err:
+            sync_logger.warning("Predictor retraining failed: %s", pred_err)
     except Exception as err:
         duration = perf_counter() - started
         _complete_sync_error(trigger=trigger, error_message=str(err), duration=duration)
@@ -1328,6 +1336,16 @@ def startup_event() -> None:
         )
         scheduler.start()
     app_logger.info("Scheduler running=%s", scheduler.running)
+
+    # Load and train predictive model
+    try:
+        loaded = wildlife_predictor.load_model()
+        if not loaded:
+            app_logger.info("No saved predictor model found, will train after first sync.")
+        else:
+            app_logger.info("Loaded saved predictor model (samples=%d)", wildlife_predictor._training_sample_count)
+    except Exception as err:
+        app_logger.warning("Failed to load predictor model: %s", err)
 
 
 @app.on_event("shutdown")
@@ -2832,3 +2850,79 @@ def open_article(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Could not resolve article URL")
 
     return RedirectResponse(url=redirect_target, status_code=307)
+
+
+# ── Predictive AI Model Endpoints ─────────────────────────────────────
+
+
+@app.post("/api/predictions/train")
+def train_predictor(db: Session = Depends(get_db)):
+    """Trigger retraining of the predictive model on all collected data."""
+    result = wildlife_predictor.train(db)
+    return result
+
+
+@app.get("/api/predictions")
+def get_predictions():
+    """Get all predictions: hotspots, species forecasts, network analysis, persons of interest."""
+    return wildlife_predictor.get_predictions()
+
+
+@app.get("/api/predictions/hotspots")
+def get_hotspots():
+    """Predicted poaching hotspots with risk scores."""
+    data = wildlife_predictor.get_hotspots()
+    if not data:
+        return {"error": "Model not trained yet.", "hotspots": []}
+    return {"hotspots": data}
+
+
+@app.get("/api/predictions/species")
+def get_species_forecast():
+    """Species threat forecast — which species are increasingly targeted."""
+    data = wildlife_predictor.get_species_forecast()
+    if not data:
+        return {"error": "Model not trained yet.", "species": []}
+    return {"species": data}
+
+
+@app.get("/api/predictions/persons")
+def get_persons_of_interest():
+    """Persons of interest — repeat offenders, kingpins, multi-state suspects."""
+    data = wildlife_predictor.get_persons_of_interest()
+    if not data:
+        return {"error": "Model not trained yet.", "persons": []}
+    return {"persons": data}
+
+
+@app.get("/api/predictions/networks")
+def get_network_analysis():
+    """Crime network cluster analysis — syndicate identification."""
+    data = wildlife_predictor.get_network_analysis()
+    if not data:
+        return {"error": "Model not trained yet.", "networks": []}
+    return {"networks": data}
+
+
+@app.get("/api/predictions/states")
+def get_state_profiles():
+    """State-level risk profiles and threat scores."""
+    data = wildlife_predictor.get_state_profiles()
+    if not data:
+        return {"error": "Model not trained yet.", "states": {}}
+    return {"states": data}
+
+
+@app.get("/api/predictions/forecast")
+def get_weekly_forecast():
+    """Weekly incident forecast using exponential moving average."""
+    data = wildlife_predictor.get_weekly_forecast()
+    if not data:
+        return {"error": "Model not trained yet.", "forecast": {}}
+    return {"forecast": data}
+
+
+@app.get("/api/predictions/model-info")
+def get_model_info():
+    """Get model training status and metrics."""
+    return wildlife_predictor.model_info

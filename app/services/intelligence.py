@@ -176,6 +176,80 @@ ARTICLE_SIGNAL_TERMS = {
     "ਜ਼ਬਤ",
 }
 
+
+
+PERSON_EXTRACTION_PATTERNS = [
+    # English: "arrested/held/detained [person]"
+    re.compile(
+        rf"\b(?:arrested|held|detained|booked|nabbed|caught|apprehended|captured|seized|"
+        rf"identified|named|questioned|interrogated|remanded|charged|convicted|sentenced)\s+"
+        rf"(?:the\s+)?(?:alleged\s+)?(?:main\s+)?(?:prime\s+)?"
+        rf"(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused|individual(?:s)?|smuggler(?:s)?|"
+        rf"kingpin(?:s)?|mastermind(?:s)?|operative(?:s)?|handler(?:s)?|dealer(?:s)?)?\s*"
+        rf"(?:named|identified as|known as)?\s*({PERSON_NAME_PATTERN})\b"
+    ),
+    # English: "[person] was arrested/held"
+    re.compile(
+        rf"\b({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+"
+        rf"(?:was|were|has been|have been|had been)?\s*"
+        rf"(?:arrested|held|detained|booked|nabbed|accused|named|identified|questioned|"
+        rf"apprehended|captured|charged|convicted|sentenced|remanded)\b"
+    ),
+    # "identified as [name]"
+    re.compile(rf"\bidentified as\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\b"),
+    # "named/identified/arrested [list of names]"
+    re.compile(
+        rf"\b(?:named|identified as|arrested|apprehended)\s+({PERSON_NAME_LIST_PATTERN})\b"
+    ),
+    # "arrest/detention of [name]"
+    re.compile(
+        rf"\b(?:arrest|detention|questioning|interrogation|remand|conviction|sentencing)\s+(?:of\s+)?({PERSON_NAME_PATTERN})\b",
+        re.IGNORECASE,
+    ),
+    # "kingpin/mastermind [name]"
+    re.compile(
+        rf"\b(?:kingpin|mastermind|ringleader|gang\s*leader|head|boss|supplier|handler)\s+"
+        rf"(?:named|identified as|known as)?\s*({PERSON_NAME_PATTERN})\b",
+        re.IGNORECASE,
+    ),
+    # "[name], the kingpin/mastermind"
+    re.compile(
+        rf"\b({PERSON_NAME_PATTERN})\s*,\s*(?:the\s+)?(?:alleged\s+)?"
+        rf"(?:kingpin|mastermind|ringleader|gang\s*leader|main\s+accused|prime\s+accused)\b",
+        re.IGNORECASE,
+    ),
+    # "accused [name] (age/alias)"
+    re.compile(
+        rf"\b(?:accused|suspect)\s+({PERSON_NAME_PATTERN})\s*(?:\(|\,)",
+        re.IGNORECASE,
+    ),
+    # Hindi: "गिरफ्तार [name]" or "[name] गिरफ्तार"
+    re.compile(rf"गिरफ़?\s*तार\s+(?:किया\s+)?({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"({PERSON_NAME_PATTERN})\s+(?:को\s+)?गिरफ़?\s*तार", re.IGNORECASE),
+    # Hindi: "आरोपी [name]"
+    re.compile(rf"(?:आरोपी|संदिग्ध|तस्कर|शिकारी)\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    # Kannada: "ಬಂಧನ"
+    re.compile(rf"({PERSON_NAME_PATTERN})\s+(?:ಅನ್ನು\s+)?ಬಂಧಿಸ", re.IGNORECASE),
+    # Tamil: "கைது"
+    re.compile(rf"({PERSON_NAME_PATTERN})\s+கைது", re.IGNORECASE),
+    # Bengali: "গ্রেপ্তার/গ্রেফতার"
+    re.compile(rf"({PERSON_NAME_PATTERN})\s+(?:কে\s+)?গ্রে(?:প|ফ)তার", re.IGNORECASE),
+    # FIR reference: "FIR against [name]"
+    re.compile(
+        rf"\b(?:FIR|case|complaint)\s+(?:filed|registered|lodged)\s+(?:against\s+)?({PERSON_NAME_PATTERN})\b",
+        re.IGNORECASE,
+    ),
+]
+
+PERSON_ROLE_PATTERNS = [
+    (re.compile(r"\b(?:kingpin|mastermind|ringleader|gang\s*leader|boss|head)\b", re.IGNORECASE), "kingpin"),
+    (re.compile(r"\b(?:smuggler|trafficker|dealer|supplier|handler|courier)\b", re.IGNORECASE), "smuggler"),
+    (re.compile(r"\b(?:poacher|hunter|killer|shooter|trapper)\b", re.IGNORECASE), "poacher"),
+    (re.compile(r"\b(?:forest\s+officer|ranger|warden|DFO|ACF|RFO|guard)\b", re.IGNORECASE), "officer"),
+    (re.compile(r"\b(?:informer|informant|tipster|whistleblower)\b", re.IGNORECASE), "informant"),
+]
+
+
 INDIA_HINT_TERMS = {
     "india",
     "bharat",
