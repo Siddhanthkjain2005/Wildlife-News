@@ -65,105 +65,105 @@ QUERY_BY_LANGUAGE: dict[str, list[str]] = {
         "wildlife DNA forensics India",
     ],
     "hi": [
-        "भारत वन्यजीव शिकार",
-        "भारत वन्यजीव तस्करी",
-        "भारत हाथी दांत जब्त",
-        "भारत बाघ की खाल जब्त",
-        "भारत तेंदुए का शिकार",
-        "भारत वन्यजीव अपराध गिरफ्तारी",
-        "भारत चंदन तस्करी",
-        "भारत सांप का जहर तस्करी",
+        "वन्यजीव शिकार",
+        "वन्यजीव तस्करी",
+        "हाथी दांत जब्त",
+        "बाघ की खाल जब्त",
+        "तेंदुए का शिकार",
+        "वन्यजीव अपराध गिरफ्तारी",
+        "चंदन तस्करी",
+        "सांप का जहर तस्करी",
     ],
     "kn": [
-        "ಭಾರತ ವನ್ಯಜೀವಿ ಕಳ್ಳಬೇಟೆ",
-        "ಭಾರತ ವನ್ಯಜೀವಿ ಕಳ್ಳಸಾಗಣೆ",
-        "ಭಾರತ ಆನೆ ದಂತ ವಶ",
-        "ಭಾರತ ಹುಲಿ ಚರ್ಮ ವಶ",
-        "ಭಾರತ ಚಿರತೆ ಬೇಟೆ",
-        "ಭಾರತ ಶ್ರೀಗಂಧ ಕಳ್ಳಸಾಗಣೆ",
+        "ವನ್ಯಜೀವಿ ಕಳ್ಳಬೇಟೆ",
+        "ವನ್ಯಜೀವಿ ಕಳ್ಳಸಾಗಣೆ",
+        "ಆನೆ ದಂತ ವಶ",
+        "ಹುಲಿ ಚರ್ಮ ವಶ",
+        "ಚಿರತೆ ಬೇಟೆ",
+        "ಶ್ರೀಗಂಧ ಕಳ್ಳಸಾಗಣೆ",
     ],
     "ta": [
-        "இந்தியா வனவிலங்கு வேட்டை",
-        "இந்தியா விலங்கு கடத்தல்",
-        "இந்தியா புலி தோல் பறிமுதல்",
-        "இந்தியா செம்மரக்கட்டை கடத்தல்",
+        "வனவிலங்கு வேட்டை",
+        "விலங்கு கடத்தல்",
+        "புலி தோல் பறிமுதல்",
+        "செம்மரக்கட்டை கடத்தல்",
     ],
     "te": [
-        "భారత్ వన్యప్రాణి వేట",
-        "భారత్ అక్రమ వన్యప్రాణి రవాణా",
-        "భారత్ ఎర్రచందనం స్మగ్లింగ్",
+        "వన్యప్రాణి వేట",
+        "అక్రమ వన్యప్రాణి రవాణా",
+        "ఎర్రచందనం స్మగ్లింగ్",
     ],
     "ml": [
-        "ഇന്ത്യ വന്യജീവി വേട്ട",
-        "ഇന്ത്യ വന്യജീവി കടത്ത്",
-        "ഇന്ത്യ ആനക്കൊമ്പ് പിടിച്ചെടുത്തു",
-        "ഇന്ത്യ കടുവ തോൽ പിടിച്ചെടുത്തു",
-        "ഇന്ത്യ പുള്ളിപ്പുലി വേട്ട",
-        "ഇന്ത്യ ചന്ദനം കടത്ത്",
-        "ഇന്ത്യ വന്യജീവി കുറ്റം അറസ്റ്റ്",
+        "വന്യജീവി വേട്ട",
+        "വന്യജീവി കടത്ത്",
+        "ആനക്കൊമ്പ് പിടിച്ചെടുത്തു",
+        "കടുവ തോൽ പിടിച്ചെടുത്തു",
+        "പുള്ളിപ്പുലി വേട്ട",
+        "ചന്ദനം കടത്ത്",
+        "വന്യജീവി കുറ്റം അറസ്റ്റ്",
     ],
     "bn": [
-        "ভারত বন্যপ্রাণী শিকার",
-        "ভারত বন্যপ্রাণী পাচার",
-        "ভারত হাতির দাঁত জব্দ",
-        "ভারত বাঘের চামড়া জব্দ",
-        "ভারত চিতাবাঘ শিকার",
-        "ভারত চন্দন পাচার",
-        "ভারত বন্যপ্রাণী অপরাধ গ্রেপ্তার",
+        "বন্যপ্রাণী শিকার",
+        "বন্যপ্রাণী পাচার",
+        "হাতির দাঁত জব্দ",
+        "বাঘের চামড়া জব্দ",
+        "চিতাবাঘ শিকার",
+        "চন্দন পাচার",
+        "বন্যপ্রাণী অপরাধ গ্রেপ্তার",
     ],
     "mr": [
-        "भारत वन्यजीव शिकारी",
-        "भारत वन्यजीव तस्करी",
-        "भारत हस्तीदंत जप्त",
-        "भारत वाघाची कातडी जप्त",
-        "भारत बिबट्या शिकार",
-        "भारत चंदन तस्करी",
-        "भारत वन्यजीव गुन्हा अटक",
+        "वन्यजीव शिकारी",
+        "वन्यजीव तस्करी",
+        "हस्तीदंत जप्त",
+        "वाघाची कातडी जप्त",
+        "बिबट्या शिकार",
+        "चंदन तस्करी",
+        "वन्यजीव गुन्हा अटक",
     ],
     "gu": [
-        "ભારત વન્યજીવ શિકાર",
-        "ભારત વન્યજીવ તસ્કરી",
-        "ભારત હાથીદાંત જપ્ત",
-        "ભારત વાઘની ચામડી જપ્ત",
-        "ભારત દીપડાનો શિકાર",
-        "ભારત ચંદન તસ્કરી",
-        "ભારત વન્યજીવ ગુનો ધરપકડ",
+        "વન્યજીવ શિકાર",
+        "વન્યજીવ તસ્કરી",
+        "હાથીદાંત જપ્ત",
+        "વાઘની ચામડી જપ્ત",
+        "દીપડાનો શિકાર",
+        "ચંદન તસ્કરી",
+        "વન્યજીવ ગુનો ધરપકડ",
     ],
     "pa": [
-        "ਭਾਰਤ ਜੰਗਲੀ ਜੀਵ ਸ਼ਿਕਾਰ",
-        "ਭਾਰਤ ਜੰਗਲੀ ਜੀਵ ਤਸਕਰੀ",
-        "ਭਾਰਤ ਹਾਥੀ ਦਾਂਤ ਜ਼ਬਤ",
-        "ਭਾਰਤ ਬਾਘ ਦੀ ਖੱਲ ਜ਼ਬਤ",
-        "ਭਾਰਤ ਚੀਤੇ ਦਾ ਸ਼ਿਕਾਰ",
-        "ਭਾਰਤ ਚੰਦਨ ਤਸਕਰੀ",
-        "ਭਾਰਤ ਜੰਗਲੀ ਜੀਵ ਅਪਰਾਧ ਗ੍ਰਿਫ਼ਤਾਰੀ",
+        "ਜੰਗਲੀ ਜੀਵ ਸ਼ਿਕਾਰ",
+        "ਜੰਗਲੀ ਜੀਵ ਤਸਕਰੀ",
+        "ਹਾਥੀ ਦਾਂਤ ਜ਼ਬਤ",
+        "ਬਾਘ ਦੀ ਖੱਲ ਜ਼ਬਤ",
+        "ਚੀਤੇ ਦਾ ਸ਼ਿਕਾਰ",
+        "ਚੰਦਨ ਤਸਕਰੀ",
+        "ਜੰਗਲੀ ਜੀਵ ਅਪਰਾਧ ਗ੍ਰਿਫ਼ਤਾਰੀ",
     ],
     "ur": [
-        "بھارت جنگلی حیات کا شکار",
-        "بھارت جنگلی حیات اسمگلنگ",
-        "بھارت ہاتھی دانت ضبط",
-        "بھارت شیر کی کھال ضبط",
-        "بھارت چیتے کا شکار",
-        "بھارت صندل کی لکڑی اسمگلنگ",
-        "بھارت جنگلی حیات جرم گرفتاری",
+        "جنگلی حیات کا شکار",
+        "جنگلی حیات اسمگلنگ",
+        "ہاتھی دانت ضبط",
+        "شیر کی کھال ضبط",
+        "چیتے کا شکار",
+        "صندل کی لکڑی اسمگلنگ",
+        "جنگلی حیات جرم گرفتاری",
     ],
     "or": [
-        "ଭାରତ ବନ୍ୟଜୀବ ଶିକାର",
-        "ଭାରତ ବନ୍ୟଜୀବ ତସକରି",
-        "ଭାରତ ହାତୀଦାନ୍ତ ଜବତ",
-        "ଭାରତ ବାଘ ଚମଡା ଜବତ",
-        "ଭାରତ ଚିତାବାଘ ଶିକାର",
-        "ଭାରତ ଚନ୍ଦନ ତସକରି",
-        "ଭାରତ ବନ୍ୟଜୀବ ଅପରାଧ ଗିରଫ",
+        "ବନ୍ୟଜୀବ ଶିକାର",
+        "ବନ୍ୟଜୀବ ତସକରି",
+        "ହାତୀଦାନ୍ତ ଜବତ",
+        "ବାଘ ଚମଡା ଜବତ",
+        "ଚିତାବାଘ ଶିକାର",
+        "ଚନ୍ଦନ ତସକରି",
+        "ବନ୍ୟଜୀବ ଅପରାଧ ଗିରଫ",
     ],
     "as": [
-        "ভাৰত বন্যপ্ৰাণী চোৰাশিকার",
-        "ভাৰত বন্যপ্ৰাণী সৰবৰাহ",
-        "ভাৰত হাতীদাঁত জব্দ",
-        "ভাৰত বাঘৰ ছাল জব্দ",
-        "ভাৰত নাহৰফুটুকী চিকাৰ",
-        "ভাৰত চন্দন সৰবৰাহ",
-        "ভাৰত বন্যপ্ৰাণী অপৰাধ গ্ৰেপ্তাৰ",
+        "বন্যপ্ৰাণী চোৰাশিকার",
+        "বন্যপ্ৰাণী সৰবৰাহ",
+        "হাতীদাঁত জব্দ",
+        "বাঘৰ ছাল জব্দ",
+        "নাহৰফুটুকী চিকাৰ",
+        "চন্দন সৰবৰাহ",
+        "বন্যপ্ৰাণী অপৰাধ গ্ৰেপ্তাৰ",
     ],
 }
 
@@ -224,6 +224,9 @@ ALL_PROVIDER_ORDER = [
     "gnews",
     "mediastack",
     "newsdata",
+    "currents",
+    "thenewsapi",
+    "worldnewsapi",
     "reddit_osint",
     "govt_notices",
     "ngo_feeds",
@@ -231,7 +234,7 @@ ALL_PROVIDER_ORDER = [
 ]
 DISABLED_PROVIDERS = {"govt_notices"}
 
-KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata"}
+KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata", "currents", "thenewsapi", "worldnewsapi"}
 PROVIDER_QUERY_CAPS = {
     "google_rss": 6,
     "bing_rss": 3,
@@ -240,6 +243,9 @@ PROVIDER_QUERY_CAPS = {
     "gnews": 2,
     "mediastack": 2,
     "newsdata": 2,
+    "currents": 2,
+    "thenewsapi": 2,
+    "worldnewsapi": 2,
     "reddit_osint": 3,
     "govt_notices": 2,
     "ngo_feeds": 2,
@@ -253,6 +259,9 @@ PROVIDER_LANGUAGE_CAPS = {
     "gnews": 2,
     "mediastack": 3,
     "newsdata": 2,
+    "currents": 2,
+    "thenewsapi": 2,
+    "worldnewsapi": 2,
 }
 
 
@@ -603,6 +612,12 @@ class NewsCollector:
             return bool(settings.mediastack_api_key)
         if provider == "newsdata":
             return bool(settings.newsdata_api_key)
+        if provider == "currents":
+            return bool(settings.currents_api_key)
+        if provider == "thenewsapi":
+            return bool(settings.thenewsapi_key)
+        if provider == "worldnewsapi":
+            return bool(settings.worldnewsapi_key)
         return True
 
     def _select_queries_for_cycle(self, *, provider: str, language: str, queries: list[str]) -> list[str]:
@@ -1062,6 +1077,87 @@ class NewsCollector:
             )
         return items
 
+    def _fetch_currents(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        if not settings.currents_api_key:
+            return []
+        payload = self._http_get_json(
+            provider="currents",
+            url="https://api.currentsapi.services/v1/search",
+            params={
+                "apiKey": settings.currents_api_key,
+                "keywords": query,
+                "language": language[:2],
+                "limit": max(1, min(50, limit)),
+            },
+        )
+        items: list[RawArticle] = []
+        for article in payload.get("news", []):
+            items.append(
+                RawArticle(
+                    title=self._strip_html(str(article.get("title", ""))),
+                    summary=self._strip_html(str(article.get("description", ""))),
+                    source=self._strip_html(str(article.get("author", "") or "Currents API")),
+                    url=self._normalize_url(str(article.get("url", "")).strip()),
+                    published_at=self._parse_date(article.get("published")),
+                    language=language,
+                )
+            )
+        return items
+
+    def _fetch_thenewsapi(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        if not settings.thenewsapi_key:
+            return []
+        payload = self._http_get_json(
+            provider="thenewsapi",
+            url="https://api.thenewsapi.com/v1/news/all",
+            params={
+                "api_token": settings.thenewsapi_key,
+                "search": query,
+                "language": language[:2],
+                "limit": max(1, min(100, limit)),
+            },
+        )
+        items: list[RawArticle] = []
+        for article in payload.get("data", []):
+            items.append(
+                RawArticle(
+                    title=self._strip_html(str(article.get("title", ""))),
+                    summary=self._strip_html(str(article.get("description", ""))),
+                    source=self._strip_html(str(article.get("source", "") or "TheNewsAPI")),
+                    url=self._normalize_url(str(article.get("url", "")).strip()),
+                    published_at=self._parse_date(article.get("published_at")),
+                    language=language,
+                )
+            )
+        return items
+
+    def _fetch_worldnewsapi(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        if not settings.worldnewsapi_key:
+            return []
+        payload = self._http_get_json(
+            provider="worldnewsapi",
+            url="https://api.worldnewsapi.com/search-news",
+            params={
+                "api-key": settings.worldnewsapi_key,
+                "text": query,
+                "language": language[:2],
+                "number": max(1, min(100, limit)),
+            },
+        )
+        items: list[RawArticle] = []
+        for article in payload.get("news", []):
+            items.append(
+                RawArticle(
+                    title=self._strip_html(str(article.get("title", ""))),
+                    summary=self._strip_html(str(article.get("text", ""))),
+                    source=self._strip_html(str(article.get("author", "") or "WorldNewsAPI")),
+                    url=self._normalize_url(str(article.get("url", "")).strip()),
+                    published_at=self._parse_date(article.get("publish_date")),
+                    language=language,
+                )
+            )
+        return items
+
     def _fetch_provider(self, provider: str, language: str, query: str, limit: int) -> list[RawArticle]:
         if self._provider_on_cooldown(provider):
             return []
@@ -1081,6 +1177,12 @@ class NewsCollector:
                 return self._fetch_mediastack(language, query, limit)
             if provider == "newsdata":
                 return self._fetch_newsdata(language, query, limit)
+            if provider == "currents":
+                return self._fetch_currents(language, query, limit)
+            if provider == "thenewsapi":
+                return self._fetch_thenewsapi(language, query, limit)
+            if provider == "worldnewsapi":
+                return self._fetch_worldnewsapi(language, query, limit)
             if provider == "reddit_osint":
                 return self._fetch_reddit_osint(query, limit)
             if provider == "govt_notices":
