@@ -19,7 +19,12 @@ export const ENDPOINTS = {
   exportExcelIncidentsReports: withBase("/api/export/excel-incidents-reports"),
   exportBriefing: withBase("/api/export/briefing-pack"),
   publicDownloadCsv: withBase("/api/public/download-csv"),
-  publicDownloadDb: withBase("/api/public/download-db")
+  publicDownloadDb: withBase("/api/public/download-db"),
+  publicUploadDb: withBase("/api/public/upload-db"),
+  predictions: withBase("/api/predictions"),
+  predictionsTrain: withBase("/api/predictions/train"),
+  predictionsHotspots: withBase("/api/predictions/hotspots"),
+  predictionsPersons: withBase("/api/predictions/persons"),
 };
 
 export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {

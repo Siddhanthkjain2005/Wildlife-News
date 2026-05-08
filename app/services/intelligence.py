@@ -1025,33 +1025,58 @@ class HybridIntelligenceEngine:
     ) -> int:
         score = (confidence * 52) + (poach_prob * 20)
         crime_bonus = {
-            "rhino_horn_trafficking": 13,
-            "tiger_skin_seizure": 12,
-            "ivory_trade": 11,
-            "illegal_wildlife_trade": 9,
-            "forest_hunting_gang": 9,
-            "smuggling": 8,
-            "poaching": 7,
+            "rhino_horn_trafficking": 15,
+            "tiger_skin_seizure": 14,
+            "ivory_trade": 13,
+            "red_sanders_smuggling": 12,
+            "snake_venom_trade": 11,
+            "illegal_wildlife_trade": 10,
+            "forest_hunting_gang": 10,
+            "smuggling": 9,
+            "poaching": 8,
+            "exotic_bird_trafficking": 7,
+            "habitat_destruction": 7,
+            "animal_cruelty": 6,
             "illegal_fishing": 5,
-            "exotic_bird_trafficking": 6,
         }
         score += crime_bonus.get(crime_type, 0)
-        if any(sp in {"tiger", "rhino", "elephant"} for sp in species):
-            score += 10
-        if network_indicator:
+
+        # Endangered species bonus — higher for CITES Appendix I species
+        critical_species = {"tiger", "rhino", "elephant", "snow leopard", "pangolin", "red panda"}
+        high_species = {"leopard", "bear", "lion", "wolf", "red sanders", "star tortoise", "gharial"}
+        if any(sp in critical_species for sp in species):
+            score += 12
+        elif any(sp in high_species for sp in species):
             score += 8
-        if repeat_indicator:
-            score += 6
-        if operational_details.get("seizure_present"):
-            score += 5
-        if operational_details.get("cross_border"):
-            score += 5
-        if operational_details.get("weapon_signal"):
+        elif species:
             score += 4
+
+        if network_indicator:
+            score += 10
+        if repeat_indicator:
+            score += 7
+        if operational_details.get("seizure_present"):
+            score += 6
+        if operational_details.get("arrest_present"):
+            score += 4
+        if operational_details.get("cross_border"):
+            score += 7
+        if operational_details.get("weapon_signal"):
+            score += 5
         if operational_details.get("quantities"):
-            score += min(4, len(operational_details["quantities"]))
-        if person_hits >= 2:
+            score += min(5, len(operational_details["quantities"]) * 2)
+        if operational_details.get("money_mentions"):
+            score += min(4, len(operational_details["money_mentions"]) * 2)
+        if operational_details.get("vehicle_refs"):
             score += 3
+        if operational_details.get("case_refs"):
+            score += 2
+        if person_hits >= 3:
+            score += 5
+        elif person_hits >= 2:
+            score += 3
+        elif person_hits >= 1:
+            score += 1
         if not species and person_hits == 0 and not operational_details.get("seizure_present"):
             score -= 6
         return max(0, min(100, int(round(score))))

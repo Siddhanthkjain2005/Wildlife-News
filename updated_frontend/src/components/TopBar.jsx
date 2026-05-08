@@ -116,6 +116,40 @@ export default function TopBar({
             <HardDrive size={14} />
             <span className="btn-label">Download DB</span>
           </button>
+          <button
+            type="button"
+            className="btn"
+            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#fff" }}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".db,.sqlite,.sqlite3";
+              input.onchange = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (!confirm(`Restore database from "${file.name}"? This will replace all current data.`)) return;
+                const base = typeof import.meta !== "undefined" ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "") : "";
+                const form = new FormData();
+                form.append("file", file);
+                try {
+                  const res = await fetch(`${base}/api/public/upload-db`, { method: "POST", body: form });
+                  const data = await res.json();
+                  if (data.ok) {
+                    alert(`✅ Database restored!\n\nTotal rows: ${data.total_rows}\nPoaching articles: ${data.poaching_rows}\nPredictor retrained: ${data.predictor_retrained ? "Yes" : "No"}`);
+                    window.location.reload();
+                  } else {
+                    alert(`❌ Restore failed: ${data.detail || "Unknown error"}`);
+                  }
+                } catch (err) {
+                  alert(`❌ Upload failed: ${err.message}`);
+                }
+              };
+              input.click();
+            }}
+          >
+            <Database size={14} />
+            <span className="btn-label">Upload DB</span>
+          </button>
         </div>
 
       </div>

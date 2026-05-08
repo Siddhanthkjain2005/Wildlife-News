@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from bs4 import BeautifulSoup
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -886,12 +886,17 @@ def _to_export_payload(row: NewsItem) -> dict[str, object]:
         "date": row.published_at.isoformat(sep=" ", timespec="seconds"),
         "report_count": max(1, int(row.report_count or 1)),
         "risk_score": row.risk_score,
+        "severity": _severity_from_risk(row.risk_score),
         "species": row.species,
         "state": row.state,
         "district": row.district,
+        "location": row.location,
         "involved_persons": row.involved_persons,
         "crime_type": row.crime_type,
+        "network_indicator": "Yes" if row.network_indicator else "No",
+        "repeat_indicator": "Yes" if row.repeat_indicator else "No",
         "source": row.source,
+        "language": row.language,
         "confidence": round(row.confidence, 4),
         "title": row.title,
         "two_line_summary": row.intel_summary,
@@ -908,6 +913,7 @@ def _to_export_payload(row: NewsItem) -> dict[str, object]:
             repeat_indicator=row.repeat_indicator,
         ),
         "confidence_explanation": row.confidence_explanation or row.ai_reason,
+        "url": row.url,
     }
 
 
@@ -999,6 +1005,71 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
         or 0
     )
     snapshot = _sync_snapshot()
+
+    # Add prediction summary if model is trained
+    prediction_summary = {}
+    try:
+        if wildlife_predictor.is_trained:
+            forecast = wildlife_predictor.get_weekly_forecast()
+            top_hotspots = wildlife_predictor.get_hotspots()[:3]
+            top_persons = wildlife_predictor.get_persons_of_interest()[:3]
+            top_species = wildlife_predictor.get_species_forecast()[:3]
+            prediction_summary = {
+                "model_trained": True,
+                "forecast_next_week": forecast.get("forecast_next_week_incidents"),
+                "forecast_trend": forecast.get("trend"),
+                "forecast_confidence": forecast.get("confidence"),
+                "top_hotspots": [
+                    {"state": h["state"], "district": h["district"], "threat_level": h["threat_level"]}
+                    for h in top_hotspots
+                ],
+                "top_persons_of_interest": [
+                    {"name": p["name"], "incident_count": p["incident_count"], "threat_label": p["threat_label"]}
+                    for p in top_persons
+                ],
+                "most_threatened_species": [
+                    {"species": s["species"], "trend": s["trend"], "threat_score": s["threat_score"]}
+                    for s in top_species
+                ],
+            }
+    except Exception:
+        prediction_summary = {"model_trained": False}
+
+    # Count network-linked incidents
+    network_incidents = int(
+        db.scalar(
+            _apply_today_news_scope(
+                select(func.count())
+                .select_from(NewsItem)
+                .where(NewsItem.is_poaching.is_(True))
+                .where(NewsItem.network_indicator.is_(True))
+            )
+        ) or 0
+    )
+
+    # Count unique persons identified
+    persons_with_data = int(
+        db.scalar(
+            _apply_today_news_scope(
+                select(func.count())
+                .select_from(NewsItem)
+                .where(NewsItem.is_poaching.is_(True))
+                .where(NewsItem.involved_persons != "")
+            )
+        ) or 0
+    )
+
+    # Count distinct crime types
+    crime_types_active = int(
+        db.scalar(
+            _apply_today_news_scope(
+                select(func.count(func.distinct(NewsItem.crime_type)))
+                .where(NewsItem.is_poaching.is_(True))
+                .where(NewsItem.crime_type != "unknown")
+            )
+        ) or 0
+    )
+
     return {
         "system_name": "Wildlife Crime Intelligence Center",
         "sync_running": bool(snapshot.get("running")),
@@ -1013,9 +1084,13 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
             "species_tracked": species_tracked,
             "sources_active": sources_active,
             "reports_today": reports_today,
+            "network_incidents": network_incidents,
+            "persons_identified": persons_with_data,
+            "crime_types_active": crime_types_active,
         },
         "total_reports": total_reports,
         "latest_incident_id": latest_incident_id,
+        "predictions": prediction_summary,
     }
 
 
@@ -2193,6 +2268,104 @@ def public_download_db(request: Request):
         headers={"Content-Disposition": f"attachment; filename=wildlife_news_backup.db"},
     )
 
+@app.post("/api/public/upload-db")
+async def public_upload_db(request: Request, file: UploadFile = File(...)):
+    """Upload a previously downloaded SQLite database to restore all data.
+
+    This is the critical data migration endpoint — when Railway free trial expires:
+    1. Download the DB from /api/public/download-db
+    2. Deploy on a new Railway account
+    3. Upload the old DB here to restore all data
+
+    The endpoint:
+    - Validates the upload is a valid SQLite file
+    - Backs up the current database
+    - Replaces the current DB with the uploaded one
+    - Runs schema migrations
+    - Retrains the predictor model
+    """
+    db_path = _database_file_path()
+    if db_path is None:
+        raise HTTPException(status_code=400, detail="DB restore is only supported for SQLite databases.")
+
+    # Read uploaded file
+    content = await file.read()
+    if len(content) < 100:
+        raise HTTPException(status_code=400, detail="Uploaded file is too small to be a valid SQLite database.")
+
+    # Validate it's a real SQLite file (magic bytes: "SQLite format 3\000")
+    if not content[:16].startswith(b"SQLite format 3"):
+        raise HTTPException(status_code=400, detail="Invalid file: not a valid SQLite database. Download the DB using the 'Download DB' button first.")
+
+    # Backup current DB if it exists
+    backup_path = None
+    if db_path.exists():
+        import shutil
+        backup_path = db_path.with_suffix(f".backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db")
+        try:
+            shutil.copy2(db_path, backup_path)
+            app_logger.info("Current DB backed up to %s", backup_path)
+        except Exception as err:
+            app_logger.warning("Failed to backup current DB: %s", err)
+
+    # Write the uploaded DB
+    try:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path.write_bytes(content)
+        app_logger.info("Database restored from upload: %d bytes", len(content))
+    except Exception as err:
+        # Restore backup if write failed
+        if backup_path and backup_path.exists():
+            import shutil
+            shutil.copy2(backup_path, db_path)
+        raise HTTPException(status_code=500, detail=f"Failed to write database: {err}")
+
+    # Run schema migrations on the restored DB
+    try:
+        init_database()
+        app_logger.info("Schema migrations applied to restored database")
+    except Exception as err:
+        app_logger.warning("Schema migration on restored DB failed (may be fine if schema matches): %s", err)
+
+    # Retrain predictor on restored data
+    retrained = False
+    try:
+        with SessionLocal() as pred_db:
+            result = wildlife_predictor.train(pred_db)
+            retrained = result.get("ok", False)
+            app_logger.info("Predictor retrained on restored data: %s", result)
+    except Exception as err:
+        app_logger.warning("Predictor retraining after restore failed: %s", err)
+
+    # Count rows in restored DB
+    try:
+        with SessionLocal() as count_db:
+            total_rows = int(count_db.scalar(select(func.count()).select_from(NewsItem)) or 0)
+            poaching_rows = int(count_db.scalar(
+                select(func.count()).select_from(NewsItem).where(NewsItem.is_poaching.is_(True))
+            ) or 0)
+    except Exception:
+        total_rows = -1
+        poaching_rows = -1
+
+    _audit(
+        actor="public",
+        action="upload_db_restore",
+        status="ok",
+        ip=_client_ip(request),
+        notes=f"size={len(content)}, total_rows={total_rows}, poaching_rows={poaching_rows}",
+    )
+
+    return {
+        "ok": True,
+        "message": "Database restored successfully! All data from your previous deployment is now live.",
+        "total_rows": total_rows,
+        "poaching_rows": poaching_rows,
+        "size_bytes": len(content),
+        "backup_created": str(backup_path) if backup_path else None,
+        "predictor_retrained": retrained,
+    }
+
 
 @app.get("/api/export/csv")
 @app.get("/export/csv")
@@ -2824,6 +2997,7 @@ def health(db: Session = Depends(get_db)):
         "uptime_seconds": round(uptime_seconds, 2),
         "queue_backlog": collector.queue_backlog,
         "total_news_rows": int(total_rows),
+        "predictor": wildlife_predictor.model_info,
     }
 
 
