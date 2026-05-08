@@ -10,7 +10,7 @@ beautifulsoup4==4.13.3
 googlenewsdecoder==0.1.7
 python-dateutil==2.9.0.post0
 langdetect==1.0.9
-requests==2.31.0
+requests>=2.32.3
 pandas==2.2.3
 openpyxl==3.1.5
 APScheduler==3.10.4
