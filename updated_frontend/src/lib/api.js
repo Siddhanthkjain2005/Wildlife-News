@@ -17,7 +17,9 @@ export const ENDPOINTS = {
   exportPdf: withBase("/api/export/pdf"),
   exportExcel: withBase("/api/export/excel"),
   exportExcelIncidentsReports: withBase("/api/export/excel-incidents-reports"),
-  exportBriefing: withBase("/api/export/briefing-pack")
+  exportBriefing: withBase("/api/export/briefing-pack"),
+  publicDownloadCsv: withBase("/api/public/download-csv"),
+  publicDownloadDb: withBase("/api/public/download-db")
 };
 
 export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {

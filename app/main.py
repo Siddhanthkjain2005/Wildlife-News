@@ -330,7 +330,7 @@ class AdminLoginPayload(BaseModel):
 @app.middleware("http")
 async def api_rate_limiter(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api") and path != "/api/admin/login":
+    if path.startswith("/api") and path != "/api/admin/login" and not path.startswith("/api/public/"):
         if request.method.upper() != "OPTIONS":
             try:
                 require_admin_access(
@@ -2128,6 +2128,52 @@ def get_report(id: int, db: Session = Depends(get_db)):
             "open_url": f"/open/{news.id}",
         },
     }
+
+
+@app.get("/api/public/download-csv")
+def public_download_csv(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Download ALL poaching news as CSV. No authentication required — serves as data backup."""
+    stmt = (
+        select(NewsItem)
+        .where(NewsItem.is_poaching.is_(True))
+        .order_by(NewsItem.published_at.desc())
+        .limit(50000)
+    )
+    rows = db.execute(stmt).scalars().all()
+    payload = [_to_export_payload(row) for row in rows]
+    csv_bytes = build_csv_bytes(payload)
+    _audit(actor="public", action="public_download_csv", status="ok", ip=_client_ip(request), notes=f"rows={len(payload)}")
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=wildlife_full_backup.csv"},
+    )
+
+
+@app.get("/api/public/download-db")
+def public_download_db(request: Request):
+    """Download the raw SQLite database file. No authentication required — serves as full data backup."""
+    db_path = _database_file_path()
+    if db_path is None or not db_path.exists():
+        raise HTTPException(status_code=404, detail="Database file not found.")
+    _audit(actor="public", action="public_download_db", status="ok", ip=_client_ip(request), notes=f"db_path={db_path}")
+
+    def _stream_file():
+        with open(db_path, "rb") as fh:
+            while True:
+                chunk = fh.read(1024 * 256)
+                if not chunk:
+                    break
+                yield chunk
+
+    return StreamingResponse(
+        _stream_file(),
+        media_type="application/x-sqlite3",
+        headers={"Content-Disposition": f"attachment; filename=wildlife_news_backup.db"},
+    )
 
 
 @app.get("/api/export/csv")

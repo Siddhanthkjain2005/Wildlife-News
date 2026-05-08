@@ -83,22 +83,41 @@ CRIME_TYPES: dict[str, set[str]] = {
     },
     "tiger_skin_seizure": {"tiger skin", "tiger hide", "tiger pelt"},
     "rhino_horn_trafficking": {"rhino horn", "rhinoceros horn"},
-    "exotic_bird_trafficking": {"exotic bird", "parrot trafficking", "macaw", "cockatoo"},
-    "illegal_fishing": {"illegal fishing", "blast fishing", "dynamite fishing"},
+    "exotic_bird_trafficking": {"exotic bird", "parrot trafficking", "macaw", "cockatoo", "parakeet smuggling"},
+    "illegal_fishing": {"illegal fishing", "blast fishing", "dynamite fishing", "trawler"},
     "forest_hunting_gang": {"hunting gang", "poaching gang", "racket", "syndicate", "cartel", "network"},
+    "habitat_destruction": {
+        "deforestation", "illegal logging", "encroachment", "forest fire arson",
+        "habitat destruction", "illegal mining forest", "land grab forest",
+        "वन कटाई", "अवैध कटाई",
+    },
+    "animal_cruelty": {
+        "animal cruelty", "animal abuse", "animal torture",
+        "poisoning animals", "poisoned carcass",
+        "पशु क्रूरता",
+    },
+    "snake_venom_trade": {"snake venom", "venom trade", "venom trafficking", "सांप का जहर"},
+    "red_sanders_smuggling": {"red sanders", "red sandalwood", "red sander", "रक्तचंदन", "ఎర్రచందనం"},
 }
 
 SPECIES_KEYWORDS: dict[str, set[str]] = {
     "tiger": {"tiger", "tigress", "big cat", "बाघ", "व्याघ्र", "ಹುಲಿ", "புலி", "పులి", "বাঘ", "বাঘ", "ਬਾਘ", "شیر", "ବାଘ", "વાઘ"},
-    "leopard": {"leopard", "panther"},
+    "leopard": {"leopard", "panther", "leopardess", "तेंदुआ", "चीता", "ಚಿರತೆ", "சிறுத்தை", "చిరుత"},
     "elephant": {"elephant", "tusk", "ivory", "हाथी", "ಆನೆ", "யானை", "ఏనుగు", "হাতি", "হাতী", "ہاتھی", "ହାତୀ", "હાથી"},
     "rhino": {"rhino", "rhinoceros", "गैंडा", "ಖಡ್ಗಮೃಗ", "காண்டாமிருகம்", "ఖడ్గమృగం", "গণ্ডার", "گینڈا", "ଗଣ୍ଡମୃଗ", "ગેંડો"},
     "pangolin": {"pangolin", "scales", "पैंगोलिन", "ಪ್ಯಾಂಗೋಲಿನ್", "பாங்கோலின்", "ప్యాంగోలిన్", "প্যাঙ্গোলিন", "پینگولن", "ପ୍ୟାଙ୍ଗୋଲିନ", "પેંગોલિન"},
-    "bear": {"bear"},
-    "deer": {"deer", "sambar", "chital", "antler"},
-    "bird": {"parrot", "owl", "eagle", "hornbill", "falcon", "macaw", "cockatoo", "bird"},
-    "reptile": {"python", "cobra", "turtle", "tortoise", "gecko", "lizard"},
-    "marine": {"shark", "ray", "sea cucumber", "illegal fishing"},
+    "bear": {"bear", "sloth bear", "himalayan bear", "bear bile", "भालू"},
+    "deer": {"deer", "sambar", "chital", "antler", "spotted deer", "barking deer", "musk deer", "hog deer", "हिरण"},
+    "bird": {"parrot", "owl", "eagle", "hornbill", "falcon", "macaw", "cockatoo", "bird", "parakeet", "myna", "peacock"},
+    "reptile": {"python", "cobra", "turtle", "tortoise", "gecko", "lizard", "star tortoise", "monitor lizard", "crocodile", "gharial"},
+    "marine": {"shark", "ray", "sea cucumber", "illegal fishing", "shark fin", "seahorse", "sea turtle"},
+    "snow leopard": {"snow leopard", "हिम चीता", "ounce"},
+    "red panda": {"red panda", "लाल पांडा"},
+    "lion": {"lion", "asiatic lion", "gir lion", "शेर", "सिंह"},
+    "wolf": {"wolf", "indian wolf", "भेड़िया"},
+    "wild boar": {"wild boar", "boar", "जंगली सूअर"},
+    "red sanders": {"red sanders", "red sandalwood", "red sander", "रक्तचंदन", "ఎర్రచందనం"},
+    "sandalwood": {"sandalwood", "sandal wood", "चंदन", "श्रीगंध"},
 }
 
 FALSE_POSITIVE_PATTERNS = [
@@ -1115,6 +1134,10 @@ class HybridIntelligenceEngine:
                     "exotic bird trafficking",
                     "illegal fishing",
                     "forest hunting gang",
+                    "habitat destruction",
+                    "animal cruelty",
+                    "snake venom trade",
+                    "red sanders smuggling",
                     "not wildlife crime",
                     "incident in India",
                     "incident outside India",
@@ -1133,6 +1156,10 @@ class HybridIntelligenceEngine:
             score_map.get("exotic bird trafficking", 0.0),
             score_map.get("illegal fishing", 0.0),
             score_map.get("forest hunting gang", 0.0),
+            score_map.get("habitat destruction", 0.0),
+            score_map.get("animal cruelty", 0.0),
+            score_map.get("snake venom trade", 0.0),
+            score_map.get("red sanders smuggling", 0.0),
         )
 
         rule_crime_type, rule_score = self._keyword_crime_scores(text)
@@ -1172,12 +1199,16 @@ class HybridIntelligenceEngine:
             ("exotic_bird_trafficking", score_map.get("exotic bird trafficking", 0.0)),
             ("illegal_fishing", score_map.get("illegal fishing", 0.0)),
             ("forest_hunting_gang", score_map.get("forest hunting gang", 0.0)),
+            ("habitat_destruction", score_map.get("habitat destruction", 0.0)),
+            ("animal_cruelty", score_map.get("animal cruelty", 0.0)),
+            ("snake_venom_trade", score_map.get("snake venom trade", 0.0)),
+            ("red_sanders_smuggling", score_map.get("red sanders smuggling", 0.0)),
             key=lambda item: item[1],
         )[0]
         crime_type = zs_crime if score_map.get("not wildlife crime", 0.0) < 0.75 else "unknown"
         if crime_type == "unknown":
             crime_type = rule_crime_type
-        if crime_type == "unknown" and (poach_prob >= 0.55 or keyword_hits >= 4):
+        if crime_type == "unknown" and (poach_prob >= 0.45 or keyword_hits >= 3):
             crime_type = "poaching"
 
         outside_prob = score_map.get("incident outside India", 0.0)
@@ -1230,9 +1261,9 @@ class HybridIntelligenceEngine:
             baseline_accept = confidence >= settings.ai_threshold and crime_type != "unknown"
             fallback_accept = (
                 crime_type != "unknown"
-                and not_wildlife_prob < 0.78
+                and not_wildlife_prob < 0.82
                 and strong_rule_signal
-                and poach_prob >= 0.28
+                and poach_prob >= 0.22
             )
         is_poaching = baseline_accept or fallback_accept
         if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:

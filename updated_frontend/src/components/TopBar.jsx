@@ -1,4 +1,4 @@
-import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut } from "lucide-react";
+import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut, Database, HardDrive } from "lucide-react";
 
 export default function TopBar({
   activeSection,
@@ -90,6 +90,31 @@ export default function TopBar({
           <button type="button" className="btn" onClick={() => onExport("pdf")}>
             <FileText size={14} />
             <span className="btn-label">PDF</span>
+          </button>
+        </div>
+
+        <div className="btn-group" role="group" aria-label="Data backup">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              const base = typeof import.meta !== "undefined" ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "") : "";
+              window.location.href = `${base}/api/public/download-csv`;
+            }}
+          >
+            <Database size={14} />
+            <span className="btn-label">All Data CSV</span>
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              const base = typeof import.meta !== "undefined" ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "") : "";
+              window.location.href = `${base}/api/public/download-db`;
+            }}
+          >
+            <HardDrive size={14} />
+            <span className="btn-label">Download DB</span>
           </button>
         </div>
 
