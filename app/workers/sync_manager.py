@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from threading import Lock
 
 
@@ -46,7 +46,7 @@ class SyncStateStore:
             self._state.running = True
             self._state.trigger = trigger
             self._state.message = "Sync started. Searching providers..."
-            self._state.started_at = datetime.now(tz=UTC).isoformat()
+            self._state.started_at = datetime.now(tz=timezone.utc).isoformat()
             self._state.finished_at = None
             self._state.duration_seconds = None
             self._state.error = ""
@@ -78,7 +78,7 @@ class SyncStateStore:
                     "query": query,
                     "scanned": int(payload.get("scanned", 0) or 0),
                     "kept": int(payload.get("kept", 0) or 0),
-                    "updated_at": datetime.now(tz=UTC).isoformat(),
+                    "updated_at": datetime.now(tz=timezone.utc).isoformat(),
                 }
 
     def append_incident(self, incident: dict[str, object]) -> None:
@@ -101,7 +101,7 @@ class SyncStateStore:
         with self._lock:
             self._state.running = False
             self._state.trigger = trigger
-            self._state.finished_at = datetime.now(tz=UTC).isoformat()
+            self._state.finished_at = datetime.now(tz=timezone.utc).isoformat()
             self._state.duration_seconds = round(duration_seconds, 2)
             self._state.error = ""
             self._state.stats = stats
@@ -111,7 +111,7 @@ class SyncStateStore:
         with self._lock:
             self._state.running = False
             self._state.trigger = trigger
-            self._state.finished_at = datetime.now(tz=UTC).isoformat()
+            self._state.finished_at = datetime.now(tz=timezone.utc).isoformat()
             self._state.duration_seconds = round(duration_seconds, 2)
             self._state.error = error
             self._state.message = error

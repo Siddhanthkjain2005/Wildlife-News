@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import timezone, date, datetime, timedelta
 from threading import Lock
 from time import monotonic, sleep
 from urllib.parse import parse_qs, parse_qsl, quote_plus, unquote, urlencode, urlparse, urlunparse
@@ -405,11 +405,11 @@ class NewsCollector:
     @staticmethod
     def _parse_date(raw_date: str | None) -> datetime:
         if not raw_date:
-            return datetime.now(tz=UTC).replace(tzinfo=None)
+            return datetime.now(tz=timezone.utc).replace(tzinfo=None)
         try:
             parsed = date_parser.parse(raw_date)
         except (TypeError, ValueError, OverflowError):
-            return datetime.now(tz=UTC).replace(tzinfo=None)
+            return datetime.now(tz=timezone.utc).replace(tzinfo=None)
         if parsed.tzinfo is None:
             return parsed
         return parsed.astimezone(UTC).replace(tzinfo=None)
@@ -654,7 +654,7 @@ class NewsCollector:
             return None
         if retry_at.tzinfo is None:
             retry_at = retry_at.replace(tzinfo=UTC)
-        delta = (retry_at.astimezone(UTC) - datetime.now(tz=UTC)).total_seconds()
+        delta = (retry_at.astimezone(UTC) - datetime.now(tz=timezone.utc)).total_seconds()
         return max(1, int(delta))
 
     def _cooldown_seconds_from_response(self, response: requests.Response | None) -> int:

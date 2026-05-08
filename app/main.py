@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import timezone, date, datetime, timedelta
 import json
 import re
 from difflib import SequenceMatcher
@@ -1136,7 +1136,7 @@ def _update_sync_progress(progress: dict[str, str | int]) -> None:
 
 
 def _register_incident_event(event: dict[str, str | int | float]) -> None:
-    now = datetime.now(tz=UTC).isoformat()
+    now = datetime.now(tz=timezone.utc).isoformat()
     enriched = dict(event)
     enriched["event_time_utc"] = now
     try:
@@ -1365,7 +1365,7 @@ def _repair_stored_urls() -> int:
 
 @app.on_event("startup")
 def startup_event() -> None:
-    runtime_diagnostics["startup_time"] = datetime.now(tz=UTC).isoformat()
+    runtime_diagnostics["startup_time"] = datetime.now(tz=timezone.utc).isoformat()
     app_logger.info("Starting %s", settings.app_name)
     init_database()
     db_file = _database_file_path()
@@ -2962,7 +2962,7 @@ def health(db: Session = Depends(get_db)):
     uptime_seconds = 0.0
     if isinstance(started_at, str):
         try:
-            uptime_seconds = max(0.0, (datetime.now(tz=UTC) - datetime.fromisoformat(started_at)).total_seconds())
+            uptime_seconds = max(0.0, (datetime.now(tz=timezone.utc) - datetime.fromisoformat(started_at)).total_seconds())
         except ValueError:
             uptime_seconds = 0.0
     pending_alerts = int(
