@@ -412,7 +412,7 @@ class NewsCollector:
             return datetime.now(tz=timezone.utc).replace(tzinfo=None)
         if parsed.tzinfo is None:
             return parsed
-        return parsed.astimezone(UTC).replace(tzinfo=None)
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
 
     @staticmethod
     def _detect_language(title: str, summary: str, fallback: str) -> str:
@@ -514,12 +514,12 @@ class NewsCollector:
             try:
                 parsed_date = date.fromisoformat(raw_start)
                 start_local = datetime(parsed_date.year, parsed_date.month, parsed_date.day, tzinfo=app_tz)
-                return start_local.astimezone(UTC).replace(tzinfo=None)
+                return start_local.astimezone(timezone.utc).replace(tzinfo=None)
             except ValueError:
                 logger.warning("Invalid START_FROM_DATE=%s in collector. Falling back to current local date.", raw_start)
         now_local = datetime.now(tz=app_tz)
         start_local = datetime(now_local.year, now_local.month, now_local.day, tzinfo=app_tz)
-        return start_local.astimezone(UTC).replace(tzinfo=None)
+        return start_local.astimezone(timezone.utc).replace(tzinfo=None)
 
     def _enabled_providers(self) -> list[str]:
         configured = self._csv_list(settings.enabled_providers)
@@ -653,8 +653,8 @@ class NewsCollector:
         except (TypeError, ValueError, OverflowError):
             return None
         if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=UTC)
-        delta = (retry_at.astimezone(UTC) - datetime.now(tz=timezone.utc)).total_seconds()
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        delta = (retry_at.astimezone(timezone.utc) - datetime.now(tz=timezone.utc)).total_seconds()
         return max(1, int(delta))
 
     def _cooldown_seconds_from_response(self, response: requests.Response | None) -> int:

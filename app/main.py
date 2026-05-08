@@ -158,8 +158,8 @@ def _today_bounds_utc() -> tuple[datetime, datetime]:
     now_local = datetime.now(tz=APP_TIMEZONE)
     start_local = datetime(now_local.year, now_local.month, now_local.day, tzinfo=APP_TIMEZONE)
     end_local = start_local + timedelta(days=1)
-    start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
-    end_utc = end_local.astimezone(UTC).replace(tzinfo=None)
+    start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = end_local.astimezone(timezone.utc).replace(tzinfo=None)
     return start_utc, end_utc
 
 
@@ -169,7 +169,7 @@ def _start_from_utc() -> datetime:
         try:
             parsed_date = date.fromisoformat(raw_start)
             start_local = datetime(parsed_date.year, parsed_date.month, parsed_date.day, tzinfo=APP_TIMEZONE)
-            return start_local.astimezone(UTC).replace(tzinfo=None)
+            return start_local.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError:
             app_logger.warning("Invalid START_FROM_DATE=%s. Falling back to current local date.", raw_start)
     start_utc, _ = _today_bounds_utc()
