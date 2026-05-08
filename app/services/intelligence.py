@@ -178,6 +178,10 @@ ARTICLE_SIGNAL_TERMS = {
 
 
 
+PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'’-]*|[^\W\d_]{2,})"
+PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,3}}"
+PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,4}}"
+
 PERSON_EXTRACTION_PATTERNS = [
     # English: "arrested/held/detained [person]"
     re.compile(
@@ -283,29 +287,7 @@ DISTRICT_ALIASES = {
     "greater noida": "uttar pradesh",
 }
 
-PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'’-]*|[^\W\d_]{2,})"
-PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,3}}"
-PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,4}}"
 
-PERSON_EXTRACTION_PATTERNS = [
-    re.compile(
-        rf"\b(?:arrested|held|detained|booked|nabbed|caught|identified|named|questioned)\s+"
-        rf"(?:the\s+)?(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused|individual(?:s)?)?\s*"
-        rf"(?:named|identified as)?\s*({PERSON_NAME_PATTERN})\b"
-    ),
-    re.compile(
-        rf"\b({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+"
-        rf"(?:was|were|has been|have been)?\s*(?:arrested|held|detained|booked|nabbed|accused|named|identified|questioned)\b"
-    ),
-    re.compile(rf"\bidentified as\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\b"),
-    re.compile(
-        rf"\b(?:named|identified as|arrested)\s+({PERSON_NAME_LIST_PATTERN})\b"
-    ),
-    re.compile(
-        rf"\b(?:arrest|detention|questioning)\s+(?:of\s+)?({PERSON_NAME_PATTERN})\b",
-        re.IGNORECASE,
-    ),
-]
 
 PERSON_NAME_STOPWORDS = {
     "forest",
