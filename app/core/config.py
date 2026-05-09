@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     # Providers
     enabled_providers: str = (
         "google_rss,bing_rss,gdelt,newsapi,gnews,mediastack,newsdata,"
-        "currents,thenewsapi,worldnewsapi,reddit_osint,ngo_feeds,x_adapter"
+        "currents,thenewsapi,worldnewsapi,eventregistry,newscatcher,"
+        "reddit_osint,ngo_feeds,x_adapter"
     )
     supported_languages: str = "en,hi,kn,ta,te,ml,bn,mr,gu,pa,ur,or,as"
     newsapi_key: str | None = None
@@ -56,6 +57,8 @@ class Settings(BaseSettings):
     currents_api_key: str | None = None
     thenewsapi_key: str | None = None
     worldnewsapi_key: str | None = None
+    eventregistry_api_key: str | None = None
+    newscatcher_api_key: str | None = None
     # Alerts
     alerts_enabled: bool = False
     telegram_alerts_enabled: bool = False

@@ -56,6 +56,9 @@ class WildlifeCrimePredictor:
         self._person_frequency: list[dict[str, Any]] = []
         self._weekly_forecast: dict[str, Any] = {}
         self._model_metrics: dict[str, Any] = {}
+        self._incremental_count: int = 0
+
+    _INCREMENTAL_RETRAIN_THRESHOLD = 25  # full retrain after this many incremental updates
 
     @property
     def is_trained(self) -> bool:
@@ -68,12 +71,92 @@ class WildlifeCrimePredictor:
             "last_trained_at": self._last_trained_at.isoformat() if self._last_trained_at else None,
             "training_samples": self._training_sample_count,
             "metrics": self._model_metrics,
+            "incremental_count": self._incremental_count,
         }
 
     def train(self, db: Session) -> dict[str, Any]:
         """Train the predictive model on all collected data."""
         with _model_lock:
-            return self._train_internal(db)
+            result = self._train_internal(db)
+            self._incremental_count = 0
+            return result
+
+    def incremental_update(self, db: Session, news_item: Any) -> dict[str, Any]:
+        """Lightweight update after a single article is inserted/merged.
+
+        Performs a full retrain every _INCREMENTAL_RETRAIN_THRESHOLD articles;
+        otherwise just updates counters and key frequency tables.
+        """
+        with _model_lock:
+            self._incremental_count += 1
+            if self._incremental_count >= self._INCREMENTAL_RETRAIN_THRESHOLD:
+                logger.info("Incremental threshold reached (%d), triggering full retrain.", self._incremental_count)
+                result = self._train_internal(db)
+                self._incremental_count = 0
+                return {"action": "full_retrain", **result}
+
+            # Lightweight: update state risk, species trend, person frequency
+            try:
+                state = (getattr(news_item, 'state', '') or '').strip().title() or 'Unknown'
+                if state not in self._state_risk_profile:
+                    self._state_risk_profile[state] = {
+                        'total_incidents': 0, 'avg_risk_score': 0, 'threat_score': 0,
+                        'recent_7d': 0, 'recency_factor': 1.0,
+                    }
+                profile = self._state_risk_profile[state]
+                prev_total = profile.get('total_incidents', 0)
+                prev_avg = profile.get('avg_risk_score', 0)
+                risk = getattr(news_item, 'risk_score', 0) or 0
+                new_total = prev_total + 1
+                profile['total_incidents'] = new_total
+                profile['avg_risk_score'] = round((prev_avg * prev_total + risk) / new_total, 2)
+                profile['recent_7d'] = profile.get('recent_7d', 0) + 1
+                profile['threat_score'] = min(100, round(
+                    profile['avg_risk_score'] * 0.4 + min(50, new_total) * 0.6 * 2
+                , 2))
+
+                # Species
+                for raw_sp in str(getattr(news_item, 'species', '') or '').split(','):
+                    sp = raw_sp.strip().lower()
+                    if sp and sp not in self._species_trend:
+                        self._species_trend[sp] = {'total_incidents': 0, 'avg_risk': 0, 'trend_label': 'new'}
+                    if sp:
+                        entry = self._species_trend[sp]
+                        prev_t = entry.get('total_incidents', 0)
+                        prev_r = entry.get('avg_risk', 0)
+                        entry['total_incidents'] = prev_t + 1
+                        entry['avg_risk'] = round((prev_r * prev_t + risk) / (prev_t + 1), 2)
+
+                # Persons
+                for raw_p in str(getattr(news_item, 'involved_persons', '') or '').split(','):
+                    person = raw_p.strip()
+                    if person and len(person) >= 3 and 'unnamed' not in person.lower():
+                        found = False
+                        for entry in self._person_frequency:
+                            if entry.get('name', '').lower() == person.lower():
+                                entry['incident_count'] = entry.get('incident_count', 0) + 1
+                                found = True
+                                break
+                        if not found:
+                            self._person_frequency.append({
+                                'name': person,
+                                'incident_count': 1,
+                                'states': [state],
+                                'threat_label': 'suspect',
+                            })
+
+                # Crime type
+                ct = (getattr(news_item, 'crime_type', 'unknown') or 'unknown').strip().lower()
+                # Recompute distribution
+                total_crimes = sum(self._crime_type_distribution.values()) + 1
+                self._crime_type_distribution[ct] = self._crime_type_distribution.get(ct, 0) + (100 / total_crimes)
+
+                self._training_sample_count += 1
+                self._save_model()
+                return {'action': 'incremental', 'incremental_count': self._incremental_count, 'ok': True}
+            except Exception as err:
+                logger.warning('Incremental update failed: %s', err)
+                return {'action': 'incremental', 'ok': False, 'error': str(err)}
 
     def _train_internal(self, db: Session) -> dict[str, Any]:
         start = datetime.utcnow()
@@ -576,6 +659,7 @@ class WildlifeCrimePredictor:
                 "person_frequency": self._person_frequency,
                 "weekly_forecast": self._weekly_forecast,
                 "model_metrics": self._model_metrics,
+                "incremental_count": self._incremental_count,
             }
             model_path = _MODEL_DIR / "predictor_state.json"
             model_path.write_text(json.dumps(data, ensure_ascii=False, default=str, indent=2))
@@ -605,6 +689,7 @@ class WildlifeCrimePredictor:
             self._person_frequency = data.get("person_frequency", [])
             self._weekly_forecast = data.get("weekly_forecast", {})
             self._model_metrics = data.get("model_metrics", {})
+            self._incremental_count = data.get("incremental_count", 0)
             logger.info("Model state loaded: trained=%s, samples=%d", self._trained, self._training_sample_count)
             return self._trained
         except Exception as err:

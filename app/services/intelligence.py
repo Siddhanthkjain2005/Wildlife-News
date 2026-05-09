@@ -178,9 +178,9 @@ ARTICLE_SIGNAL_TERMS = {
 
 
 
-PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'’-]*|[^\W\d_]{2,})"
-PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,3}}"
-PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,4}}"
+PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'\u2019-]*|[A-Z]\.?|[^\W\d_]{2,})"
+PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,4}}"
+PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,6}}"
 
 PERSON_EXTRACTION_PATTERNS = [
     # English: "arrested/held/detained [person]"
@@ -243,6 +243,34 @@ PERSON_EXTRACTION_PATTERNS = [
         rf"\b(?:FIR|case|complaint)\s+(?:filed|registered|lodged)\s+(?:against\s+)?({PERSON_NAME_PATTERN})\b",
         re.IGNORECASE,
     ),
+    # "led by [name]" / "headed by [name]"
+    re.compile(
+        rf"\b(?:led|headed|operated|run|managed|controlled)\s+by\s+({PERSON_NAME_PATTERN})\b",
+        re.IGNORECASE,
+    ),
+    # "one [name], aged/resident" — very common in Indian news
+    re.compile(
+        rf"\bone\s+({PERSON_NAME_PATTERN})\s*(?:,|\(|aged|resident|r/o|a\s+resident)\b",
+        re.IGNORECASE,
+    ),
+    # "including [names]"
+    re.compile(
+        rf"\bincluding\s+({PERSON_NAME_LIST_PATTERN})\b",
+        re.IGNORECASE,
+    ),
+    # "gang of [name]" / "racket of [name]"
+    re.compile(
+        rf"\b(?:gang|racket|syndicate|network|nexus)\s+(?:of|headed by|led by|run by)\s+({PERSON_NAME_PATTERN})\b",
+        re.IGNORECASE,
+    ),
+    # Telugu: "అరెస్ట్ [name]"
+    re.compile(rf"అరెస్ట్\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    # Malayalam: "അറസ്റ്റ് [name]"
+    re.compile(rf"അറസ്റ്റ്\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    # Marathi: "अटक [name]"
+    re.compile(rf"(?:अटक|ताब्यात)\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    # Gujarati: "ધરપકડ [name]"
+    re.compile(rf"(?:ધરપકડ|પકડાયો)\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
 ]
 
 PERSON_ROLE_PATTERNS = [
@@ -329,6 +357,62 @@ PERSON_NAME_STOPWORDS = {
     "number",
     "no",
     "crimebranch",
+    "national",
+    "park",
+    "sanctuary",
+    "reserve",
+    "forest",
+    "animal",
+    "bird",
+    "snake",
+    "tiger",
+    "leopard",
+    "elephant",
+    "rhino",
+    "pangolin",
+    "arrested",
+    "detained",
+    "held",
+    "caught",
+    "seized",
+    "rescued",
+    "recovered",
+    "found",
+    "killed",
+    "total",
+    "several",
+    "multiple",
+    "many",
+    "various",
+    "other",
+    "first",
+    "last",
+    "senior",
+    "deputy",
+    "chief",
+    "inspector",
+    "constable",
+    "superintendent",
+    "director",
+    "minister",
+    "secretary",
+    "collector",
+    "commissioner",
+    "magistrate",
+    "judge",
+    "advocate",
+    "lawyer",
+    "reporter",
+    "journalist",
+    "correspondent",
+    "editor",
+    "press",
+    "pti",
+    "ians",
+    "ani",
+    "reuters",
+    "afp",
+    "representative",
 }
 
 PERSON_COUNT_WORDS = {
@@ -750,36 +834,43 @@ class HybridIntelligenceEngine:
 
     @staticmethod
     def _clean_person_candidate(raw_value: str) -> str:
-        value = re.sub(r"^[\"'`“”‘’\s-]+|[\"'`“”‘’,.;:\s-]+$", "", raw_value or "")
-        value = re.sub(r"\([^)]{1,20}\)", "", value).strip()
-        value = re.sub(r"\baged\s+\d{1,2}\b", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"^[\"'`\u201c\u201d\u2018\u2019\s-]+|[\"'`\u201c\u201d\u2018\u2019,.;:\s-]+$", "", raw_value or "")
+        value = re.sub(r"\([^)]{1,30}\)", "", value).strip()
+        value = re.sub(r"\baged?\s+\d{1,3}\s*(?:years?|yrs?)?\b", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"\b\d{1,3}\s*(?:years?|yrs?)\s*(?:old)?\b", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\balias\b.*$", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"\b(?:a\.?k\.?a\.?|also known as)\b.*$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(
-            r"^(?:the\s+)?(?:alleged\s+)?(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused)\s+",
+            r"^(?:the\s+)?(?:alleged\s+)?(?:main\s+)?(?:prime\s+)?"
+            r"(?:poacher(?:s)?|trafficker(?:s)?|suspect(?:s)?|accused|smuggler(?:s)?|kingpin(?:s)?)\s+",
             "",
             value,
             flags=re.IGNORECASE,
         )
-        value = re.sub(r",?\s*(?:resident(?:s)?|r/o|s/o|d/o|w/o)\b.*$", "", value, flags=re.IGNORECASE).strip()
-        value = re.sub(r"\b(?:son|daughter|wife)\s+of\b.*$", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r",?\s*(?:resident(?:s)?|r/o|s/o|d/o|w/o|h/o|f/o)\b.*$", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"\b(?:son|daughter|wife|husband|father)\s+of\b.*$", "", value, flags=re.IGNORECASE).strip()
+        value = re.sub(r"\b(?:hailing|belonging|native)\s+(?:from|to)\b.*$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\s+", " ", value).strip()
-        value = re.sub(r"^(?:mr|mrs|ms|dr|shri|smt)\.?\s+", "", value, flags=re.IGNORECASE)
+        value = re.sub(r"^(?:mr|mrs|ms|dr|shri|smt|sri|prof)\.?\s+", "", value, flags=re.IGNORECASE)
         if not value:
             return ""
         tokens = [token.strip() for token in value.split(" ") if token.strip()]
-        if not tokens or len(tokens) > 4:
+        if not tokens or len(tokens) > 5:
             return ""
         lowered_tokens = [token.lower().strip(".") for token in tokens]
-        if any(token in PERSON_NAME_STOPWORDS for token in lowered_tokens):
+        # Filter out stopword tokens but keep non-stopword ones
+        clean_tokens = [t for t, lt in zip(tokens, lowered_tokens) if lt not in PERSON_NAME_STOPWORDS]
+        if not clean_tokens:
             return ""
-        normalized = " ".join(lowered_tokens)
+        lowered_clean = [t.lower().strip(".") for t in clean_tokens]
+        normalized = " ".join(lowered_clean)
         if normalized in GEO_STOP_TERMS or normalized in SPECIES_STOP_TERMS:
             return ""
-        if len(tokens) == 1 and len(tokens[0].strip(".")) < 3:
+        if len(clean_tokens) == 1 and len(clean_tokens[0].strip(".")) < 3:
             return ""
-        if not re.search(r"[A-Z]", value) and not re.search(r"[^\x00-\x7F]", value):
+        if not re.search(r"[A-Z]", " ".join(clean_tokens)) and not re.search(r"[^\x00-\x7F]", " ".join(clean_tokens)):
             return ""
-        return " ".join(tokens)
+        return " ".join(clean_tokens)
 
     @classmethod
     def _split_person_candidates(cls, raw_value: str) -> list[str]:

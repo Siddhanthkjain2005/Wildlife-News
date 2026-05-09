@@ -25,6 +25,7 @@ from app.models import Alert, DistrictStat, Entity, ExternalSignal, NewsItem, So
 from app.services.dedupe import DedupeEngine
 from app.services.intelligence import HybridIntelligenceEngine
 from app.services.reports import upsert_report_for_news
+from app.services.predictor import predictor as wildlife_predictor
 
 logger = get_logger("sync.collector")
 
@@ -227,6 +228,8 @@ ALL_PROVIDER_ORDER = [
     "currents",
     "thenewsapi",
     "worldnewsapi",
+    "eventregistry",
+    "newscatcher",
     "reddit_osint",
     "govt_notices",
     "ngo_feeds",
@@ -234,7 +237,7 @@ ALL_PROVIDER_ORDER = [
 ]
 DISABLED_PROVIDERS = {"govt_notices"}
 
-KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata", "currents", "thenewsapi", "worldnewsapi"}
+KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata", "currents", "thenewsapi", "worldnewsapi", "eventregistry", "newscatcher"}
 PROVIDER_QUERY_CAPS = {
     "google_rss": 6,
     "bing_rss": 3,
@@ -246,6 +249,8 @@ PROVIDER_QUERY_CAPS = {
     "currents": 2,
     "thenewsapi": 2,
     "worldnewsapi": 2,
+    "eventregistry": 2,
+    "newscatcher": 2,
     "reddit_osint": 3,
     "govt_notices": 2,
     "ngo_feeds": 2,
@@ -262,6 +267,8 @@ PROVIDER_LANGUAGE_CAPS = {
     "currents": 2,
     "thenewsapi": 2,
     "worldnewsapi": 2,
+    "eventregistry": 2,
+    "newscatcher": 2,
 }
 
 
@@ -618,6 +625,10 @@ class NewsCollector:
             return bool(settings.thenewsapi_key)
         if provider == "worldnewsapi":
             return bool(settings.worldnewsapi_key)
+        if provider == "eventregistry":
+            return bool(settings.eventregistry_api_key)
+        if provider == "newscatcher":
+            return bool(settings.newscatcher_api_key)
         return True
 
     def _select_queries_for_cycle(self, *, provider: str, language: str, queries: list[str]) -> list[str]:
@@ -722,9 +733,9 @@ class NewsCollector:
     def _region(language: str) -> tuple[str, str, str, str]:
         return REGION_BY_LANGUAGE.get(language, REGION_BY_LANGUAGE["en"])
 
-    def _http_get_json(self, *, provider: str, url: str, params: dict[str, object]) -> dict[str, object]:
+    def _http_get_json(self, *, provider: str, url: str, params: dict[str, object], headers: dict[str, str] | None = None) -> dict[str, object]:
         def _call() -> requests.Response:
-            response = self.http.get(url, params=params, timeout=settings.request_timeout_seconds)
+            response = self.http.get(url, params=params, headers=headers, timeout=settings.request_timeout_seconds)
             if response.status_code >= 500:
                 response.raise_for_status()
             return response
@@ -1158,6 +1169,68 @@ class NewsCollector:
             )
         return items
 
+    def _fetch_eventregistry(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        """EventRegistry API — free tier: 200 requests/day. https://eventregistry.org/"""
+        if not settings.eventregistry_api_key:
+            return []
+        payload = self._http_get_json(
+            provider="eventregistry",
+            url="https://eventregistry.org/api/v1/article/getArticles",
+            params={
+                "apiKey": settings.eventregistry_api_key,
+                "keyword": query,
+                "lang": language[:2],
+                "articlesCount": max(1, min(100, limit)),
+                "articlesSortBy": "date",
+                "sourceLocationUri": "http://en.wikipedia.org/wiki/India",
+                "resultType": "articles",
+            },
+        )
+        items: list[RawArticle] = []
+        articles = payload.get("articles", {}).get("results", [])
+        for article in articles:
+            items.append(
+                RawArticle(
+                    title=self._strip_html(str(article.get("title", ""))),
+                    summary=self._strip_html(str(article.get("body", ""))[:2000]),
+                    source=self._strip_html(str(article.get("source", {}).get("title", "") or "EventRegistry")),
+                    url=self._normalize_url(str(article.get("url", "")).strip()),
+                    published_at=self._parse_date(article.get("dateTimePub") or article.get("dateTime")),
+                    language=language,
+                )
+            )
+        return items
+
+    def _fetch_newscatcher(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        """NewsCatcher API v3 — free tier: 1000 calls/month. https://www.newscatcherapi.com/"""
+        if not settings.newscatcher_api_key:
+            return []
+        payload = self._http_get_json(
+            provider="newscatcher",
+            url="https://v3-api.newscatcherapi.com/api/search",
+            params={
+                "q": query,
+                "lang": language[:2],
+                "countries": "IN",
+                "page_size": max(1, min(100, limit)),
+                "sort_by": "date",
+            },
+            headers={"x-api-token": settings.newscatcher_api_key},
+        )
+        items: list[RawArticle] = []
+        for article in payload.get("articles", []):
+            items.append(
+                RawArticle(
+                    title=self._strip_html(str(article.get("title", ""))),
+                    summary=self._strip_html(str(article.get("summary", "") or article.get("excerpt", ""))[:2000]),
+                    source=self._strip_html(str(article.get("rights", "") or article.get("clean_url", "") or "NewsCatcher")),
+                    url=self._normalize_url(str(article.get("link", "")).strip()),
+                    published_at=self._parse_date(article.get("published_date")),
+                    language=language,
+                )
+            )
+        return items
+
     def _fetch_provider(self, provider: str, language: str, query: str, limit: int) -> list[RawArticle]:
         if self._provider_on_cooldown(provider):
             return []
@@ -1183,6 +1256,10 @@ class NewsCollector:
                 return self._fetch_thenewsapi(language, query, limit)
             if provider == "worldnewsapi":
                 return self._fetch_worldnewsapi(language, query, limit)
+            if provider == "eventregistry":
+                return self._fetch_eventregistry(language, query, limit)
+            if provider == "newscatcher":
+                return self._fetch_newscatcher(language, query, limit)
             if provider == "reddit_osint":
                 return self._fetch_reddit_osint(query, limit)
             if provider == "govt_notices":
@@ -1826,6 +1903,12 @@ class NewsCollector:
                             merged_sources_value = new_item.merged_sources
 
                         upsert_report_for_news(db=db, news=incident_row)
+
+                        # Incremental ML model training on each new article
+                        try:
+                            wildlife_predictor.incremental_update(db=db, news_item=incident_row)
+                        except Exception as _pred_err:
+                            logger.debug("Incremental predictor update skipped: %s", _pred_err)
 
                         self._upsert_source_stat(
                             db=db,

@@ -18,3 +18,5 @@ updated_frontend/node_modules/
 app/static/react-build/
 
 *.zip
+venv_test/
+data/ml_models/
