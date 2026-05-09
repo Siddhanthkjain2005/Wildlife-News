@@ -1,13 +1,10 @@
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 const withBase = (path) => (API_BASE ? `${API_BASE}${path}` : path);
 const AUTH_TOKEN_KEY = "wildlife_admin_token";
-const WS_BASE = API_BASE.replace(/^http/, "ws");
-const withWs = (path) => (WS_BASE ? `${WS_BASE}${path}` : `ws://${window.location.host}${path}`);
 
 export const ENDPOINTS = {
   adminLogin: withBase("/api/admin/login"),
   adminLogout: withBase("/api/admin/logout"),
-  adminRefresh: withBase("/api/admin/refresh"),
   summary: withBase("/api/dashboard-summary"),
   chart: withBase("/api/chart-data"),
   map: withBase("/api/map-data"),
@@ -28,11 +25,6 @@ export const ENDPOINTS = {
   predictionsTrain: withBase("/api/predictions/train"),
   predictionsHotspots: withBase("/api/predictions/hotspots"),
   predictionsPersons: withBase("/api/predictions/persons"),
-  graphNetworks: withBase("/api/graph/networks"),
-  graphPersonProfile: (name) => withBase(`/api/graph/person/${encodeURIComponent(name)}`),
-  ragQuery: withBase("/api/rag/query"),
-  searchSemantic: withBase("/api/search/semantic"),
-  wsLive: (token) => withWs(`/api/ws/live?token=${token}`),
 };
 
 export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {
@@ -46,16 +38,10 @@ export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {
   return "#";
 }
 
-export async function fetchJson(url, { retry = true } = {}) {
+export async function fetchJson(url) {
   const token = getStoredToken();
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await fetch(url, { cache: "no-store", headers });
-  
-  if (res.status === 401 && retry && token) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) return fetchJson(url, { retry: false });
-  }
-
+  const res = await fetch(url, { cache: "no-store", credentials: "same-origin", headers });
   if (!res.ok) {
     let detail = "";
     try {
@@ -71,22 +57,16 @@ export async function fetchJson(url, { retry = true } = {}) {
   return res.json();
 }
 
-export async function postJson(url, payload, { includeAuth = true, retry = true } = {}) {
+export async function postJson(url, payload, { includeAuth = true } = {}) {
   const token = includeAuth ? getStoredToken() : "";
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  
   const res = await fetch(url, {
     method: "POST",
+    credentials: "same-origin",
     headers,
     body: JSON.stringify(payload || {})
   });
-
-  if (res.status === 401 && retry && token && includeAuth) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) return postJson(url, payload, { includeAuth, retry: false });
-  }
-
   if (!res.ok) {
     let detail = "";
     try {
@@ -100,19 +80,6 @@ export async function postJson(url, payload, { includeAuth = true, retry = true 
     throw error;
   }
   return res.json();
-}
-
-async function refreshAccessToken() {
-  try {
-    const tokens = await postJson(ENDPOINTS.adminRefresh, {}, { includeAuth: false });
-    if (tokens?.access_token) {
-      setStoredToken(tokens.access_token);
-      return true;
-    }
-  } catch (err) {
-    console.error("Token refresh failed:", err);
-  }
-  return false;
 }
 
 export function getStoredToken() {

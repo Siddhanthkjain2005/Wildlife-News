@@ -38,33 +38,38 @@ def dashboard_summary(db: Session = Depends(get_db)):
 @router.get("/api/map-data")
 def map_data(db: Session = Depends(get_db), limit: int = 400):
     m = _main()
-    safe_limit = max(50, min(1200, limit))
-    rows = (
-        db.execute(
-            m._apply_today_news_scope(
-                select(NewsItem)
-                .where(NewsItem.is_poaching.is_(True))
-                .order_by(NewsItem.published_at.desc())
-                .limit(safe_limit)
+    key = m._cache_key(f"map_data_{limit}")
+
+    def _compute_map_data():
+        safe_limit = max(50, min(1200, limit))
+        rows = (
+            db.execute(
+                m._apply_today_news_scope(
+                    select(NewsItem)
+                    .where(NewsItem.is_poaching.is_(True))
+                    .order_by(NewsItem.published_at.desc())
+                    .limit(safe_limit)
+                )
             )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
-    markers = [m._marker_from_news(row) for row in rows]
-    state_counts: dict[str, int] = {}
-    for row in rows:
-        state = (row.state or "").strip().title() or "Unknown"
-        state_counts[state] = state_counts.get(state, 0) + max(1, row.report_count)
-    heatmap = []
-    for state, count in sorted(state_counts.items(), key=lambda item: item[1], reverse=True):
-        lat, lng = centroid_for_state(state)
-        heatmap.append({"state": state, "count": count, "lat": lat, "lng": lng})
-    return {
-        "center": {"lat": INDIA_CENTER[0], "lng": INDIA_CENTER[1]},
-        "markers": markers,
-        "state_heatmap": heatmap,
-    }
+        markers = [m._marker_from_news(row) for row in rows]
+        state_counts: dict[str, int] = {}
+        for row in rows:
+            state = (row.state or "").strip().title() or "Unknown"
+            state_counts[state] = state_counts.get(state, 0) + max(1, row.report_count)
+        heatmap = []
+        for state, count in sorted(state_counts.items(), key=lambda item: item[1], reverse=True):
+            lat, lng = centroid_for_state(state)
+            heatmap.append({"state": state, "count": count, "lat": lat, "lng": lng})
+        return {
+            "center": {"lat": INDIA_CENTER[0], "lng": INDIA_CENTER[1]},
+            "markers": markers,
+            "state_heatmap": heatmap,
+        }
+
+    return m._cache_get_or_compute(key, _compute_map_data)
 
 
 @router.get("/api/chart-data")

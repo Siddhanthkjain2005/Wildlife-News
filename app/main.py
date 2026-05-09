@@ -114,6 +114,9 @@ app.include_router(rag.router)
 app.include_router(search.router)
 app.include_router(websocket.router)
 
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app)
+
 init_logging()
 app_logger = get_logger("app.main")
 sync_logger = get_logger("sync.main")

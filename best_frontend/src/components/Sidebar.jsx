@@ -5,7 +5,6 @@ import {
   Radio,
   BarChart3,
   Table,
-  Network,
   Satellite,
   Lightbulb
 } from "lucide-react";
@@ -23,7 +22,6 @@ const NAV = [
   {
     title: "Analysis",
     items: [
-      { id: "networks", label: "Network", icon: Network },
       { id: "analytics", label: "Analytics", icon: BarChart3 },
       { id: "incidents", label: "Incidents", icon: Table }
     ]

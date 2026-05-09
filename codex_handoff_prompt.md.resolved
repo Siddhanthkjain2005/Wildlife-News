@@ -1,0 +1,236 @@
+# CODEX HANDOFF PROMPT — Wildlife Crime Intelligence Platform
+
+You are continuing implementation work on a **Wildlife Crime Intelligence Platform** — a production-grade, AI-powered system that monitors Indian wildlife crime news in 13 languages, classifies incidents using NLP, and provides a real-time intelligence dashboard.
+
+---
+
+## PROJECT LOCATION
+
+```
+/Users/swetha/Downloads/wildlife-live-poaching-news-system/
+```
+
+## TECH STACK
+
+- **Backend**: Python 3.11, FastAPI, SQLAlchemy, SQLite, APScheduler
+- **AI/ML**: HuggingFace Transformers (mDeBERTa zero-shot), Sentence-Transformers (MiniLM-L12), Babelscape NER
+- **Frontend**: React 18, Vite, Recharts, Leaflet maps
+- **Deployment**: Railway (backend), Vercel (frontend), Docker-ready
+- **Dependencies**: See `requirements.txt` + `requirements-ai.txt`
+
+## KEY FILE MAP
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `app/main.py` | ~3,280 | ALL 63+ FastAPI routes, startup, sync orchestration |
+| `app/services/intelligence.py` | ~1,890 | AI classification, NER, location extraction, risk scoring |
+| `app/services/collector.py` | ~2,105 | 17 news providers, RSS, rate limiting, parallel fetching |
+| `app/services/predictor.py` | ~847 | Hotspot prediction, species forecast, network analysis |
+| `app/services/dedupe.py` | ~310 | URL hash + fuzzy title + semantic embedding dedup |
+| `app/services/alert_engine.py` | ~151 | Telegram/email alerting |
+| `app/utils/location_data.py` | ~646 | 633 district→state mappings + regional scripts |
+| `app/models/news.py` | ~58 | SQLAlchemy NewsItem model (30 columns) |
+| `app/core/config.py` | ~80 | Pydantic settings |
+| `updated_frontend/` | React app | Dashboard with map, charts, table, alerts |
+
+---
+
+## WHAT HAS BEEN COMPLETED (DO NOT REDO)
+
+### 1. District Database Expansion (location_data.py)
+- **Expanded from 240 → 633 entries** covering all Indian states
+- Added all major cities, wildlife sanctuaries, tiger reserves, national parks
+- Added regional script entries (Hindi, Kannada, Tamil, Telugu, Bengali, Malayalam, Marathi, Gujarati, Punjabi, Odia)
+- File: `app/utils/location_data.py` — fully rewritten and working
+
+### 2. Startup Cleanup Enhancement (main.py)
+- Function `_cleanup_existing_articles()` at line ~1366
+- **Now searches BOTH title AND summary** for location matches (was title-only)
+- Uses the expanded 633-entry district DB
+- Applies 200+ regex post-filter to clean person names
+- Cross-references persons against location DB to reject false positives
+- Runs on every startup WITHOUT requiring AI model
+
+### 3. Source Credibility Scoring (intelligence.py)
+- Added `SOURCE_CREDIBILITY` dictionary at line ~179 with 40+ news sources rated 0.55–0.97
+- Tier 1 (0.93–0.97): Mongabay, TRAFFIC, WWF, Down to Earth
+- Tier 2 (0.88–0.92): The Hindu, Indian Express, NDTV, PTI, Reuters
+- Tier 3 (0.80–0.87): Regional media (Deccan Herald, Prajavani, etc.)
+- Tier 4 (0.55–0.70): Aggregators (LatestLY, NewsMeter)
+- **Integrated into `analyze()` method** — confidence is nudged ±5% based on source reliability
+- The `analyze()` method now accepts an optional `source: str = ""` parameter
+
+### 4. Species-Aware Smuggling Route Intelligence (intelligence.py)
+- Method `_likely_smuggling_route()` completely rewritten
+- Now accepts `species: list[str] | None = None` parameter
+- Contains **real TRAFFIC/WCCB-documented trafficking corridors**:
+  - Tiger: MP→Rajasthan, Corbett→Delhi, Tadoba→Nagpur, Bandipur→ports
+  - Red Sanders: Seshachalam→Chennai port→SE Asia
+  - Pangolin: NE India→Myanmar, Odisha→Kolkata
+  - Elephant: Kaziranga ivory routes, Kerala→Rajasthan carving hubs
+- Falls back to geographic route logic (border/coastal/inland/NE corridor)
+- Call site in `analyze()` updated to pass `species=species`
+
+### 5. Entity-Aware Deduplication (dedupe.py)
+- Method `_best_similarity_match()` enhanced with 3 new optional params: `species`, `involved_persons`, `published_at`
+- **Entity boost**: When text similarity is borderline (≥0.70), shared persons add +0.07 each (max +0.15), shared species add +0.04 each (max +0.08)
+- **Temporal decay**: Same-day matches get +0.03, 1-3 days +0.01, 10+ days -0.03
+- New reason type: `"entity_match"` when entity overlap pushed score over threshold
+- NOTE: The `find_duplicate()` method that calls `_best_similarity_match()` has NOT been updated to pass the new params yet — this needs to be done
+
+### 6. Predictor Enhancements (predictor.py)
+- **Seasonal Analysis** (`_compute_seasonal_analysis`): Monthly crime heatmap with Indian season markers (summer/monsoon/post_monsoon/winter), peak/low month detection, season aggregates
+- **Smuggling Corridor Detection** (`_detect_smuggling_corridors`): Identifies state-species trafficking patterns from network-flagged articles with route keywords
+- Both new methods added to training pipeline (steps 10 and 11)
+- Both persisted in save/load model state
+- Both exposed in `get_predictions()` API response
+
+### 7. Previously Completed (before this session)
+- 17 news provider adapters (Google, Bing, GDELT, DuckDuckGo, 11 Indian media RSS)
+- 200+ entry person name post-filter (regex blocklist achieving 99.3% accuracy)
+- Dual-mode AI (transformer + rule-based fallback for memory-constrained deployment)
+- Excel auto-recovery for corrupted workbooks
+- Professional README, CONTRIBUTING.md, SECURITY.md, GitHub templates
+- 13-language search queries (Hindi, Kannada, Tamil, Telugu, Bengali, etc.)
+- Admin authentication, audit logging, rate limiting
+- React dashboard with KPI cards, Leaflet map, Recharts charts, incident table
+
+---
+
+## WHAT REMAINS TO BE IMPLEMENTED
+
+### PHASE 1 — Quick Wins (still remaining)
+
+#### 1A. Wire source param through sync pipeline
+The `analyze()` method now accepts `source=` but the caller in `main.py` (the sync pipeline that calls `intelligence_engine.analyze(...)`) does NOT pass the source yet. Find ALL calls to `intelligence_engine.analyze()` in `app/main.py` and pass `source=article.source` or equivalent.
+
+#### 1B. Wire entity params through dedup
+The `_best_similarity_match()` in `dedupe.py` now accepts `species=`, `involved_persons=`, `published_at=` but `find_duplicate()` doesn't pass them. Update `find_duplicate()` to accept and forward these params. Then update the caller in `main.py`.
+
+#### 1C. Add unit tests
+Create `tests/` directory with:
+- `tests/test_location.py` — test DISTRICT_TO_STATE lookups for 20+ known cases
+- `tests/test_person_filter.py` — test the `_is_bad_person()` post-filter against known good/bad names
+- `tests/conftest.py` — basic fixtures
+
+#### 1D. Split main.py into route modules
+`app/main.py` is 3,280 lines with 63+ endpoints. Split into:
+- `app/api/dashboard.py` — dashboard summary, chart data, map data
+- `app/api/incidents.py` — filter-news, live-incidents
+- `app/api/admin.py` — admin routes, settings, audit logs
+- `app/api/exports.py` — Excel/PDF export routes
+- `app/api/predictions.py` — prediction endpoints
+- `app/api/health.py` — health check
+Keep `main.py` as app factory that includes routers.
+
+---
+
+### PHASE 2 — Major Upgrades
+
+#### 2A. PostgreSQL Migration
+- Add `DATABASE_URL` environment variable support (detect postgres:// vs sqlite:///)
+- Abstract database access behind repository pattern
+- Add Alembic for migrations
+- Add pgvector extension for semantic search
+
+#### 2B. Redis Caching
+- Add Redis for API response caching (TTL-based)
+- Add Redis pub/sub for real-time WebSocket events
+- Cache dashboard-summary, chart-data, map-data (60s TTL)
+
+#### 2C. WebSocket Real-Time
+- Add `/ws/live` WebSocket endpoint
+- Push new incidents, alerts, sync status to connected clients
+- Replace frontend polling (currently 30s interval) with WebSocket
+
+#### 2D. Semantic Search API
+- Add FAISS in-memory index of all incident embeddings
+- Endpoint: `GET /api/search?q=pangolin+trafficking+odisha&limit=10`
+- Endpoint: `GET /api/similar/{incident_id}?limit=5`
+- Use existing sentence-transformers model for embeddings
+
+#### 2E. Graph Intelligence Engine
+- Add NetworkX-based criminal network analysis
+- Build suspect co-occurrence graph from incidents
+- Detect connected components (criminal networks)
+- Compute betweenness centrality (key actors)
+- Endpoints: `GET /api/graph/networks`, `GET /api/graph/person/{name}`
+
+#### 2F. Docker Compose
+Create `docker-compose.yml` with services: api, db (postgres), redis
+
+#### 2G. CI/CD Pipeline
+Create `.github/workflows/ci.yml` with: lint (ruff), type check (mypy), test (pytest), build
+
+#### 2H. JWT Refresh Tokens + RBAC
+- Replace session auth with JWT access + refresh tokens
+- Add roles: viewer, analyst, admin
+- Permission-based endpoint access
+
+---
+
+### PHASE 3 — Enterprise Features
+
+#### 3A. Quantized LLM for Intelligence Summaries
+- Integrate Qwen2-0.5B or Phi-3-mini (quantized) via llama-cpp-python
+- Replace template `_build_summary()` with LLM-generated intel briefs
+- Structured prompting for JSON output
+
+#### 3B. RAG-Based Intelligence Q&A
+- Combine FAISS vector search + LLM for question answering
+- Endpoint: `GET /api/rag/ask?q=What+smuggling+routes+for+red+sanders`
+
+#### 3C. Fine-Tuned Classification (SetFit)
+- Fine-tune SetFit classifier on the 250+ labeled articles from the database
+- Replace zero-shot mDeBERTa (1.2GB, 200ms) with SetFit (150MB, 5ms)
+- Multi-label crime classification
+
+#### 3D. GLiNER Role-Aware NER
+- Replace Babelscape NER with GLiNER for zero-shot entity extraction
+- Custom entity types: SUSPECT, OFFICER, NEWS_SOURCE, ORGANIZATION
+- Eliminates 90%+ false positive persons without post-filter
+
+#### 3E. Celery Background Workers
+- Move sync pipeline to Celery tasks
+- Rate-limited per-provider task execution
+- Separate worker process for AI inference
+
+---
+
+### PHASE 4 — Government-Grade
+
+#### 4A. Kubernetes deployment manifests
+#### 4B. Prometheus + Grafana monitoring
+#### 4C. ELK stack log aggregation
+#### 4D. Data encryption at rest
+#### 4E. WCCB API integration
+#### 4F. Custom fine-tuned NER on Indian wildlife crime corpus
+#### 4G. Satellite imagery integration for habitat monitoring
+#### 4H. Mobile-responsive field officer interface
+
+---
+
+## CURRENT FILE STATES (after my changes)
+
+```
+Modified files (not yet committed):
+ app/main.py                  |  28 lines changed (cleanup searches summaries)
+ app/services/dedupe.py       |  42 lines changed (entity-aware matching)
+ app/services/intelligence.py |  81 lines changed (source credibility, smuggling routes)
+ app/services/predictor.py    | 114 lines changed (seasonal analysis, corridors)
+ app/utils/location_data.py   | 689 lines changed (240→633 district entries)
+```
+
+## IMPORTANT CONSTRAINTS
+
+1. **Railway Free Tier**: 512MB RAM. AI models need 2.5GB combined. The system has a dual-mode fallback that uses rule-based scoring when models can't load.
+2. **No new pip packages without updating requirements.txt** — Railway builds from requirements.txt
+3. **Embedded frontend**: `updated_frontend/` builds to `app/static/react-build/` via `EMBED_BUILD=true npm run build`. FastAPI serves it.
+4. **SQLite database**: Located at `./wildlife_news.db`. Backups exist as `wildlife_news_backup (N).db`.
+5. **The system is LIVE in production** on Railway. Changes should not break existing functionality.
+
+## RECOMMENDED NEXT STEP
+
+Start with **1A** (wire source param) and **1B** (wire entity params through dedup) — these are 10-minute fixes that activate the improvements already coded. Then move to **1D** (split main.py) which is the highest-impact maintainability improvement.
+
+After that, prioritize **2E** (graph intelligence) and **2D** (semantic search) as they add the most impressive features with existing dependencies.

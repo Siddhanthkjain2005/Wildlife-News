@@ -20,9 +20,6 @@ import MapPanel from "./components/MapPanel.jsx";
 import Analytics from "./components/Analytics.jsx";
 import FilterBar from "./components/FilterBar.jsx";
 import IncidentTable from "./components/IncidentTable.jsx";
-import NetworkGraph from "./components/NetworkGraph.jsx";
-import SemanticSearch from "./components/SemanticSearch.jsx";
-import AlertFeed from "./components/AlertFeed.jsx";
 import { OsintFeed, Recommendations } from "./components/BottomPanels.jsx";
 
 import {
@@ -240,38 +237,6 @@ export default function App() {
       setLoading(false);
       return undefined;
     }
-
-    const wsUrl = ENDPOINTS.wsLive(authToken);
-    let ws = null;
-    let reconnectTimer = null;
-
-    function connect() {
-      ws = new WebSocket(wsUrl);
-      ws.onmessage = (event) => {
-        try {
-          const { channel, data } = JSON.parse(event.data);
-          if (channel === "alerts") {
-            setAlerts((prev) => [data, ...prev].slice(0, 100));
-          } else if (channel === "incidents") {
-            setNewsRows((prev) => [data, ...prev].slice(0, 200));
-          } else if (channel === "sync_status") {
-            setSyncStatus(data);
-          }
-        } catch (err) {
-          console.error("WS parse error:", err);
-        }
-      };
-      ws.onclose = () => {
-        reconnectTimer = window.setTimeout(connect, 5000);
-      };
-      ws.onerror = (err) => {
-        console.error("WS error:", err);
-        ws.close();
-      };
-    }
-
-    connect();
-
     setLoading(true);
     loadDashboard();
     loadFilteredNews().catch(() => {});
@@ -279,20 +244,12 @@ export default function App() {
       loadDashboard();
       loadFilteredNews().catch(() => {});
     }, AUTO_REFRESH_MS);
-
-    return () => {
-      window.clearInterval(timer);
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-      }
-    };
+    return () => window.clearInterval(timer);
   }, [authToken, loadDashboard, loadFilteredNews]);
 
   // Track active section via scroll
   useEffect(() => {
-    const ids = ["overview", "map", "alerts", "networks", "analytics", "incidents", "osint", "reco"];
+    const ids = ["overview", "map", "alerts", "analytics", "incidents", "osint", "reco"];
     const observers = [];
     ids.forEach((id) => {
       const el = document.getElementById(`section-${id}`);
@@ -533,41 +490,11 @@ export default function App() {
             <MapPanel mapData={mapData} onMapError={setError} />
           </section>
 
-          {/* Section 3: Live Alerts */}
-          <section className="dashboard-section" id="section-alerts">
-            <div className="section-header">
-              <div className="section-header-content">
-                <span className="section-number">03</span>
-                <div>
-                  <h2>Live High-Risk Alerts</h2>
-                  <p>Immediate notifications for critical poaching and trafficking signals</p>
-                </div>
-              </div>
-            </div>
-            <AlertFeed alerts={alerts} />
-          </section>
-
-          {/* Section 4: Network Intelligence */}
-          <section className="dashboard-section" id="section-networks">
-            <div className="section-header">
-              <div className="section-header-content">
-                <span className="section-number">04</span>
-                <div>
-                  <h2>Network Intelligence</h2>
-                  <p>Analyzing connections between suspects and organized crime groups</p>
-                </div>
-              </div>
-            </div>
-            <article className="card network-card">
-              <NetworkGraph />
-            </article>
-          </section>
-
-          {/* Section 4: Intelligence Analytics */}
+          {/* Section 3: Intelligence Analytics */}
           <section className="dashboard-section" id="section-analytics">
             <div className="section-header">
               <div className="section-header-content">
-                <span className="section-number">05</span>
+                <span className="section-number">03</span>
                 <div>
                   <h2>Intelligence Analytics</h2>
                   <p>Trends, distributions, and source reliability metrics</p>
@@ -581,14 +508,13 @@ export default function App() {
           <section className="dashboard-section" id="section-incidents">
             <div className="section-header">
               <div className="section-header-content">
-                <span className="section-number">06</span>
+                <span className="section-number">04</span>
                 <div>
                   <h2>Incident Database</h2>
                   <p>Search and filter wildlife crime reports</p>
                 </div>
               </div>
             </div>
-            <SemanticSearch />
             <FilterBar
               filters={filters}
               filterOptions={filterOptions}
@@ -603,7 +529,7 @@ export default function App() {
           <section className="dashboard-section" id="section-osint">
             <div className="section-header">
               <div className="section-header-content">
-                <span className="section-number">07</span>
+                <span className="section-number">05</span>
                 <div>
                   <h2>Intelligence Feed</h2>
                   <p>External sources and strategic recommendations</p>
