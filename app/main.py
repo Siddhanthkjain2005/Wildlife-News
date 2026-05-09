@@ -1363,62 +1363,148 @@ def _repair_stored_urls() -> int:
     return changed
 
 
-def _reanalyze_existing_articles() -> dict:
-    """Re-run intelligence engine on ALL existing articles to fix state/person/location detection."""
-    app_logger.info("Starting FULL re-analysis of existing articles with updated AI engine...")
-    updated = 0
-    errors = 0
+def _cleanup_existing_articles() -> dict:
+    """Lightweight cleanup of existing articles - NO AI model needed.
+
+    Directly applies regex post-filters to stored involved_persons,
+    and uses location_data dictionary to fix empty states from titles.
+    This runs even if the NER model fails to load.
+    """
+    from app.utils.location_data import DISTRICT_TO_STATE, INDIA_STATES
+    app_logger.info("Starting lightweight cleanup of existing articles...")
+    persons_cleaned = 0
+    states_fixed = 0
     total = 0
+
+    # Build the same post-filter regexes used in intelligence.py
+    _start_block = re.compile(
+        r"^(?:in|at|of|for|from|by|with|to|the|a|an|as|on|is|was|were|has|have|had|"
+        r"this|that|these|those|and|or|but|not|no|its|their|our|who|which|what|where|"
+        r"when|how|why|after|before|during|while|about|against|between|through|under|"
+        r"over|into|upon|until|within|without|some|most|many|several|few|all|any|such|"
+        r"also|additionally|meanwhile|however|further|moreover|hence|thus|therefore|"
+        r"yet|still|already|just|only|even|much|more|less|very|too|quite|rather|here|"
+        r"there|now|then|often|never|always|sometimes|recently|usually|finally|"
+        r"among|another|earlier|following|identified|investigations|interrogation|"
+        r"while|late|busted|racket|arrested|am|were|on|anganwadi|cbi|ncb|stf|sho|ngo|ncrb|wbcsd)\b",
+        re.IGNORECASE,
+    )
+    _contains_block = re.compile(
+        r"\b(?:district|state|forest|police|crime|branch|bureau|wildlife|poaching|hunting|"
+        r"smuggling|trafficking|smuggler|smugglers|trafficker|traffickers|arrested|detained|"
+        r"seized|seizure|national|international|park|sanctuary|reserve|government|ministry|"
+        r"department|court|bench|tribunal|committee|commission|board|authority|agency|office|"
+        r"organization|organisation|council|news|media|times|today|daily|express|herald|"
+        r"telegraph|gazette|post|reporter|correspondent|editor|publication|website|online|"
+        r"digital|india|indian|bharat|hindustan|airport|station|highway|road|bridge|border|"
+        r"river|lake|village|town|city|area|region|zone|sector|block|tehsil|taluk|mandal|"
+        r"panchayat|assembly|parliament|lok|rajya|sabha|pradesh|nagar|gang|racket|syndicate|"
+        r"network|nexus|cartel|mafia|ring|sold|repatriated|released|rescued|recovered|"
+        r"deported|blue|red|green|white|black|minor|major|old|new|young|small|big|large|"
+        r"that\s+was|that\s+were|left|right|long|short|good|bad|wing|ran|"
+        r"towards|behind|front|above|below|inside|outside|nearby|forward|backward|"
+        r"birds|animals|deer|peacock|peacocks|monkey|monkeys|cattle|horses|cows|dogs|cats|"
+        r"meter|metre|newsmeter|deccan|navbharat|eenadu|sakshi|mathrubhumi|manorama|"
+        r"dainik|jagran|amar|ujala|rajasthan|patrika|divya|bhaskar|lokmat|sakal|"
+        r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|dt\s+next|"
+        r"dinamani|dinakaran|standard|journal|latestly|statesman|observer|mirror|"
+        r"chronicle|sentinel|pioneer|quint|firstpost|theprint|scroll|"
+        r"cruelty|credit|image|photo|video|streamer|twitch|whatsapp|telegram|"
+        r"delivery|passenger|passengers|owner|store|shop|muslim|rohingya|centres|"
+        r"reserves|landscapes|pressed|revealed|investigations|interrogation|"
+        r"identified|discussion|discussions|stated|scent|squad|once|cases|"
+        r"people|persons|suspects|accused|convict|convicts|offender|offenders|"
+        r"boy|girl|man|woman|men|women|couple|family|resident|residents|"
+        r"encounter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+        r"morning|evening|night|march|april|january|february|may|june|july|"
+        r"august|september|october|november|december|pangolin|leopard|tiger|"
+        r"elephant|rhinoceros|rhino|turtle|tortoise|snake|crocodile|ivory|"
+        r"skin|skins|horn|horns|tusk|tusks|claw|claws|bone|bones|scale|scales|"
+        r"sanders|sander|coral|corals|quill|quills|gibbon|gibbons|"
+        r"heroin|smack|ganja|drug|drugs|narcotic|narcotics|ndps|"
+        r"escobar|pablo|hippo|hippos|sho|cbi|ncb|stf|ncrb|dfo|acf|rfo|division|force|task)\b",
+        re.IGNORECASE,
+    )
+    _number_word = re.compile(
+        r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
+        r"fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|several|many|few|"
+        r"multiple|numerous|duo|trio)(?:\s|$)",
+        re.IGNORECASE,
+    )
+    _verb_frag = re.compile(
+        r"\b(?:ran|went|came|said|told|asked|made|took|gave|got|saw|"
+        r"found|knew|thought|called|tried|used|turned|started|moved|"
+        r"brought|kept|held|sent|happened|appeared|seemed|became|"
+        r"revealed|pressed|stated|convicted|sentenced|busted|raided|"
+        r"confiscated|caught|nabbed|apprehended|smuggled|traded|is|are|"
+        r"towards|against|behind|before|between)\b",
+        re.IGNORECASE,
+    )
+
+    def _is_bad_person(person: str) -> bool:
+        if not person or person.endswith("unnamed suspect") or person.endswith("unnamed suspects"):
+            return False
+        if _start_block.match(person): return True
+        if _contains_block.search(person): return True
+        words = person.split()
+        if all(len(w.strip(".")) <= 1 for w in words): return True
+        if re.match(r"^\d+", person): return True
+        if _number_word.match(person.strip()): return True
+        if len(person) <= 5 and person == person.upper(): return True
+        if len(person) <= 4: return True
+        if _verb_frag.search(person): return True
+        if person.lower().strip() in DISTRICT_TO_STATE or person.lower().strip() in INDIA_STATES: return True
+        return False
+
     try:
         with SessionLocal() as db:
             items = db.query(NewsItem).filter(NewsItem.is_poaching == True).all()
             total = len(items)
-            app_logger.info("Re-analyzing %d articles...", total)
-            for i, item in enumerate(items):
-                try:
-                    result = intelligence_engine.analyze(
-                        title=item.title or "",
-                        summary=item.summary or "",
-                    )
-                    # ALWAYS overwrite state/district/location/persons with fresh analysis
-                    # State: use new result, or keep old if new is empty
-                    if result.state:
-                        item.state = result.state
-                    if result.district:
-                        item.district = result.district
-                    if result.location and result.location != "India":
-                        item.location = result.location
-                    elif result.state:
-                        item.location = f"{result.district.title()}, {result.state.title()}" if result.district else result.state.title()
+            app_logger.info("Cleaning up %d articles...", total)
+            for item in items:
+                # --- Fix persons: apply post-filter to existing stored persons ---
+                old_persons = item.involved_persons or ""
+                if old_persons.strip():
+                    parts = [p.strip() for p in old_persons.split(",") if p.strip()]
+                    cleaned = [p for p in parts if not _is_bad_person(p)]
+                    new_persons = ", ".join(cleaned)
+                    if new_persons != old_persons:
+                        item.involved_persons = new_persons
+                        persons_cleaned += 1
 
-                    # ALWAYS overwrite involved_persons (this is the key fix)
-                    item.involved_persons = ", ".join(result.involved_persons) if result.involved_persons else ""
+                # --- Fix state: extract from title using location dictionary ---
+                if not (item.state or "").strip():
+                    title = item.title or ""
+                    found_state = ""
+                    found_district = ""
+                    # Check both lowered and original text
+                    for text in [title.lower(), title]:
+                        for district, state in DISTRICT_TO_STATE.items():
+                            if district in text:
+                                found_state = state
+                                found_district = district
+                                break
+                        if found_state:
+                            break
+                        for st in INDIA_STATES:
+                            if st in text:
+                                found_state = st
+                                break
+                        if found_state:
+                            break
+                    if found_state:
+                        item.state = found_state
+                        if found_district and not (item.district or "").strip():
+                            item.district = found_district
+                        if not (item.location or "").strip() or item.location == "India":
+                            item.location = f"{found_district.title()}, {found_state.title()}" if found_district else found_state.title()
+                        states_fixed += 1
 
-                    # Update crime_type
-                    if result.crime_type and result.crime_type != "unknown":
-                        item.crime_type = result.crime_type
-
-                    # Update species
-                    if result.species:
-                        item.species = ", ".join(result.species)
-
-                    # Update confidence and risk_score
-                    item.confidence = result.confidence
-                    item.risk_score = result.risk_score
-
-                    updated += 1
-                    if (i + 1) % 50 == 0:
-                        db.commit()
-                        app_logger.info("Re-analyzed %d/%d articles (%d updated)", i + 1, total, updated)
-                except Exception as item_err:
-                    errors += 1
-                    if errors <= 5:
-                        app_logger.warning("Re-analysis error for article %d: %s", item.id, item_err)
             db.commit()
-            app_logger.info("Re-analysis complete: %d/%d articles updated, %d errors", updated, total, errors)
+            app_logger.info("Cleanup complete: %d persons cleaned, %d states fixed out of %d articles", persons_cleaned, states_fixed, total)
     except Exception as e:
-        app_logger.error("Re-analysis failed: %s", e)
-    return {"total_analyzed": total, "updated": updated, "errors": errors}
+        app_logger.error("Cleanup failed: %s", e)
+    return {"total": total, "persons_cleaned": persons_cleaned, "states_fixed": states_fixed}
 
 
 @app.on_event("startup")
@@ -1452,13 +1538,12 @@ def startup_event() -> None:
             runtime_diagnostics["ai_model_ready"] = intelligence_engine.warmup()
             app_logger.info("AI model warmup ready=%s", runtime_diagnostics["ai_model_ready"])
 
-            # Re-analyze existing articles with updated intelligence engine
-            if runtime_diagnostics["ai_model_ready"]:
-                try:
-                    reanalysis_result = _reanalyze_existing_articles()
-                    app_logger.info("Startup re-analysis result: %s", reanalysis_result)
-                except Exception as reanalyze_err:
-                    app_logger.warning("Startup re-analysis failed: %s", reanalyze_err)
+            # Clean up existing articles — runs ALWAYS, no AI model needed
+            try:
+                cleanup_result = _cleanup_existing_articles()
+                app_logger.info("Startup cleanup result: %s", cleanup_result)
+            except Exception as cleanup_err:
+                app_logger.warning("Startup cleanup failed: %s", cleanup_err)
         except Exception as e:
             app_logger.error("Background startup tasks failed: %s", e)
 
@@ -1586,12 +1671,12 @@ def sync_now():
 
 @app.post("/api/admin/reanalyze")
 def admin_reanalyze(request: Request, _admin=Depends(require_admin_access)):
-    """Re-run intelligence engine on all existing articles to fix state/person detection."""
-    def _bg_reanalyze():
-        result = _reanalyze_existing_articles()
+    """Clean up existing articles to fix state/person detection."""
+    def _bg_cleanup():
+        result = _cleanup_existing_articles()
         _audit(actor="admin", action="reanalyze", status="ok", notes=json.dumps(result))
-    Thread(target=_bg_reanalyze, daemon=True).start()
-    return {"ok": True, "message": "Re-analysis started in background. Check logs for progress."}
+    Thread(target=_bg_cleanup, daemon=True).start()
+    return {"ok": True, "message": "Cleanup started in background. Check logs for progress."}
 
 
 @app.get("/login")

@@ -160,10 +160,7 @@ export default function TopBar({
                 <FileSpreadsheet size={14} />
                 <span>Excel (2-Sheet)</span>
               </button>
-              <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("pdf")}>
-                <FileText size={14} />
-                <span>Export as PDF</span>
-              </button>
+
             </div>
           )}
         </div>
