@@ -48,23 +48,126 @@ const EMPTY_FILTERS = {
   source: ""
 };
 
+// Demo mode - set to true to bypass authentication and show mock data
+const DEMO_MODE = true;
+
+const DEMO_SUMMARY = {
+  total_incidents: 2847,
+  high_risk_count: 342,
+  states_affected: 28,
+  species_impacted: 156,
+  last_sync_time: new Date().toISOString(),
+  trend_incidents: 12.5,
+  trend_high_risk: -8.2,
+  trend_states: 3,
+  trend_species: 7.1
+};
+
+const DEMO_CHART_DATA = {
+  timeline: {
+    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    incidents: [120, 145, 132, 178, 156, 189, 201, 234, 198, 267, 245, 282],
+    high_risk: [23, 31, 28, 42, 35, 48, 52, 61, 45, 72, 58, 68]
+  },
+  top_states: [
+    { state: "Maharashtra", count: 423 },
+    { state: "Karnataka", count: 387 },
+    { state: "Tamil Nadu", count: 312 },
+    { state: "Kerala", count: 278 },
+    { state: "Madhya Pradesh", count: 245 },
+    { state: "Assam", count: 198 },
+    { state: "West Bengal", count: 176 },
+    { state: "Rajasthan", count: 154 }
+  ],
+  species_dist: [
+    { species: "Tiger", count: 89 },
+    { species: "Elephant", count: 156 },
+    { species: "Leopard", count: 134 },
+    { species: "Rhinoceros", count: 45 },
+    { species: "Pangolin", count: 234 },
+    { species: "Red Sanders", count: 312 },
+    { species: "Sea Turtle", count: 67 },
+    { species: "Lion", count: 23 },
+    { species: "Deer", count: 189 },
+    { species: "Bear", count: 78 }
+  ],
+  source_rank: [
+    { source: "TOI", reliability_score: 92 },
+    { source: "Hindu", reliability_score: 89 },
+    { source: "NDTV", reliability_score: 87 },
+    { source: "Indian Express", reliability_score: 85 },
+    { source: "Hindustan Times", reliability_score: 83 },
+    { source: "Deccan Herald", reliability_score: 81 },
+    { source: "Tribune", reliability_score: 78 },
+    { source: "Telegraph", reliability_score: 76 }
+  ],
+  filters: {
+    states: ["Maharashtra", "Karnataka", "Tamil Nadu", "Kerala", "Madhya Pradesh", "Assam", "West Bengal", "Rajasthan"],
+    species: ["Tiger", "Elephant", "Leopard", "Rhinoceros", "Pangolin", "Red Sanders", "Sea Turtle", "Lion"],
+    crime_types: ["Poaching", "Trafficking", "Habitat Destruction", "Illegal Trade", "Smuggling"],
+    sources: ["TOI", "Hindu", "NDTV", "Indian Express", "Hindustan Times"]
+  }
+};
+
+const DEMO_MAP_DATA = {
+  markers: [
+    { lat: 19.076, lng: 72.8777, title: "Tiger poaching attempt foiled in Tadoba", state: "Maharashtra", district: "Chandrapur", risk_score: 85, species: "Tiger" },
+    { lat: 12.9716, lng: 77.5946, title: "Elephant corridor protection initiative", state: "Karnataka", district: "Bangalore Rural", risk_score: 45, species: "Elephant" },
+    { lat: 13.0827, lng: 80.2707, title: "Sea turtle nesting site secured", state: "Tamil Nadu", district: "Chennai", risk_score: 32, species: "Sea Turtle" },
+    { lat: 9.9312, lng: 76.2673, title: "Pangolin trafficking ring busted", state: "Kerala", district: "Kochi", risk_score: 92, species: "Pangolin" },
+    { lat: 23.2599, lng: 77.4126, title: "Leopard sighting near village", state: "Madhya Pradesh", district: "Bhopal", risk_score: 67, species: "Leopard" },
+    { lat: 26.1445, lng: 91.7362, title: "Rhinoceros protection patrol", state: "Assam", district: "Guwahati", risk_score: 78, species: "Rhinoceros" },
+    { lat: 22.5726, lng: 88.3639, title: "Illegal wildlife trade investigation", state: "West Bengal", district: "Kolkata", risk_score: 71, species: "Various" },
+    { lat: 26.9124, lng: 75.7873, title: "Desert wildlife monitoring", state: "Rajasthan", district: "Jaipur", risk_score: 38, species: "Deer" },
+    { lat: 21.1702, lng: 72.8311, title: "Lion habitat assessment", state: "Gujarat", district: "Surat", risk_score: 55, species: "Lion" },
+    { lat: 15.2993, lng: 74.124, title: "Red Sanders seizure operation", state: "Goa", district: "Panaji", risk_score: 88, species: "Red Sanders" }
+  ]
+};
+
+const DEMO_ALERTS = [
+  { id: 1, title: "Critical: Tiger poaching network identified in Western Ghats", severity: "high", time: "2 hours ago", state: "Karnataka" },
+  { id: 2, title: "Urgent: Elephant herd approaching human settlement", severity: "high", time: "4 hours ago", state: "Kerala" },
+  { id: 3, title: "Warning: Unusual pangolin trade activity detected", severity: "medium", time: "6 hours ago", state: "Assam" },
+  { id: 4, title: "Alert: Leopard spotted near school premises", severity: "medium", time: "8 hours ago", state: "Maharashtra" },
+  { id: 5, title: "Notice: Seasonal migration pattern shift observed", severity: "low", time: "12 hours ago", state: "Rajasthan" },
+  { id: 6, title: "Info: New wildlife corridor proposal submitted", severity: "low", time: "1 day ago", state: "Madhya Pradesh" }
+];
+
+const DEMO_OSINT = [
+  { id: 1, title: "International wildlife trafficking ring exposed", source: "Interpol", date: "Today", url: "#" },
+  { id: 2, title: "New conservation technology deployed in reserves", source: "WWF", date: "Yesterday", url: "#" },
+  { id: 3, title: "Climate change impact on migration patterns", source: "IUCN", date: "2 days ago", url: "#" },
+  { id: 4, title: "Community-led conservation success story", source: "Wildlife Trust", date: "3 days ago", url: "#" }
+];
+
+const DEMO_NEWS_ROWS = [
+  { id: 1, title: "Forest department seizes illegal wildlife products worth Rs 50 lakh", state: "Maharashtra", species: "Pangolin", risk_score: 87, date: "2024-01-15", source: "TOI" },
+  { id: 2, title: "Tiger census reveals population increase in Corbett", state: "Uttarakhand", species: "Tiger", risk_score: 34, date: "2024-01-14", source: "Hindu" },
+  { id: 3, title: "Elephant tramples crops, villagers demand compensation", state: "Karnataka", species: "Elephant", risk_score: 56, date: "2024-01-14", source: "NDTV" },
+  { id: 4, title: "Red Sanders smugglers arrested at Chennai airport", state: "Tamil Nadu", species: "Red Sanders", risk_score: 91, date: "2024-01-13", source: "Indian Express" },
+  { id: 5, title: "Leopard rescued from well in Pune suburbs", state: "Maharashtra", species: "Leopard", risk_score: 42, date: "2024-01-13", source: "Hindustan Times" },
+  { id: 6, title: "Rhino horn trafficking case: Two more arrests", state: "Assam", species: "Rhinoceros", risk_score: 95, date: "2024-01-12", source: "Telegraph" },
+  { id: 7, title: "Sea turtle nesting season begins on Kerala coast", state: "Kerala", species: "Sea Turtle", risk_score: 28, date: "2024-01-12", source: "Deccan Herald" },
+  { id: 8, title: "Wildlife sanctuary expansion approved by state", state: "Madhya Pradesh", species: "Various", risk_score: 15, date: "2024-01-11", source: "Tribune" }
+];
+
 export default function App() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(DEMO_MODE ? false : true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [authToken, setAuthToken] = useState(() => getStoredToken());
+  const [authToken, setAuthToken] = useState(() => DEMO_MODE ? "demo" : getStoredToken());
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [credentials, setCredentials] = useState({ username: "", password: "" });
 
-  const [summary, setSummary] = useState(null);
-  const [chartData, setChartData] = useState(null);
-  const [mapData, setMapData] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [osintItems, setOsintItems] = useState([]);
+  const [summary, setSummary] = useState(DEMO_MODE ? DEMO_SUMMARY : null);
+  const [chartData, setChartData] = useState(DEMO_MODE ? DEMO_CHART_DATA : null);
+  const [mapData, setMapData] = useState(DEMO_MODE ? DEMO_MAP_DATA : null);
+  const [alerts, setAlerts] = useState(DEMO_MODE ? DEMO_ALERTS : []);
+  const [osintItems, setOsintItems] = useState(DEMO_MODE ? DEMO_OSINT : []);
   const [reports, setReports] = useState([]);
   const [syncStatus, setSyncStatus] = useState(null);
-  const [newsRows, setNewsRows] = useState([]);
+  const [newsRows, setNewsRows] = useState(DEMO_MODE ? DEMO_NEWS_ROWS : []);
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [activeSection, setActiveSection] = useState("overview");
@@ -80,7 +183,7 @@ export default function App() {
   }, []);
 
   const loadDashboard = useCallback(async () => {
-    if (!authToken) return;
+    if (!authToken || DEMO_MODE) return;
     setBusy(true);
     const tasks = await Promise.allSettled([
       fetchJson(ENDPOINTS.summary),
@@ -117,7 +220,7 @@ export default function App() {
   }, [authToken, handleUnauthorized]);
 
   const loadFilteredNews = useCallback(async () => {
-    if (!authToken) return;
+    if (!authToken || DEMO_MODE) return;
     const query = buildQuery({ ...filters, min_confidence: 0, limit: 120 });
     try {
       const data = await fetchJson(`${ENDPOINTS.filterNews}?${query}`);
@@ -130,6 +233,7 @@ export default function App() {
   }, [authToken, filters, handleUnauthorized]);
 
   useEffect(() => {
+    if (DEMO_MODE) return undefined;
     if (!authToken) {
       setLoading(false);
       return undefined;
