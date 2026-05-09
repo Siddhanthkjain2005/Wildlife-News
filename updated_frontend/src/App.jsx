@@ -446,6 +446,7 @@ export default function App() {
         />
 
         <div className="content">
+          {/* Status Messages */}
           {error ? (
             <div className="status error" role="alert">
               <AlertCircle size={16} />
@@ -456,49 +457,94 @@ export default function App() {
             <div className="status info" role="status">
               <Activity size={16} />
               <span>
-                {syncStatus.message || "Search in progress…"}
-                {syncProgressText ? ` — ${syncProgressText}` : ""}
+                {syncStatus.message || "Search in progress..."}
+                {syncProgressText ? ` - ${syncProgressText}` : ""}
               </span>
             </div>
           ) : null}
 
-          <div className="section-title">
-            <div>
-              <h2>National Overview</h2>
-              <p>Real-time wildlife threat monitoring across India with automated 15-second data refresh.</p>
+          {/* Section 1: Overview Dashboard */}
+          <section className="dashboard-section" id="section-overview">
+            <div className="section-header">
+              <div className="section-header-content">
+                <span className="section-number">01</span>
+                <div>
+                  <h2>National Overview</h2>
+                  <p>Real-time wildlife threat monitoring across India</p>
+                </div>
+              </div>
             </div>
-          </div>
+            <Kpis summary={summary} loading={loading} />
+          </section>
 
-          <Kpis summary={summary} loading={loading} />
-
-          <div className="ops-grid">
-            <MapPanel mapData={mapData} onMapError={setError} />
-            <AlertFeed alerts={alerts} />
-          </div>
-
-          <div className="section-title" style={{ marginTop: 8 }}>
-            <div>
-              <h2>Intelligence Analytics</h2>
-              <p>Comprehensive trends, species distributions, and source reliability metrics.</p>
+          {/* Section 2: Operations Center */}
+          <section className="dashboard-section" id="section-map">
+            <div className="section-header">
+              <div className="section-header-content">
+                <span className="section-number">02</span>
+                <div>
+                  <h2>Operations Center</h2>
+                  <p>Geographic incident mapping and live alert feed</p>
+                </div>
+              </div>
             </div>
-          </div>
+            <div className="ops-grid">
+              <MapPanel mapData={mapData} onMapError={setError} />
+              <AlertFeed alerts={alerts} />
+            </div>
+          </section>
 
-          <Analytics chartData={chartData} />
+          {/* Section 3: Intelligence Analytics */}
+          <section className="dashboard-section" id="section-analytics">
+            <div className="section-header">
+              <div className="section-header-content">
+                <span className="section-number">03</span>
+                <div>
+                  <h2>Intelligence Analytics</h2>
+                  <p>Trends, distributions, and source reliability metrics</p>
+                </div>
+              </div>
+            </div>
+            <Analytics chartData={chartData} />
+          </section>
 
-          <FilterBar
-            filters={filters}
-            filterOptions={filterOptions}
-            onChange={setFilters}
-            onApply={() => loadFilteredNews()}
-            onBriefing={() => handleExport("briefing")}
-          />
+          {/* Section 4: Incident Database */}
+          <section className="dashboard-section" id="section-incidents">
+            <div className="section-header">
+              <div className="section-header-content">
+                <span className="section-number">04</span>
+                <div>
+                  <h2>Incident Database</h2>
+                  <p>Search and filter wildlife crime reports</p>
+                </div>
+              </div>
+            </div>
+            <FilterBar
+              filters={filters}
+              filterOptions={filterOptions}
+              onChange={setFilters}
+              onApply={() => loadFilteredNews()}
+              onBriefing={() => handleExport("briefing")}
+            />
+            <IncidentTable rows={newsRows} loading={loading} />
+          </section>
 
-          <IncidentTable rows={newsRows} loading={loading} />
-
-          <div className="bottom-grid">
-            <OsintFeed items={osintItems} />
-            <Recommendations items={recommendations} />
-          </div>
+          {/* Section 5: Intelligence Feed */}
+          <section className="dashboard-section" id="section-osint">
+            <div className="section-header">
+              <div className="section-header-content">
+                <span className="section-number">05</span>
+                <div>
+                  <h2>Intelligence Feed</h2>
+                  <p>External sources and strategic recommendations</p>
+                </div>
+              </div>
+            </div>
+            <div className="bottom-grid">
+              <OsintFeed items={osintItems} />
+              <Recommendations items={recommendations} />
+            </div>
+          </section>
         </div>
       </div>
     </div>

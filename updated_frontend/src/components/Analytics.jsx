@@ -66,10 +66,10 @@ const doughnutOptions = {
 };
 
 export default function Analytics({ chartData }) {
-  const timeline = chartData?.timeline || { labels: [], incidents: [], high_risk: [], granularity: "daily" };
+  const timeline = chartData?.timeline || { labels: [], incidents: [], high_risk: [], granularity: "monthly" };
   const topStates = chartData?.top_states || [];
-  const speciesDist = chartData?.species_distribution || [];
-  const sourceRank = chartData?.source_rankings || [];
+  const speciesDist = chartData?.species_dist || chartData?.species_distribution || [];
+  const sourceRank = chartData?.source_rank || chartData?.source_rankings || [];
 
   const timelineChart = {
     labels: timeline.labels,
