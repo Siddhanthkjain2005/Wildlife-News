@@ -117,13 +117,14 @@ class IntelligenceSummarizer:
 
         prompt = (
             "You are a wildlife crime intelligence analyst. "
-            "Return STRICT JSON with keys: summary, key_facts, smuggling_route, recommendation, risk_factors, confidence_explanation.\n\n"
+            "Return STRICT JSON with keys: summary, key_facts, smuggling_route, recommendation, risk_factors, extracted_species, extracted_location, extracted_suspects, confidence_explanation.\n\n"
             f"Article:\n{article_text[:4500]}\n\n"
             "Extracted facts:\n"
             f"- Crime type: {crime_type}\n"
             f"- Species: {', '.join(species) if species else 'unknown'}\n"
             f"- Location: {district or 'unknown'}, {state or 'unknown'}\n"
             f"- Suspects: {', '.join(suspects) if suspects else 'unknown'}\n"
+            "If any facts are 'unknown', try to find them in the article text. "
             "Keep summary to 2-3 sentences and key_facts to <=6 bullets."
         )
 
@@ -162,6 +163,9 @@ class IntelligenceSummarizer:
             "smuggling_route": str(parsed.get("smuggling_route") or fallback["smuggling_route"])[:500],
             "recommendation": str(parsed.get("recommendation") or fallback["recommendation"])[:500],
             "risk_factors": risk_points[:5],
+            "extracted_species": parsed.get("extracted_species") or [],
+            "extracted_location": str(parsed.get("extracted_location") or ""),
+            "extracted_suspects": parsed.get("extracted_suspects") or [],
             "confidence_explanation": str(
                 parsed.get("confidence_explanation") or fallback["confidence_explanation"]
             )[:500],

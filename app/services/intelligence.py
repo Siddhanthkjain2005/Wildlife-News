@@ -109,18 +109,19 @@ SPECIES_KEYWORDS: dict[str, set[str]] = {
     "elephant": {"elephant", "tusk", "ivory", "हाथी", "ಆನೆ", "யானை", "ఏనుగు", "হাতি", "হাতী", "ہاتھی", "ହାତୀ", "હાથી"},
     "rhino": {"rhino", "rhinoceros", "गैंडा", "ಖಡ್ಗಮೃಗ", "காண்டாமிருகம்", "ఖడ్గమృగం", "গণ্ডার", "گینڈا", "ଗଣ୍ଡମୃଗ", "ગેંડો"},
     "pangolin": {"pangolin", "scales", "पैंगोलिन", "ಪ್ಯಾಂಗೋಲಿನ್", "பாங்கோலின்", "ప్యాంగోలిన్", "প্যাঙ্গোলিন", "پینگولن", "ପ୍ୟାଙ୍ଗୋଲିନ", "પેંગોલિન"},
-    "bear": {"bear", "sloth bear", "himalayan bear", "bear bile", "भालू"},
-    "deer": {"deer", "sambar", "chital", "antler", "spotted deer", "barking deer", "musk deer", "hog deer", "हिरण"},
-    "bird": {"parrot", "owl", "eagle", "hornbill", "falcon", "macaw", "cockatoo", "bird", "parakeet", "myna", "peacock"},
-    "reptile": {"python", "cobra", "turtle", "tortoise", "gecko", "lizard", "star tortoise", "monitor lizard", "crocodile", "gharial"},
-    "marine": {"shark", "ray", "sea cucumber", "illegal fishing", "shark fin", "seahorse", "sea turtle"},
+    "bear": {"bear", "sloth bear", "himalayan bear", "bear bile", "भालू", "ಕರಡಿ", "கரடி", "ఎలుగుబంటి"},
+    "deer": {"deer", "sambar", "chital", "antler", "spotted deer", "barking deer", "musk deer", "hog deer", "हिरण", "ಜಿಂಕೆ", "மான்", "జింక"},
+    "bird": {"parrot", "owl", "eagle", "hornbill", "falcon", "macaw", "cockatoo", "bird", "parakeet", "myna", "peacock", "emu", "ostrich", "turkey"},
+    "reptile": {"python", "cobra", "turtle", "tortoise", "gecko", "lizard", "star tortoise", "monitor lizard", "crocodile", "gharial", "tokay gecko", "sand boa", "red sand boa", "chameleon"},
+    "marine": {"shark", "ray", "sea cucumber", "illegal fishing", "shark fin", "seahorse", "sea turtle", "whale shark", "dugong", "ambergris"},
     "snow leopard": {"snow leopard", "हिम चीता", "ounce"},
     "red panda": {"red panda", "लाल पांडा"},
     "lion": {"lion", "asiatic lion", "gir lion", "शेर", "सिंह"},
     "wolf": {"wolf", "indian wolf", "भेड़िया"},
     "wild boar": {"wild boar", "boar", "जंगली सूअर"},
-    "red sanders": {"red sanders", "red sandalwood", "red sander", "रक्तचंदन", "ఎర్రచందనం"},
-    "sandalwood": {"sandalwood", "sandal wood", "चंदन", "श्रीगंध"},
+    "red sanders": {"red sanders", "red sandalwood", "red sander", "रक्तचंदन", "ఎర్রచందనం", "செம்மரம்"},
+    "sandalwood": {"sandalwood", "sandal wood", "चंदन", "श्रीगंध", "சந்தனம்"},
+    "pangolin": {"pangolin", "scales", "पैंगोलिन", "चिंटीखोर", "ప్యాంగోలిన్", "பாங்கோலின்"},
 }
 
 FALSE_POSITIVE_PATTERNS = [
@@ -920,6 +921,7 @@ class HybridIntelligenceEngine:
                 r"\bdistrict of\s+([a-z][a-z\s-]{2,50})",
                 r"\bin\s+([a-z][a-z\s-]{2,50})\s+district\b",
                 r"\b([a-z][a-z\s-]{2,50})\s+district\b",
+                r"\bdistrict\s+([a-z][a-z\s-]{2,50})\b",
             ]
             for pattern in district_hint_patterns:
                 for match in re.finditer(pattern, text):
@@ -986,7 +988,8 @@ class HybridIntelligenceEngine:
         state = ""
         district = ""
         try:
-            entities = ner(text[:500])
+            # Analyze more text for better context
+            entities = ner(text[:2500])
         except Exception:
             return "", ""
         loc_candidates = []
@@ -995,30 +998,30 @@ class HybridIntelligenceEngine:
             if "LOC" not in label and "GPE" not in label:
                 continue
             score = float(entity.get("score") or 0.0)
-            if score < 0.5:
+            if score < 0.45: # Slightly lower threshold for NER
                 continue
             word = str(entity.get("word") or "").strip().lower()
-            word = re.sub(r"^##", "", word).strip()
-            if len(word) < 2:
+            if len(word) < 3:
                 continue
             loc_candidates.append(word)
 
-        from app.utils.location_data import DISTRICT_TO_STATE, INDIA_STATES
-        for loc in loc_candidates:
-            if loc in DISTRICT_TO_STATE:
-                district = loc
-                state = DISTRICT_TO_STATE[loc]
+        # Cross-reference extracted locations with our geo database
+        for candidate in loc_candidates:
+            if candidate in DISTRICT_TO_STATE:
+                district = candidate
+                state = DISTRICT_TO_STATE[candidate]
                 break
-            if loc in INDIA_STATES:
-                state = loc
+            if candidate in INDIA_STATES:
+                state = candidate
                 break
-            # Check partial matches
-            for s in INDIA_STATES:
-                if loc in s or s in loc:
+            # Check for partial matches or aliases
+            for d, s in DISTRICT_TO_STATE.items():
+                if candidate in d or d in candidate:
+                    district = d
                     state = s
                     break
-            if state:
-                break
+            if state: break
+
         return state, district
 
     @staticmethod
@@ -1629,11 +1632,13 @@ class HybridIntelligenceEngine:
         *,
         title: str,
         summary: str,
+        full_content: str = "",
         source: str = "",
         prior_district_hits: int = 0,
         prior_source_hits: int = 0,
     ) -> IntelligenceResult:
-        source_text = normalize_space(f"{title}. {summary}")
+        # Use full content for better context if available, fallback to title + summary
+        source_text = normalize_space(full_content) if len(full_content) > 200 else normalize_space(f"{title}. {summary}")
         text = source_text.lower()
         if not source_text:
             return IntelligenceResult(
@@ -1893,6 +1898,22 @@ class HybridIntelligenceEngine:
         likely_smuggling_route = str(llm_summary.get("smuggling_route") or likely_smuggling_route)
         enforcement_recommendation = str(llm_summary.get("recommendation") or enforcement_recommendation)
         confidence_explanation = str(llm_summary.get("confidence_explanation") or confidence_explanation)
+
+        # Post-Analysis Metadata Recovery (using LLM hints)
+        llm_species = llm_summary.get("extracted_species")
+        if isinstance(llm_species, list) and not species:
+            species = [str(s).strip().lower() for s in llm_species if str(s).strip()]
+        
+        llm_location = str(llm_summary.get("extracted_location") or "").strip()
+        if llm_location and not (state or district):
+            # Attempt to re-extract location from the LLM's suggested text
+            s_ext, d_ext, l_ext = self._extract_location(llm_location.lower())
+            if s_ext or d_ext:
+                state, district, location = s_ext, d_ext, l_ext
+        
+        llm_suspects = llm_summary.get("extracted_suspects")
+        if isinstance(llm_suspects, list) and not involved_persons:
+            involved_persons = [str(p).strip() for p in llm_suspects if str(p).strip()][:8]
 
         reason = (
             f"poach_prob={poach_prob:.2f}, rule_score={rule_score:.2f}, keyword_hits={keyword_hits}, "

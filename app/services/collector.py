@@ -1866,14 +1866,16 @@ class NewsCollector:
                         prior_source = self._prior_source_hits(db, source)
                         initial_intel = self.intelligence_engine.analyze(
                             title=title,
-                            summary=(analysis_summary or summary),
+                            summary=summary,
+                            full_content=analysis_summary,
                             prior_source_hits=prior_source,
                             source=source,
                         )
                         prior_district = self._prior_district_hits(db, initial_intel.district)
                         intel = self.intelligence_engine.analyze(
                             title=title,
-                            summary=(analysis_summary or summary),
+                            summary=summary,
+                            full_content=analysis_summary,
                             prior_district_hits=prior_district,
                             prior_source_hits=prior_source,
                             source=source,
