@@ -271,4 +271,11 @@ DISTRICT_TO_STATE = {
     "ਲੁਧਿਆਣਾ": "punjab",
     "ਚੰਡੀਗੜ੍ਹ": "chandigarh",
     "ਪੰਜਾਬ": "punjab",
+    "baripada": "odisha",
+    "makthal": "telangana",
+    "shadnagar": "telangana",
+    "kadapa": "andhra pradesh",
+    "nabarangpur": "odisha",
+    "amravati": "maharashtra",
+    "dindoli": "gujarat",
 }

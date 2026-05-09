@@ -1364,10 +1364,11 @@ def _repair_stored_urls() -> int:
 
 
 def _reanalyze_existing_articles() -> dict:
-    """Re-run intelligence engine on all existing articles to fix state/person detection."""
-    app_logger.info("Starting re-analysis of existing articles with updated AI engine...")
+    """Re-run intelligence engine on ALL existing articles to fix state/person/location detection."""
+    app_logger.info("Starting FULL re-analysis of existing articles with updated AI engine...")
     updated = 0
     errors = 0
+    total = 0
     try:
         with SessionLocal() as db:
             items = db.query(NewsItem).filter(NewsItem.is_poaching == True).all()
@@ -1379,47 +1380,45 @@ def _reanalyze_existing_articles() -> dict:
                         title=item.title or "",
                         summary=item.summary or "",
                     )
-                    changed = False
-                    # Update state if it was empty/unknown and we found one
-                    if result.state and (not item.state or item.state.strip() == ""):
+                    # ALWAYS overwrite state/district/location/persons with fresh analysis
+                    # State: use new result, or keep old if new is empty
+                    if result.state:
                         item.state = result.state
-                        changed = True
-                    # Update district if it was empty and we found one
-                    if result.district and (not item.district or item.district.strip() == ""):
+                    if result.district:
                         item.district = result.district
-                        changed = True
-                    # Update location
-                    if result.location and (not item.location or item.location.strip() in ("", "India")):
+                    if result.location and result.location != "India":
                         item.location = result.location
-                        changed = True
-                    # Always re-run person detection (the main fix)
-                    new_persons = ", ".join(result.involved_persons) if result.involved_persons else ""
-                    old_persons = item.involved_persons or ""
-                    if new_persons != old_persons:
-                        item.involved_persons = new_persons
-                        changed = True
-                    # Update crime_type if it was unknown
-                    if result.crime_type and result.crime_type != "unknown" and (not item.crime_type or item.crime_type == "unknown"):
+                    elif result.state:
+                        item.location = f"{result.district.title()}, {result.state.title()}" if result.district else result.state.title()
+
+                    # ALWAYS overwrite involved_persons (this is the key fix)
+                    item.involved_persons = ", ".join(result.involved_persons) if result.involved_persons else ""
+
+                    # Update crime_type
+                    if result.crime_type and result.crime_type != "unknown":
                         item.crime_type = result.crime_type
-                        changed = True
-                    # Update species if empty
-                    if result.species and not item.species:
+
+                    # Update species
+                    if result.species:
                         item.species = ", ".join(result.species)
-                        changed = True
-                    if changed:
-                        updated += 1
+
+                    # Update confidence and risk_score
+                    item.confidence = result.confidence
+                    item.risk_score = result.risk_score
+
+                    updated += 1
                     if (i + 1) % 50 == 0:
                         db.commit()
-                        app_logger.info("Re-analyzed %d/%d articles (%d updated so far)", i + 1, total, updated)
+                        app_logger.info("Re-analyzed %d/%d articles (%d updated)", i + 1, total, updated)
                 except Exception as item_err:
                     errors += 1
-                    if errors <= 3:
+                    if errors <= 5:
                         app_logger.warning("Re-analysis error for article %d: %s", item.id, item_err)
             db.commit()
             app_logger.info("Re-analysis complete: %d/%d articles updated, %d errors", updated, total, errors)
     except Exception as e:
         app_logger.error("Re-analysis failed: %s", e)
-    return {"total_analyzed": total if 'total' in dir() else 0, "updated": updated, "errors": errors}
+    return {"total_analyzed": total, "updated": updated, "errors": errors}
 
 
 @app.on_event("startup")

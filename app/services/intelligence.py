@@ -1169,7 +1169,9 @@ class HybridIntelligenceEngine:
             r"over|into|upon|until|within|without|some|most|many|several|few|all|any|such|"
             r"also|additionally|meanwhile|however|further|moreover|hence|thus|therefore|"
             r"yet|still|already|just|only|even|much|more|less|very|too|quite|rather|here|"
-            r"there|now|then|often|never|always|sometimes|recently|usually|finally)\b",
+            r"there|now|then|often|never|always|sometimes|recently|usually|finally|"
+            r"among|another|earlier|following|identified|investigations|interrogation|"
+            r"while|late|busted|racket|arrested|am|were|on|anganwadi|cbi|ncb|stf|sho|ngo|ncrb|wbcsd)\b",
             re.IGNORECASE,
         )
         _contains_block = re.compile(
@@ -1189,13 +1191,29 @@ class HybridIntelligenceEngine:
             r"birds|animals|deer|peacock|peacocks|monkey|monkeys|cattle|horses|cows|dogs|cats|"
             r"meter|metre|newsmeter|deccan|navbharat|eenadu|sakshi|mathrubhumi|manorama|"
             r"dainik|jagran|amar|ujala|rajasthan|patrika|divya|bhaskar|lokmat|sakal|"
-            r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|"
-            r"dinamani|dinakaran)\b",
+            r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|dt\\s+next|"
+            r"dinamani|dinakaran|standard|journal|latestly|statesman|observer|mirror|"
+            r"chronicle|sentinel|pioneer|quint|firstpost|theprint|scroll|"
+            r"cruelty|credit|image|photo|video|streamer|twitch|whatsapp|telegram|"
+            r"delivery|passenger|passengers|owner|store|shop|muslim|rohingya|centres|"
+            r"reserves|landscapes|pressed|revealed|investigations|interrogation|"
+            r"identified|discussion|discussions|stated|scent|squad|once|cases|"
+            r"people|persons|suspects|accused|convict|convicts|offender|offenders|"
+            r"boy|girl|man|woman|men|women|couple|family|resident|residents|"
+            r"encounter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+            r"morning|evening|night|march|april|january|february|may|june|july|"
+            r"august|september|october|november|december|pangolin|leopard|tiger|"
+            r"elephant|rhinoceros|rhino|turtle|tortoise|snake|crocodile|ivory|"
+            r"skin|skins|horn|horns|tusk|tusks|claw|claws|bone|bones|scale|scales|"
+            r"sanders|sander|coral|corals|quill|quills|gibbon|gibbons|"
+            r"heroin|smack|ganja|drug|drugs|narcotic|narcotics|ndps|"
+            r"escobar|pablo|hippo|hippos|sho|cbi|ncb|stf|ncrb|dfo|acf|rfo|division|force|task)\b",
             re.IGNORECASE,
         )
         _number_word = re.compile(
             r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
-            r"fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|several|many|few|multiple|numerous|duo|trio)$",
+            r"fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|several|many|few|"
+            r"multiple|numerous|duo|trio)(?:\s|$)",
             re.IGNORECASE,
         )
         for person in raw_persons:
@@ -1210,17 +1228,26 @@ class HybridIntelligenceEngine:
                 continue
             if _number_word.match(person.strip()):
                 continue
-            # Skip all-caps short strings (likely acronyms/sources not names)
+            # Skip all-caps short strings (acronyms/sources) or single short words
             if len(person) <= 5 and person == person.upper():
                 continue
-            # Skip if contains common verbs indicating sentence fragment
+            if len(person) <= 4:
+                continue
+            # Skip if contains common verbs/phrases indicating sentence fragment
             if re.search(r"\b(?:ran|went|came|said|told|asked|made|took|gave|got|saw|"
                          r"found|knew|thought|called|tried|used|turned|started|moved|"
                          r"brought|kept|held|sent|happened|appeared|seemed|became|"
+                         r"revealed|pressed|stated|convicted|sentenced|busted|raided|"
+                         r"confiscated|caught|nabbed|apprehended|smuggled|traded|is|are|"
                          r"towards|against|behind|before|between)\b", person, re.IGNORECASE):
                 continue
             # Must have at least one word with 2+ alphabetic chars
             if not any(len(re.sub(r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]", "", w)) >= 2 for w in words):
+                continue
+            # Skip if it looks like a known Indian location/city name (not a person)
+            from app.utils.location_data import DISTRICT_TO_STATE, INDIA_STATES
+            person_lower = person.lower().strip()
+            if person_lower in DISTRICT_TO_STATE or person_lower in INDIA_STATES:
                 continue
             involved_persons.append(person)
             if len(involved_persons) >= 8:
