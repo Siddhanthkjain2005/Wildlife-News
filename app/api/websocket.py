@@ -16,7 +16,7 @@ def _redis_topic(channel: str) -> str:
     return f"{prefix}:{channel}"
 
 
-@router.websocket("/ws/live")
+@router.websocket("/api/ws/live")
 async def websocket_live(websocket: WebSocket):
     supplied_token = (websocket.query_params.get("token") or "").strip()
     controls_enabled = bool(
