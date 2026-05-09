@@ -1,9 +1,14 @@
+# OS
 .DS_Store
+
+# Python
 .env
 .venv/
 __pycache__/
 *.py[cod]
+*.pyc
 
+# Data
 logs/
 data/*.db
 data/*.sqlite
@@ -12,12 +17,19 @@ data/*.db-shm
 data/*.db-wal
 data/*.xlsx
 data/backups/
-
-frontend/node_modules/
-updated_frontend/node_modules/
-app/static/react-build/
-
-*.zip
-venv_test/
 data/ml_models/
 *.db
+
+# Frontend
+node_modules/
+updated_frontend/node_modules/
+best_frontend/node_modules/
+
+# Build artifacts (embedded build is force-added)
+app/static/react-build/
+
+# Archives
+*.zip
+
+# Misc
+venv_test/
