@@ -209,11 +209,37 @@ NGO_FEED_URLS = [
     "https://www.wti.org.in/feed/",
     "https://www.iucn.org/rss/news",
 ]
+
+INDIAN_MEDIA_RSS_URLS = [
+    # Times of India - Environment
+    "https://timesofindia.indiatimes.com/rssfeeds/2647163.cms",
+    # NDTV - Environment
+    "https://feeds.feedburner.com/ndtv/TXjg",
+    # The Hindu - National
+    "https://www.thehindu.com/news/national/feeder/default.rss",
+    # Indian Express - India
+    "https://indianexpress.com/section/india/feed/",
+    # Hindustan Times - Environment
+    "https://www.hindustantimes.com/feeds/rss/environment/rssfeed.xml",
+    # Deccan Herald
+    "https://www.deccanherald.com/rss/national.rss",
+    # The Wire - Environment
+    "https://thewire.in/category/environment/feed",
+    # Scroll.in - Environment
+    "https://scroll.in/rss/feed",
+    # Down to Earth - Wildlife
+    "https://www.downtoearth.org.in/rss/wildlife",
+    # Mongabay India
+    "https://india.mongabay.com/feed/",
+    # Sanctuary Nature Foundation
+    "https://www.sanctuarynaturefoundation.org/feed",
+]
 OSINT_SOURCE_TYPE = {
     "reddit_osint": "reddit",
     "govt_notices": "government",
     "ngo_feeds": "ngo",
     "x_adapter": "x_adapter",
+    "indian_media_rss": "indian_media",
 }
 AGGREGATOR_HOSTS = {"news.google.com", "www.news.google.com", "google.com", "www.google.com", "bing.com", "www.bing.com"}
 
@@ -221,6 +247,8 @@ ALL_PROVIDER_ORDER = [
     "google_rss",
     "bing_rss",
     "gdelt",
+    "duckduckgo",
+    "indian_media_rss",
     "newsapi",
     "gnews",
     "mediastack",
@@ -251,6 +279,8 @@ PROVIDER_QUERY_CAPS = {
     "worldnewsapi": 2,
     "eventregistry": 2,
     "newscatcher": 2,
+    "duckduckgo": 3,
+    "indian_media_rss": 4,
     "reddit_osint": 3,
     "govt_notices": 2,
     "ngo_feeds": 2,
@@ -269,6 +299,8 @@ PROVIDER_LANGUAGE_CAPS = {
     "worldnewsapi": 2,
     "eventregistry": 2,
     "newscatcher": 2,
+    "duckduckgo": 2,
+    "indian_media_rss": 3,
 }
 
 
@@ -1231,6 +1263,50 @@ class NewsCollector:
             )
         return items
 
+    def _fetch_duckduckgo(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        """DuckDuckGo News RSS — no API key needed, fully free."""
+        encoded_query = requests.utils.quote(query)
+        rss_url = f"https://duckduckgo.com/?q={encoded_query}&t=h_&iar=news&ia=news&kl=in-en&df=w&format=rss"
+        items: list[RawArticle] = []
+        try:
+            self._throttle_provider("duckduckgo")
+            response = self.http.get(rss_url, timeout=settings.request_timeout_seconds)
+            response.raise_for_status()
+            import feedparser
+            feed = feedparser.parse(response.text)
+            for entry in feed.entries[:limit]:
+                title = self._strip_html(getattr(entry, "title", ""))
+                summary = self._strip_html(getattr(entry, "summary", ""))
+                link = getattr(entry, "link", "")
+                source = getattr(entry, "source", {})
+                source_name = source.get("title", "") if isinstance(source, dict) else str(source) if source else "DuckDuckGo"
+                published = self._parse_date(getattr(entry, "published", None))
+                if title and link:
+                    items.append(
+                        RawArticle(
+                            title=title,
+                            summary=summary,
+                            source=self._strip_html(source_name or "DuckDuckGo"),
+                            url=self._normalize_url(link),
+                            published_at=published,
+                            language=language,
+                        )
+                    )
+        except Exception as err:
+            logger.debug("DuckDuckGo fetch failed: %s", err)
+        return items
+
+    def _fetch_indian_media_rss(self, language: str, query: str, limit: int) -> list[RawArticle]:
+        """Indian media outlet RSS feeds — direct wildlife/environment news, no API key needed."""
+        return self._fetch_rss_urls(
+            urls=INDIAN_MEDIA_RSS_URLS,
+            query=query,
+            limit=max(3, limit // 3),
+            fallback_source="Indian Media",
+            provider="indian_media_rss",
+            language=language,
+        )
+
     def _fetch_provider(self, provider: str, language: str, query: str, limit: int) -> list[RawArticle]:
         if self._provider_on_cooldown(provider):
             return []
@@ -1260,6 +1336,10 @@ class NewsCollector:
                 return self._fetch_eventregistry(language, query, limit)
             if provider == "newscatcher":
                 return self._fetch_newscatcher(language, query, limit)
+            if provider == "duckduckgo":
+                return self._fetch_duckduckgo(language, query, limit)
+            if provider == "indian_media_rss":
+                return self._fetch_indian_media_rss(language, query, limit)
             if provider == "reddit_osint":
                 return self._fetch_reddit_osint(query, limit)
             if provider == "govt_notices":

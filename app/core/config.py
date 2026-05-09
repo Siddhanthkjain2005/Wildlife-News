@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # Providers
     enabled_providers: str = (
-        "google_rss,bing_rss,gdelt,newsapi,gnews,mediastack,newsdata,"
+        "google_rss,bing_rss,gdelt,duckduckgo,indian_media_rss,newsapi,gnews,mediastack,newsdata,"
         "currents,thenewsapi,worldnewsapi,eventregistry,newscatcher,"
         "reddit_osint,ngo_feeds,x_adapter"
     )

@@ -304,8 +304,26 @@ STATE_ALIASES = {
     "tn": "tamil nadu",
     "wb": "west bengal",
     "jk": "jammu and kashmir",
+    "j&k": "jammu and kashmir",
     "delhi ncr": "delhi",
+    "ncr": "delhi",
     "orissa": "odisha",
+    "ap": "andhra pradesh",
+    "hp": "himachal pradesh",
+    "uk": "uttarakhand",
+    "ar": "arunachal pradesh",
+    "cg": "chhattisgarh",
+    "chattisgarh": "chhattisgarh",
+    "bengal": "west bengal",
+    "bombay": "maharashtra",
+    "madras": "tamil nadu",
+    "calcutta": "west bengal",
+    "trivandrum": "kerala",
+    "poona": "maharashtra",
+    "baroda": "gujarat",
+    "mysore": "karnataka",
+    "pondicherry": "puducherry",
+    "uttaranchal": "uttarakhand",
 }
 
 DISTRICT_ALIASES = {
@@ -313,6 +331,22 @@ DISTRICT_ALIASES = {
     "virar": "maharashtra",
     "palghar": "maharashtra",
     "greater noida": "uttar pradesh",
+    "gurgaon": "haryana",
+    "faridabad": "haryana",
+    "ghaziabad": "uttar pradesh",
+    "meerut": "uttar pradesh",
+    "allahabad": "uttar pradesh",
+    "prayagraj": "uttar pradesh",
+    "kashi": "uttar pradesh",
+    "benaras": "uttar pradesh",
+    "mangalore": "karnataka",
+    "calicut": "kerala",
+    "vizag": "andhra pradesh",
+    "secunderabad": "telangana",
+    "cochin": "kerala",
+    "pondicherry": "puducherry",
+    "whitefield": "karnataka",
+    "electronic city": "karnataka",
 }
 
 
@@ -832,6 +866,49 @@ class HybridIntelligenceEngine:
             location = "India" if "india" in text or "bharat" in text else ""
         return state, district, location
 
+    def _extract_location_ner(self, text: str) -> tuple[str, str]:
+        """Use NER model to extract LOC entities and map them to Indian states/districts."""
+        ner = self._get_person_ner()
+        if ner is False:
+            return "", ""
+        state = ""
+        district = ""
+        try:
+            entities = ner(text[:500])
+        except Exception:
+            return "", ""
+        loc_candidates = []
+        for entity in entities:
+            label = str(entity.get("entity_group") or entity.get("entity") or "").upper()
+            if "LOC" not in label and "GPE" not in label:
+                continue
+            score = float(entity.get("score") or 0.0)
+            if score < 0.5:
+                continue
+            word = str(entity.get("word") or "").strip().lower()
+            word = re.sub(r"^##", "", word).strip()
+            if len(word) < 2:
+                continue
+            loc_candidates.append(word)
+
+        from app.utils.location_data import DISTRICT_TO_STATE, INDIA_STATES
+        for loc in loc_candidates:
+            if loc in DISTRICT_TO_STATE:
+                district = loc
+                state = DISTRICT_TO_STATE[loc]
+                break
+            if loc in INDIA_STATES:
+                state = loc
+                break
+            # Check partial matches
+            for s in INDIA_STATES:
+                if loc in s or s in loc:
+                    state = s
+                    break
+            if state:
+                break
+        return state, district
+
     @staticmethod
     def _clean_person_candidate(raw_value: str) -> str:
         value = re.sub(r"^[\"'`\u201c\u201d\u2018\u2019\s-]+|[\"'`\u201c\u201d\u2018\u2019,.;:\s-]+$", "", raw_value or "")
@@ -909,9 +986,9 @@ class HybridIntelligenceEngine:
         if ner is False:
             return []
         candidates: list[str] = []
-        for sentence in sentences[:10]:
+        for sentence in sentences[:16]:
             try:
-                entities = ner(sentence[:450])
+                entities = ner(sentence[:512])
             except Exception as err:  # noqa: BLE001
                 if not self._logged_ner_notice:
                     logger.warning("Person NER inference failed: %s", err)
@@ -967,9 +1044,17 @@ class HybridIntelligenceEngine:
         for candidate in self._extract_ner_person_candidates(sentences):
             key = candidate.lower()
             display_names.setdefault(key, candidate)
-            candidate_scores[key] = candidate_scores.get(key, 0) + 2
+            candidate_scores[key] = candidate_scores.get(key, 0) + 3
+        # Also try NER on all sentences (not just context) for broader coverage
+        all_sentences = self._person_sentences(text)
+        extra_ner = [s for s in all_sentences if s not in sentences][:6]
+        for candidate in self._extract_ner_person_candidates(extra_ner):
+            key = candidate.lower()
+            display_names.setdefault(key, candidate)
+            candidate_scores[key] = candidate_scores.get(key, 0) + 1
+
         ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
-        involved_persons = [display_names[name] for name, score in ranked if score >= 2][:6]
+        involved_persons = [display_names[name] for name, score in ranked if score >= 2][:8]
         if 0 < involved_count_hint <= 20 and involved_count_hint > len(involved_persons) and len(involved_persons) < 6:
             remaining = involved_count_hint - len(involved_persons)
             suffix = "other unnamed suspect" if remaining == 1 else "other unnamed suspects"
@@ -1338,6 +1423,18 @@ class HybridIntelligenceEngine:
         keyword_hits = self._keyword_signal_hits(text)
         species = self._extract_species(text)
         state, district, location = self._extract_location(text)
+
+        # AI fallback: use NER to detect state/district when rules found nothing
+        if not state and not district:
+            ner_state, ner_district = self._extract_location_ner(source_text)
+            if ner_state:
+                state = ner_state
+                district = ner_district
+                if district and state:
+                    location = f"{district.title()}, {state.title()}"
+                elif state:
+                    location = state.title()
+
         involved_persons = self._extract_involved_persons(source_text)
         operational_details = self._extract_operational_details(source_text, text)
         network_indicator = self._network_indicator(text)
