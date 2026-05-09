@@ -103,7 +103,13 @@ export default function NetworkGraph() {
                 <section className="actors-section">
                   <h3><User size={18} /> High-Centrality Actors</h3>
                   <div className="actor-list">
-                    {selectedNetwork.top_actors?.map((actor, idx) => (
+                    {selectedNetwork.top_actors
+                      ?.filter(actor => {
+                        const name = (actor.name || "").toLowerCase();
+                        const banned = ["thailand", "myanmar", "singapore", "vietnam", "ghosh", "india", "unknown"];
+                        return !banned.includes(name);
+                      })
+                      .map((actor, idx) => (
                       <div key={idx} className="actor-card">
                         <div className="actor-rank">#{idx + 1}</div>
                         <div className="actor-main">
