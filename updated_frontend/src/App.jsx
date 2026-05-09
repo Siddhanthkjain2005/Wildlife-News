@@ -17,7 +17,6 @@ import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
 import Kpis from "./components/Kpis.jsx";
 import MapPanel from "./components/MapPanel.jsx";
-import AlertFeed from "./components/AlertFeed.jsx";
 import Analytics from "./components/Analytics.jsx";
 import FilterBar from "./components/FilterBar.jsx";
 import IncidentTable from "./components/IncidentTable.jsx";
@@ -124,15 +123,6 @@ const DEMO_MAP_DATA = {
   ]
 };
 
-const DEMO_ALERTS = [
-  { id: 1, title: "Critical: Tiger poaching network identified in Western Ghats", severity: "high", time: "2 hours ago", state: "Karnataka" },
-  { id: 2, title: "Urgent: Elephant herd approaching human settlement", severity: "high", time: "4 hours ago", state: "Kerala" },
-  { id: 3, title: "Warning: Unusual pangolin trade activity detected", severity: "medium", time: "6 hours ago", state: "Assam" },
-  { id: 4, title: "Alert: Leopard spotted near school premises", severity: "medium", time: "8 hours ago", state: "Maharashtra" },
-  { id: 5, title: "Notice: Seasonal migration pattern shift observed", severity: "low", time: "12 hours ago", state: "Rajasthan" },
-  { id: 6, title: "Info: New wildlife corridor proposal submitted", severity: "low", time: "1 day ago", state: "Madhya Pradesh" }
-];
-
 const DEMO_OSINT = [
   { id: 1, title: "International wildlife trafficking ring exposed", source: "Interpol", date: "Today", url: "#" },
   { id: 2, title: "New conservation technology deployed in reserves", source: "WWF", date: "Yesterday", url: "#" },
@@ -163,7 +153,6 @@ export default function App() {
   const [summary, setSummary] = useState(DEMO_MODE ? DEMO_SUMMARY : null);
   const [chartData, setChartData] = useState(DEMO_MODE ? DEMO_CHART_DATA : null);
   const [mapData, setMapData] = useState(DEMO_MODE ? DEMO_MAP_DATA : null);
-  const [alerts, setAlerts] = useState(DEMO_MODE ? DEMO_ALERTS : []);
   const [osintItems, setOsintItems] = useState(DEMO_MODE ? DEMO_OSINT : []);
   const [reports, setReports] = useState([]);
   const [syncStatus, setSyncStatus] = useState(null);
@@ -189,7 +178,6 @@ export default function App() {
       fetchJson(ENDPOINTS.summary),
       fetchJson(ENDPOINTS.chart),
       fetchJson(ENDPOINTS.map),
-      fetchJson(ENDPOINTS.alerts),
       fetchJson(ENDPOINTS.reports),
       fetchJson(ENDPOINTS.osint),
       fetchJson(ENDPOINTS.syncStatus)
@@ -201,11 +189,10 @@ export default function App() {
       handleUnauthorized("Session expired. Please sign in again.");
       return;
     }
-    const [summaryRes, chartRes, mapRes, alertRes, reportRes, osintRes, syncRes] = tasks;
+    const [summaryRes, chartRes, mapRes, reportRes, osintRes, syncRes] = tasks;
     if (summaryRes.status === "fulfilled") setSummary(summaryRes.value);
     if (chartRes.status === "fulfilled") setChartData(chartRes.value);
     if (mapRes.status === "fulfilled") setMapData(mapRes.value);
-    if (alertRes.status === "fulfilled") setAlerts(Array.isArray(alertRes.value) ? alertRes.value : []);
     if (reportRes.status === "fulfilled") setReports(Array.isArray(reportRes.value) ? reportRes.value : []);
     if (osintRes.status === "fulfilled") setOsintItems(Array.isArray(osintRes.value) ? osintRes.value : []);
     if (syncRes.status === "fulfilled") setSyncStatus(syncRes.value);
@@ -250,7 +237,7 @@ export default function App() {
 
   // Track active section via scroll
   useEffect(() => {
-    const ids = ["overview", "map", "alerts", "analytics", "incidents", "osint", "reco"];
+    const ids = ["overview", "map", "analytics", "incidents", "osint", "reco"];
     const observers = [];
     ids.forEach((id) => {
       const el = document.getElementById(`section-${id}`);
@@ -477,21 +464,18 @@ export default function App() {
             <Kpis summary={summary} loading={loading} />
           </section>
 
-          {/* Section 2: Operations Center */}
+          {/* Section 2: Geographic Intelligence */}
           <section className="dashboard-section" id="section-map">
             <div className="section-header">
               <div className="section-header-content">
                 <span className="section-number">02</span>
                 <div>
-                  <h2>Operations Center</h2>
-                  <p>Geographic incident mapping and live alert feed</p>
+                  <h2>Geographic Intelligence</h2>
+                  <p>Real-time incident mapping across regions</p>
                 </div>
               </div>
             </div>
-            <div className="ops-grid">
-              <MapPanel mapData={mapData} onMapError={setError} />
-              <AlertFeed alerts={alerts} />
-            </div>
+            <MapPanel mapData={mapData} onMapError={setError} />
           </section>
 
           {/* Section 3: Intelligence Analytics */}

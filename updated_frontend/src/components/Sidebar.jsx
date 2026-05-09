@@ -2,7 +2,6 @@ import {
   Shield,
   LayoutDashboard,
   MapPinned,
-  Radio,
   BarChart3,
   Table,
   Satellite,
@@ -15,8 +14,7 @@ const NAV = [
     title: "Monitoring",
     items: [
       { id: "overview", label: "Overview", icon: LayoutDashboard },
-      { id: "map", label: "Threat Map", icon: MapPinned },
-      { id: "alerts", label: "Live Alerts", icon: Radio }
+      { id: "map", label: "Threat Map", icon: MapPinned }
     ]
   },
   {
