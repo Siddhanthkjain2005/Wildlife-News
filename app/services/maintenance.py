@@ -52,10 +52,19 @@ def run_deep_maintenance(db: Session):
                 )
                 
                 if intel.is_poaching:
-                    item.species = intel.species or item.species
+                    # Convert lists to strings for DB compatibility
+                    new_species = intel.species
+                    if isinstance(new_species, list):
+                        new_species = ", ".join(new_species)
+                    
+                    new_persons = intel.involved_persons
+                    if isinstance(new_persons, list):
+                        new_persons = ", ".join(new_persons)
+
+                    item.species = new_species or item.species
                     item.state = intel.state or item.state
                     item.district = intel.district or item.district
-                    item.involved_persons = intel.involved_persons or item.involved_persons
+                    item.involved_persons = new_persons or item.involved_persons
                     item.risk_score = max(item.risk_score, intel.risk_score)
                     item.confidence = max(item.confidence, intel.confidence)
                     item.is_poaching = True
