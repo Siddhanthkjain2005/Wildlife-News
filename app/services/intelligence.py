@@ -1093,8 +1093,7 @@ class HybridIntelligenceEngine:
     def _person_sentences(text: str) -> list[str]:
         if not text:
             return []
-        chunks = re.split(r"(?<=[.!?।])\s+|
-+", text)
+        chunks = re.split(r"(?<=[.!?।])\s+|\n+", text)
         return [re.sub(r"\s+", " ", chunk).strip() for chunk in chunks if chunk and chunk.strip()]
 
     @classmethod
@@ -1511,8 +1510,7 @@ class HybridIntelligenceEngine:
         species_text = ", ".join(species) if species else "unknown species"
         where = location or "unspecified location"
         line2 = f"Likely {crime_type.replace('_', ' ')} involving {species_text} near {where}."
-        return f"{line1}
-{line2}"
+        return f"{line1}\n{line2}"
 
     @staticmethod
     def _build_intel_points(
