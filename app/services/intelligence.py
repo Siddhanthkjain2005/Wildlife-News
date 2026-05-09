@@ -1310,7 +1310,7 @@ class HybridIntelligenceEngine:
         return involved_persons[:8]
 
     @staticmethod
-    def _is_india(text: str, state: str, district: str, india_prob: float, outside_prob: float) -> tuple[bool, float]:
+    def _is_india(text: str, state: str, district: str, india_prob: float = 0.5, outside_prob: float = 0.1) -> tuple[bool, float]:
         rule_score = 0.0
         if any(term in text for term in INDIA_HINT_TERMS):
             rule_score += 0.5
