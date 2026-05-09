@@ -1876,7 +1876,7 @@ class HybridIntelligenceEngine:
         
         if is_poaching and not involved_persons:
             # More aggressive person extraction on full text
-            involved_persons = self._extract_persons(source_text)[:5]
+            involved_persons = self._extract_involved_persons(source_text)[:5]
 
         risk_score = self._compute_risk(
             confidence=confidence,
