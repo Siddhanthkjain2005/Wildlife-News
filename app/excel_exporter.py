@@ -72,7 +72,14 @@ excel_write_lock = Lock()
 def _ensure_workbook(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
-        return load_workbook(path)
+        try:
+            return load_workbook(path)
+        except Exception:
+            # File is corrupted (not a valid zip/xlsx) — recreate it
+            try:
+                path.unlink()
+            except OSError:
+                pass
     wb = Workbook()
     default_sheet = wb.active
     default_sheet.title = NEWS_SHEET
