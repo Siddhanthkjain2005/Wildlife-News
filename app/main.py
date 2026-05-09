@@ -1363,6 +1363,65 @@ def _repair_stored_urls() -> int:
     return changed
 
 
+def _reanalyze_existing_articles() -> dict:
+    """Re-run intelligence engine on all existing articles to fix state/person detection."""
+    app_logger.info("Starting re-analysis of existing articles with updated AI engine...")
+    updated = 0
+    errors = 0
+    try:
+        with SessionLocal() as db:
+            items = db.query(NewsItem).filter(NewsItem.is_poaching == True).all()
+            total = len(items)
+            app_logger.info("Re-analyzing %d articles...", total)
+            for i, item in enumerate(items):
+                try:
+                    result = intelligence_engine.analyze(
+                        title=item.title or "",
+                        summary=item.summary or "",
+                    )
+                    changed = False
+                    # Update state if it was empty/unknown and we found one
+                    if result.state and (not item.state or item.state.strip() == ""):
+                        item.state = result.state
+                        changed = True
+                    # Update district if it was empty and we found one
+                    if result.district and (not item.district or item.district.strip() == ""):
+                        item.district = result.district
+                        changed = True
+                    # Update location
+                    if result.location and (not item.location or item.location.strip() in ("", "India")):
+                        item.location = result.location
+                        changed = True
+                    # Always re-run person detection (the main fix)
+                    new_persons = ", ".join(result.involved_persons) if result.involved_persons else ""
+                    old_persons = item.involved_persons or ""
+                    if new_persons != old_persons:
+                        item.involved_persons = new_persons
+                        changed = True
+                    # Update crime_type if it was unknown
+                    if result.crime_type and result.crime_type != "unknown" and (not item.crime_type or item.crime_type == "unknown"):
+                        item.crime_type = result.crime_type
+                        changed = True
+                    # Update species if empty
+                    if result.species and not item.species:
+                        item.species = ", ".join(result.species)
+                        changed = True
+                    if changed:
+                        updated += 1
+                    if (i + 1) % 50 == 0:
+                        db.commit()
+                        app_logger.info("Re-analyzed %d/%d articles (%d updated so far)", i + 1, total, updated)
+                except Exception as item_err:
+                    errors += 1
+                    if errors <= 3:
+                        app_logger.warning("Re-analysis error for article %d: %s", item.id, item_err)
+            db.commit()
+            app_logger.info("Re-analysis complete: %d/%d articles updated, %d errors", updated, total, errors)
+    except Exception as e:
+        app_logger.error("Re-analysis failed: %s", e)
+    return {"total_analyzed": total if 'total' in dir() else 0, "updated": updated, "errors": errors}
+
+
 @app.on_event("startup")
 def startup_event() -> None:
     runtime_diagnostics["startup_time"] = datetime.now(tz=timezone.utc).isoformat()
@@ -1393,6 +1452,14 @@ def startup_event() -> None:
             # Download and warmup model in background to not block port binding
             runtime_diagnostics["ai_model_ready"] = intelligence_engine.warmup()
             app_logger.info("AI model warmup ready=%s", runtime_diagnostics["ai_model_ready"])
+
+            # Re-analyze existing articles with updated intelligence engine
+            if runtime_diagnostics["ai_model_ready"]:
+                try:
+                    reanalysis_result = _reanalyze_existing_articles()
+                    app_logger.info("Startup re-analysis result: %s", reanalysis_result)
+                except Exception as reanalyze_err:
+                    app_logger.warning("Startup re-analysis failed: %s", reanalyze_err)
         except Exception as e:
             app_logger.error("Background startup tasks failed: %s", e)
 
@@ -1516,6 +1583,16 @@ def legacy_home(
 @app.post("/sync")
 def sync_now():
     raise HTTPException(status_code=410, detail="Manual sync is disabled. Scheduler runs automatically.")
+
+
+@app.post("/api/admin/reanalyze")
+def admin_reanalyze(request: Request, _admin=Depends(require_admin_access)):
+    """Re-run intelligence engine on all existing articles to fix state/person detection."""
+    def _bg_reanalyze():
+        result = _reanalyze_existing_articles()
+        _audit(actor="admin", action="reanalyze", status="ok", notes=json.dumps(result))
+    Thread(target=_bg_reanalyze, daemon=True).start()
+    return {"ok": True, "message": "Re-analysis started in background. Check logs for progress."}
 
 
 @app.get("/login")
