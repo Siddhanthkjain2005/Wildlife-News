@@ -645,6 +645,11 @@ GEO_STOP_TERMS = {
     *DISTRICT_TO_STATE.keys(),
     *DISTRICT_ALIASES.keys(),
     *STATE_ALIASES.keys(),
+    "myanmar", "singapore", "thailand", "vietnam", "china", "laos", "cambodia",
+    "nepal", "bhutan", "bangladesh", "sri lanka", "malaysia", "indonesia",
+    "hong kong", "taiwan", "africa", "south africa", "kenya", "tanzania",
+    "europe", "usa", "uk", "dubai", "uae", "qatar", "russia", "australia",
+    "canada", "brazil", "nigeria", "congo", "madagascar",
 }
 
 SPECIES_STOP_TERMS = {
@@ -1305,13 +1310,23 @@ class HybridIntelligenceEngine:
         india_score = min(1.0, 0.65 * india_prob + 0.35 * rule_score)
         
         # International Veto: If specific international hubs are mentioned without strong India context
-        veto_terms = {"vietnam", "south africa", "kenya", "tanzania", "laos", "cambodia", "china", "europe", "usa", "uk"}
+        veto_terms = {
+            "vietnam", "south africa", "kenya", "tanzania", "laos", "cambodia", "china", 
+            "europe", "usa", "uk", "myanmar", "singapore", "thailand", "malaysia", 
+            "indonesia", "bangladesh", "sri lanka", "dubai", "uae", "africa"
+        }
         lower_text = text.lower()
         if any(term in lower_text for term in veto_terms):
             # Only allow if an Indian state/district is EXPLICITLY present
             if not (state or district):
                 return False, 0.0
-            india_score -= 0.15 # Penalize international mentions
+            
+            # If the title explicitly mentions the international country as the primary location, drop it
+            title_lower = lower_text.split(".")[0] # approximate title
+            if any(term in title_lower for term in veto_terms) and not any(s in title_lower for s in INDIA_STATES):
+                return False, 0.0
+                
+            india_score -= 0.20 # Heavier penalty for international mentions
 
         is_india = india_score >= settings.india_threshold and india_score >= (outside_prob - 0.05)
         return is_india, india_score
@@ -1822,11 +1837,30 @@ class HybridIntelligenceEngine:
                 and strong_rule_signal
                 and poach_prob >= 0.22
             )
+
+        # Strict High-Value Signal Check
+        has_operational_signal = any(t in text for t in ["arrested", "seized", "held", "nabbed", "raided", "caught", "booked", "seizure"])
+        if not has_operational_signal:
+            confidence *= 0.8 # Penalize articles with no clear action verbs
+            
         is_poaching = baseline_accept or fallback_accept
+        
+        # Additional strict check for low signal articles
+        if is_poaching and not has_operational_signal and keyword_hits < 5:
+            is_poaching = False
+
         if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:
             is_poaching = False
         if strict_mode and not_wildlife_prob >= 0.62 and evidence_strength < 0.75 and poach_prob < 0.70:
             is_poaching = False
+
+        # Deep Recovery: If critical values are missing, do a second, more exhaustive scan of the source_text
+        if is_poaching and not species:
+            species = self._extract_species(source_text) # Re-scan with full casing/spacing
+        if is_poaching and not (state or district):
+            s_rec, d_rec, l_rec = self._extract_location(source_text)
+            if s_rec or d_rec:
+                state, district, location = s_rec, d_rec, l_rec
 
         risk_score = self._compute_risk(
             confidence=confidence,
