@@ -16,6 +16,7 @@ class Base(DeclarativeBase):
 
 
 is_sqlite = settings.database_url.startswith("sqlite")
+is_postgres = settings.database_url.startswith("postgresql") or settings.database_url.startswith("postgres")
 sqlite_connect_args = {"check_same_thread": False, "timeout": 30} if is_sqlite else {}
 engine = create_engine(
     settings.database_url,
@@ -277,6 +278,16 @@ def _ensure_audit_logs_schema() -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_action ON audit_logs (action)"))
 
 
+def _ensure_postgres_extensions() -> None:
+    if not is_postgres:
+        return
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        except SQLAlchemyError as err:
+            logger.warning("PostgreSQL extension bootstrap skipped: %s", err)
+
+
 def init_database() -> None:
     from app import models as _models  # noqa: F401
 
@@ -291,6 +302,7 @@ def init_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     try:
+        _ensure_postgres_extensions()
         _ensure_news_items_schema()
         _ensure_reports_schema()
         _ensure_audit_logs_schema()

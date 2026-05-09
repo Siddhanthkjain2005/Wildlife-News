@@ -6,11 +6,19 @@ import secrets
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
+import jwt
 from fastapi import Header, HTTPException, Request
 
 from app.core.config import settings
+
+ROLES: dict[str, list[str]] = {
+    "viewer": ["read:incidents", "read:dashboard", "read:map", "read:health"],
+    "analyst": ["read:*", "export:*", "search:*", "graph:*"],
+    "admin": ["read:*", "write:*", "export:*", "search:*", "graph:*", "admin:*"],
+}
 
 
 @dataclass
@@ -168,6 +176,82 @@ def authenticate_admin(*, username: str, password: str) -> bool:
     return False
 
 
+def _jwt_secret() -> str:
+    value = (settings.jwt_secret or "").strip()
+    if value:
+        return value
+    # Backward-compatible fallback when explicit JWT secret is not configured.
+    fallback = (settings.admin_token or settings.admin_password_hash or settings.admin_password or "wildlife-default-secret").strip()
+    return fallback
+
+
+def _token_expiry(minutes: int | None = None, days: int | None = None) -> datetime:
+    now = datetime.now(tz=timezone.utc)
+    if days is not None:
+        return now + timedelta(days=max(1, days))
+    return now + timedelta(minutes=max(1, minutes or 1))
+
+
+def create_jwt_tokens(*, user_id: str, role: str = "admin") -> dict[str, object]:
+    role_name = role if role in ROLES else "admin"
+    access_payload = {
+        "sub": user_id,
+        "role": role_name,
+        "type": "access",
+        "exp": _token_expiry(minutes=settings.jwt_access_minutes),
+        "iat": datetime.now(tz=timezone.utc),
+    }
+    refresh_payload = {
+        "sub": user_id,
+        "role": role_name,
+        "type": "refresh",
+        "exp": _token_expiry(days=settings.jwt_refresh_days),
+        "iat": datetime.now(tz=timezone.utc),
+    }
+    secret = _jwt_secret()
+    algorithm = settings.jwt_algorithm
+    access_token = jwt.encode(access_payload, secret, algorithm=algorithm)
+    refresh_token = jwt.encode(refresh_payload, secret, algorithm=algorithm)
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in_seconds": max(60, settings.jwt_access_minutes * 60),
+        "role": role_name,
+    }
+
+
+def decode_jwt_token(token: str) -> dict[str, object] | None:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, _jwt_secret(), algorithms=[settings.jwt_algorithm])
+        if not isinstance(payload, dict):
+            return None
+        return payload
+    except jwt.PyJWTError:
+        return None
+
+
+def token_role(token: str) -> str:
+    payload = decode_jwt_token(token)
+    if payload is None:
+        return ""
+    return str(payload.get("role") or "")
+
+
+def has_permission(role: str, permission: str) -> bool:
+    role_perms = ROLES.get(role, [])
+    if permission in role_perms:
+        return True
+    target_scope, _, target_action = permission.partition(":")
+    for perm in role_perms:
+        scope, _, action = perm.partition(":")
+        if (scope == target_scope or scope == "*") and (action == "*" or action == target_action):
+            return True
+    return False
+
+
 def _extract_token(request: Request, x_admin_token: str | None, authorization: str | None) -> str:
     if not isinstance(x_admin_token, str):
         x_admin_token = None
@@ -190,6 +274,16 @@ def extract_admin_token(request: Request) -> str:
         x_admin_token=request.headers.get("X-Admin-Token"),
         authorization=request.headers.get("Authorization"),
     )
+
+
+def _token_has_admin_access(token: str) -> bool:
+    payload = decode_jwt_token(token)
+    if payload is None:
+        return False
+    if str(payload.get("type") or "") != "access":
+        return False
+    role = str(payload.get("role") or "")
+    return has_permission(role, "admin:access")
 
 
 def require_admin_access(
@@ -216,4 +310,34 @@ def require_admin_access(
         return
     if admin_sessions.validate(token):
         return
+    if _token_has_admin_access(token):
+        return
     raise HTTPException(status_code=401, detail="Invalid or expired admin token.")
+
+
+def require_permission(permission: str):
+    def _dependency(
+        request: Request,
+        x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+        authorization: str | None = Header(default=None),
+    ) -> None:
+        if not settings.rbac_enabled:
+            require_admin_access(request, x_admin_token=x_admin_token, authorization=authorization)
+            return
+
+        token = _extract_token(request=request, x_admin_token=x_admin_token, authorization=authorization)
+        if not token:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+        if settings.admin_token and token == settings.admin_token:
+            return
+        if admin_sessions.validate(token):
+            return
+
+        payload = decode_jwt_token(token)
+        if payload is None or str(payload.get("type") or "") != "access":
+            raise HTTPException(status_code=401, detail="Invalid access token.")
+        role = str(payload.get("role") or "")
+        if not has_permission(role, permission):
+            raise HTTPException(status_code=403, detail="Insufficient permissions.")
+
+    return _dependency

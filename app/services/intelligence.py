@@ -15,6 +15,9 @@ else:
 
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.services.role_ner import role_ner
+from app.services.setfit_classifier import CLASSIFIER_LABELS, setfit_classifier
+from app.services.summarizer import get_intelligence_summarizer
 from app.utils.location_data import DISTRICT_TO_STATE, INDIA_STATES
 from app.utils.text_utils import first_sentence, normalize_space
 
@@ -176,6 +179,23 @@ ARTICLE_SIGNAL_TERMS = {
     "ਜ਼ਬਤ",
 }
 
+# Source credibility — weights intelligence confidence by publisher reliability
+SOURCE_CREDIBILITY: dict[str, float] = {
+    "mongabay": 0.97, "mongabay india": 0.97, "down to earth": 0.95,
+    "sanctuary nature": 0.95, "traffic": 0.95, "wwf": 0.95, "iucn": 0.95,
+    "the hindu": 0.92, "indian express": 0.92, "hindustan times": 0.90,
+    "ndtv": 0.90, "times of india": 0.88, "the wire": 0.90,
+    "scroll": 0.88, "firstpost": 0.87, "theprint": 0.88,
+    "deccan herald": 0.87, "deccan chronicle": 0.85, "the statesman": 0.85,
+    "new indian express": 0.87, "hans india": 0.82, "eenadu": 0.82,
+    "prajavani": 0.82, "vijaya karnataka": 0.82, "mathrubhumi": 0.82,
+    "dinamalar": 0.80, "dainik jagran": 0.82, "amar ujala": 0.82,
+    "divya bhaskar": 0.82, "lokmat": 0.82, "navbharat times": 0.82,
+    "pti": 0.92, "ani": 0.90, "reuters": 0.92, "afp": 0.92,
+    "latestly": 0.60, "newsmeter": 0.62, "dt next": 0.65,
+    "india today": 0.85, "outlook": 0.78, "business standard": 0.75,
+}
+_SOURCE_DEFAULT = 0.70
 
 
 PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'\u2019-]*|[A-Z]\.?|[^\W\d_]{2,})"
@@ -688,6 +708,9 @@ class HybridIntelligenceEngine:
     def __init__(self) -> None:
         self._classifier = None
         self._person_ner = None
+        self._role_ner = role_ner
+        self._setfit_classifier = setfit_classifier
+        self._summarizer = get_intelligence_summarizer()
         self._lock = Lock()
         self._model_ready = False
         self._logged_fallback_notice = False
@@ -698,6 +721,10 @@ class HybridIntelligenceEngine:
         return self._model_ready
 
     def warmup(self) -> bool:
+        setfit_scores = self._setfit_classifier.predict_score_map("Wildlife officers seized tiger skin in Karnataka.")
+        if setfit_scores is not None:
+            self._model_ready = True
+            return True
         try:
             classifier = self._get_classifier()
             if classifier is False:
@@ -705,13 +732,7 @@ class HybridIntelligenceEngine:
                 return False
             _ = classifier(
                 "Wildlife officers seized tiger skin in Karnataka.",
-                candidate_labels=[
-                    "wildlife poaching",
-                    "illegal wildlife trade",
-                    "not wildlife crime",
-                    "incident in India",
-                    "incident outside India",
-                ],
+                candidate_labels=CLASSIFIER_LABELS,
                 hypothesis_template="This report concerns {}.",
                 multi_label=True,
             )
@@ -780,20 +801,7 @@ class HybridIntelligenceEngine:
 
     @classmethod
     def _fallback_score_map(cls, text: str) -> dict[str, float]:
-        labels = [
-            "wildlife poaching",
-            "wildlife smuggling",
-            "illegal wildlife trade",
-            "ivory trade",
-            "tiger skin seizure",
-            "rhino horn trafficking",
-            "exotic bird trafficking",
-            "illegal fishing",
-            "forest hunting gang",
-            "not wildlife crime",
-            "incident in India",
-            "incident outside India",
-        ]
+        labels = list(CLASSIFIER_LABELS)
         score_map = {label: 0.0 for label in labels}
 
         rule_crime_type, rule_score = cls._keyword_crime_scores(text)
@@ -1086,6 +1094,17 @@ class HybridIntelligenceEngine:
         return (contextual or sentences)[:14]
 
     def _extract_ner_person_candidates(self, sentences: list[str]) -> list[str]:
+        gliner_candidates: list[str] = []
+        for sentence in sentences[:16]:
+            for entity in self._role_ner.extract(sentence[:512]):
+                if entity.get("label") not in {"SUSPECT", "OFFICER"}:
+                    continue
+                candidate = self._clean_person_candidate(str(entity.get("text") or ""))
+                if candidate:
+                    gliner_candidates.append(candidate)
+        if gliner_candidates:
+            return gliner_candidates
+
         ner = self._get_person_ner()
         if ner is False:
             return []
@@ -1126,6 +1145,102 @@ class HybridIntelligenceEngine:
                 max_count = count
         return max_count
 
+    @staticmethod
+    def _is_bad_person(person: str) -> bool:
+        if not person or person.endswith("unnamed suspect") or person.endswith("unnamed suspects"):
+            return False
+
+        start_block = re.compile(
+            r"^(?:in|at|of|for|from|by|with|to|the|a|an|as|on|is|was|were|has|have|had|"
+            r"this|that|these|those|and|or|but|not|no|its|their|our|who|which|what|where|"
+            r"when|how|why|after|before|during|while|about|against|between|through|under|"
+            r"over|into|upon|until|within|without|some|most|many|several|few|all|any|such|"
+            r"also|additionally|meanwhile|however|further|moreover|hence|thus|therefore|"
+            r"yet|still|already|just|only|even|much|more|less|very|too|quite|rather|here|"
+            r"there|now|then|often|never|always|sometimes|recently|usually|finally|"
+            r"among|another|earlier|following|identified|investigations|interrogation|"
+            r"while|late|busted|racket|arrested|am|were|on|anganwadi|cbi|ncb|stf|sho|ngo|ncrb|wbcsd)\b",
+            re.IGNORECASE,
+        )
+        contains_block = re.compile(
+            r"\b(?:district|state|forest|police|crime|branch|bureau|wildlife|poaching|hunting|"
+            r"smuggling|trafficking|smuggler|smugglers|trafficker|traffickers|arrested|detained|"
+            r"seized|seizure|national|international|park|sanctuary|reserve|government|ministry|"
+            r"department|court|bench|tribunal|committee|commission|board|authority|agency|office|"
+            r"organization|organisation|council|news|media|times|today|daily|express|herald|"
+            r"telegraph|gazette|post|reporter|correspondent|editor|publication|website|online|"
+            r"digital|india|indian|bharat|hindustan|airport|station|highway|road|bridge|border|"
+            r"river|lake|village|town|city|area|region|zone|sector|block|tehsil|taluk|mandal|"
+            r"panchayat|assembly|parliament|lok|rajya|sabha|pradesh|nagar|gang|racket|syndicate|"
+            r"network|nexus|cartel|mafia|ring|sold|repatriated|released|rescued|recovered|"
+            r"deported|blue|red|green|white|black|minor|major|old|new|young|small|big|large|"
+            r"that\s+was|that\s+were|left|right|long|short|good|bad|wing|ran|"
+            r"towards|behind|front|above|below|inside|outside|nearby|forward|backward|"
+            r"birds|animals|deer|peacock|peacocks|monkey|monkeys|cattle|horses|cows|dogs|cats|"
+            r"meter|metre|newsmeter|deccan|navbharat|eenadu|sakshi|mathrubhumi|manorama|"
+            r"dainik|jagran|amar|ujala|rajasthan|patrika|divya|bhaskar|lokmat|sakal|"
+            r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|dt\s+next|"
+            r"dinamani|dinakaran|standard|journal|latestly|statesman|observer|mirror|"
+            r"chronicle|sentinel|pioneer|quint|firstpost|theprint|scroll|"
+            r"cruelty|credit|image|photo|video|streamer|twitch|whatsapp|telegram|"
+            r"delivery|passenger|passengers|owner|store|shop|muslim|rohingya|centres|"
+            r"reserves|landscapes|pressed|revealed|investigations|interrogation|"
+            r"identified|discussion|discussions|stated|scent|squad|once|cases|"
+            r"people|persons|suspects|accused|convict|convicts|offender|offenders|"
+            r"boy|girl|man|woman|men|women|couple|family|resident|residents|"
+            r"encounter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+            r"morning|evening|night|march|april|january|february|may|june|july|"
+            r"august|september|october|november|december|pangolin|leopard|tiger|"
+            r"elephant|rhinoceros|rhino|turtle|tortoise|snake|crocodile|ivory|"
+            r"skin|skins|horn|horns|tusk|tusks|claw|claws|bone|bones|scale|scales|"
+            r"sanders|sander|coral|corals|quill|quills|gibbon|gibbons|"
+            r"heroin|smack|ganja|drug|drugs|narcotic|narcotics|ndps|"
+            r"escobar|pablo|hippo|hippos|sho|cbi|ncb|stf|ncrb|dfo|acf|rfo|division|force|task)\b",
+            re.IGNORECASE,
+        )
+        number_word = re.compile(
+            r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
+            r"fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|several|many|few|"
+            r"multiple|numerous|duo|trio)(?:\s|$)",
+            re.IGNORECASE,
+        )
+        verb_frag = re.compile(
+            r"\b(?:ran|went|came|said|told|asked|made|took|gave|got|saw|"
+            r"found|knew|thought|called|tried|used|turned|started|moved|"
+            r"brought|kept|held|sent|happened|appeared|seemed|became|"
+            r"revealed|pressed|stated|convicted|sentenced|busted|raided|"
+            r"confiscated|caught|nabbed|apprehended|smuggled|traded|is|are|"
+            r"towards|against|behind|before|between)\b",
+            re.IGNORECASE,
+        )
+
+        if start_block.match(person):
+            return True
+        if contains_block.search(person):
+            return True
+        words = person.split()
+        if all(len(w.strip(".")) <= 1 for w in words):
+            return True
+        if re.match(r"^\d+", person):
+            return True
+        if number_word.match(person.strip()):
+            return True
+        if len(person) <= 5 and person == person.upper():
+            return True
+        if len(person) <= 4:
+            return True
+        if verb_frag.search(person):
+            return True
+        if not any(
+            len(re.sub(r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]", "", w)) >= 2
+            for w in words
+        ):
+            return True
+        person_lower = person.lower().strip()
+        if person_lower in DISTRICT_TO_STATE or person_lower in INDIA_STATES:
+            return True
+        return False
+
     def _extract_involved_persons(self, text: str) -> list[str]:
         if not text:
             return []
@@ -1162,92 +1277,8 @@ class HybridIntelligenceEngine:
 
         # Post-filter: remove obvious false positives
         involved_persons = []
-        _start_block = re.compile(
-            r"^(?:in|at|of|for|from|by|with|to|the|a|an|as|on|is|was|were|has|have|had|"
-            r"this|that|these|those|and|or|but|not|no|its|their|our|who|which|what|where|"
-            r"when|how|why|after|before|during|while|about|against|between|through|under|"
-            r"over|into|upon|until|within|without|some|most|many|several|few|all|any|such|"
-            r"also|additionally|meanwhile|however|further|moreover|hence|thus|therefore|"
-            r"yet|still|already|just|only|even|much|more|less|very|too|quite|rather|here|"
-            r"there|now|then|often|never|always|sometimes|recently|usually|finally|"
-            r"among|another|earlier|following|identified|investigations|interrogation|"
-            r"while|late|busted|racket|arrested|am|were|on|anganwadi|cbi|ncb|stf|sho|ngo|ncrb|wbcsd)\b",
-            re.IGNORECASE,
-        )
-        _contains_block = re.compile(
-            r"\b(?:district|state|forest|police|crime|branch|bureau|wildlife|poaching|hunting|"
-            r"smuggling|trafficking|smuggler|smugglers|trafficker|traffickers|arrested|detained|"
-            r"seized|seizure|national|international|park|sanctuary|reserve|government|ministry|"
-            r"department|court|bench|tribunal|committee|commission|board|authority|agency|office|"
-            r"organization|organisation|council|news|media|times|today|daily|express|herald|"
-            r"telegraph|gazette|post|reporter|correspondent|editor|publication|website|online|"
-            r"digital|india|indian|bharat|hindustan|airport|station|highway|road|bridge|border|"
-            r"river|lake|village|town|city|area|region|zone|sector|block|tehsil|taluk|mandal|"
-            r"panchayat|assembly|parliament|lok|rajya|sabha|pradesh|nagar|gang|racket|syndicate|"
-            r"network|nexus|cartel|mafia|ring|sold|repatriated|released|rescued|recovered|"
-            r"deported|blue|red|green|white|black|minor|major|old|new|young|small|big|large|"
-            r"that\s+was|that\s+were|left|right|long|short|good|bad|wing|ran|"
-            r"towards|behind|front|above|below|inside|outside|nearby|forward|backward|"
-            r"birds|animals|deer|peacock|peacocks|monkey|monkeys|cattle|horses|cows|dogs|cats|"
-            r"meter|metre|newsmeter|deccan|navbharat|eenadu|sakshi|mathrubhumi|manorama|"
-            r"dainik|jagran|amar|ujala|rajasthan|patrika|divya|bhaskar|lokmat|sakal|"
-            r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|dt\\s+next|"
-            r"dinamani|dinakaran|standard|journal|latestly|statesman|observer|mirror|"
-            r"chronicle|sentinel|pioneer|quint|firstpost|theprint|scroll|"
-            r"cruelty|credit|image|photo|video|streamer|twitch|whatsapp|telegram|"
-            r"delivery|passenger|passengers|owner|store|shop|muslim|rohingya|centres|"
-            r"reserves|landscapes|pressed|revealed|investigations|interrogation|"
-            r"identified|discussion|discussions|stated|scent|squad|once|cases|"
-            r"people|persons|suspects|accused|convict|convicts|offender|offenders|"
-            r"boy|girl|man|woman|men|women|couple|family|resident|residents|"
-            r"encounter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
-            r"morning|evening|night|march|april|january|february|may|june|july|"
-            r"august|september|october|november|december|pangolin|leopard|tiger|"
-            r"elephant|rhinoceros|rhino|turtle|tortoise|snake|crocodile|ivory|"
-            r"skin|skins|horn|horns|tusk|tusks|claw|claws|bone|bones|scale|scales|"
-            r"sanders|sander|coral|corals|quill|quills|gibbon|gibbons|"
-            r"heroin|smack|ganja|drug|drugs|narcotic|narcotics|ndps|"
-            r"escobar|pablo|hippo|hippos|sho|cbi|ncb|stf|ncrb|dfo|acf|rfo|division|force|task)\b",
-            re.IGNORECASE,
-        )
-        _number_word = re.compile(
-            r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
-            r"fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|several|many|few|"
-            r"multiple|numerous|duo|trio)(?:\s|$)",
-            re.IGNORECASE,
-        )
         for person in raw_persons:
-            if _start_block.match(person):
-                continue
-            if _contains_block.search(person):
-                continue
-            words = person.split()
-            if all(len(w.strip(".")) <= 1 for w in words):
-                continue
-            if re.match(r"^\d+", person):
-                continue
-            if _number_word.match(person.strip()):
-                continue
-            # Skip all-caps short strings (acronyms/sources) or single short words
-            if len(person) <= 5 and person == person.upper():
-                continue
-            if len(person) <= 4:
-                continue
-            # Skip if contains common verbs/phrases indicating sentence fragment
-            if re.search(r"\b(?:ran|went|came|said|told|asked|made|took|gave|got|saw|"
-                         r"found|knew|thought|called|tried|used|turned|started|moved|"
-                         r"brought|kept|held|sent|happened|appeared|seemed|became|"
-                         r"revealed|pressed|stated|convicted|sentenced|busted|raided|"
-                         r"confiscated|caught|nabbed|apprehended|smuggled|traded|is|are|"
-                         r"towards|against|behind|before|between)\b", person, re.IGNORECASE):
-                continue
-            # Must have at least one word with 2+ alphabetic chars
-            if not any(len(re.sub(r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]", "", w)) >= 2 for w in words):
-                continue
-            # Skip if it looks like a known Indian location/city name (not a person)
-            from app.utils.location_data import DISTRICT_TO_STATE, INDIA_STATES
-            person_lower = person.lower().strip()
-            if person_lower in DISTRICT_TO_STATE or person_lower in INDIA_STATES:
+            if self._is_bad_person(person):
                 continue
             involved_persons.append(person)
             if len(involved_persons) >= 8:
@@ -1481,19 +1512,62 @@ class HybridIntelligenceEngine:
         return points
 
     @staticmethod
-    def _likely_smuggling_route(state: str, district: str, network_indicator: bool) -> str:
+    def _likely_smuggling_route(state: str, district: str, network_indicator: bool, species: list[str] | None = None) -> str:
         state_norm = (state or "").strip().lower()
         district_norm = (district or "").strip().lower()
+        species_set = {s.lower() for s in (species or [])}
         if not state_norm:
             return "Potential interstate movement route not yet clear."
+
+        # Species-specific known trafficking corridors (TRAFFIC/WCCB documented)
+        SPECIES_ROUTES = {
+            "tiger": {
+                "madhya pradesh": "MP → Rajasthan → Gujarat border or MP → UP → Nepal corridor",
+                "uttarakhand": "Corbett/Rajaji belt → UP/Delhi via NH-58/NH-34",
+                "maharashtra": "Tadoba/Melghat → Nagpur rail hub → Delhi/international",
+                "karnataka": "Bandipur/Nagarhole → Tamil Nadu/Kerala → port cities",
+            },
+            "red sanders": {
+                "andhra pradesh": "Seshachalam Hills (Chittoor/Kadapa) → Chennai port → SE Asia/China",
+                "tamil nadu": "TN coast → Sri Lanka transit or Chennai/Tuticorin port → export",
+                "telangana": "Telangana → AP border → Chennai port",
+            },
+            "pangolin": {
+                "assam": "NE India → Myanmar border → China/Vietnam",
+                "manipur": "Manipur/Nagaland → Myanmar → SE Asian markets",
+                "odisha": "Odisha → Kolkata → international via Chittagong or air cargo",
+                "jharkhand": "Jharkhand/Chhattisgarh forests → Delhi/Mumbai via rail",
+            },
+            "elephant": {
+                "assam": "Kaziranga belt → ivory processing via NE border routes",
+                "kerala": "Kerala/Tamil Nadu border → ivory carving hubs in Rajasthan/Gujarat",
+                "karnataka": "Southern Karnataka → Tamil Nadu → coastal export",
+            },
+        }
+
+        # Check for species-specific route first
+        for sp in species_set:
+            routes = SPECIES_ROUTES.get(sp, {})
+            if state_norm in routes:
+                route_detail = routes[state_norm]
+                base = f"Known {sp} trafficking corridor: {route_detail}."
+                if network_indicator:
+                    return f"{base} Organized network detected — coordinate with WCCB and border agencies."
+                return base
+
+        # General geographic route logic
         border_hubs = {"assam", "west bengal", "sikkim", "arunachal pradesh", "nagaland", "manipur", "mizoram", "tripura", "jammu and kashmir", "ladakh", "punjab", "rajasthan", "gujarat"}
         coastal_hubs = {"kerala", "tamil nadu", "andhra pradesh", "goa", "maharashtra", "odisha", "west bengal", "gujarat"}
-        if state_norm in border_hubs:
-            base = "Likely border-linked corridor into interstate or cross-border trafficking chain."
+        ne_states = {"assam", "manipur", "nagaland", "mizoram", "tripura", "arunachal pradesh", "meghalaya", "sikkim"}
+
+        if state_norm in ne_states:
+            base = "Northeast corridor: likely cross-border movement via Myanmar/Bangladesh/Nepal routes."
+        elif state_norm in border_hubs:
+            base = "Border-linked corridor into interstate or cross-border trafficking chain."
         elif state_norm in coastal_hubs:
-            base = "Likely coastal transit route through transport and port-linked channels."
+            base = "Coastal transit route through port-linked channels (Chennai, Mumbai, Tuticorin, Kochi)."
         else:
-            base = "Likely inland interstate movement through road and rail logistics corridors."
+            base = "Inland interstate movement through road and rail logistics corridors."
         if network_indicator:
             return f"{base} District signal: {district_norm.title() if district_norm else 'unspecified'} indicates organized relay movement."
         return base
@@ -1545,6 +1619,7 @@ class HybridIntelligenceEngine:
         *,
         title: str,
         summary: str,
+        source: str = "",
         prior_district_hits: int = 0,
         prior_source_hits: int = 0,
     ) -> IntelligenceResult:
@@ -1572,30 +1647,18 @@ class HybridIntelligenceEngine:
                 reason="empty",
             )
 
-        classifier = self._get_classifier()
-        if classifier is False:
-            score_map = self._fallback_score_map(text)
+        score_map = self._setfit_classifier.predict_score_map(text)
+        if score_map is None:
+            classifier = self._get_classifier()
         else:
+            classifier = None
+
+        if score_map is None and classifier is False:
+            score_map = self._fallback_score_map(text)
+        elif score_map is None:
             zs = classifier(
                 text,
-                candidate_labels=[
-                    "wildlife poaching",
-                    "wildlife smuggling",
-                    "illegal wildlife trade",
-                    "ivory trade",
-                    "tiger skin seizure",
-                    "rhino horn trafficking",
-                    "exotic bird trafficking",
-                    "illegal fishing",
-                    "forest hunting gang",
-                    "habitat destruction",
-                    "animal cruelty",
-                    "snake venom trade",
-                    "red sanders smuggling",
-                    "not wildlife crime",
-                    "incident in India",
-                    "incident outside India",
-                ],
+                candidate_labels=CLASSIFIER_LABELS,
                 hypothesis_template="This report concerns {}.",
                 multi_label=True,
             )
@@ -1716,6 +1779,15 @@ class HybridIntelligenceEngine:
             evidence_strength=evidence_strength,
             operational_details=operational_details,
         )
+        # Apply source credibility weighting
+        if source:
+            src_key = source.strip().lower()
+            cred = next(
+                (v for k, v in SOURCE_CREDIBILITY.items() if k in src_key),
+                _SOURCE_DEFAULT,
+            )
+            # Nudge confidence ±5% based on source reliability
+            confidence = max(0.0, min(1.0, confidence + (cred - 0.75) * 0.20))
         if strict_mode:
             effective_ai_threshold = min(0.98, settings.ai_threshold + 0.04)
             baseline_accept = confidence >= effective_ai_threshold and crime_type != "unknown"
@@ -1768,6 +1840,7 @@ class HybridIntelligenceEngine:
             state=state,
             district=district,
             network_indicator=network_indicator,
+            species=species,
         )
         enforcement_recommendation = self._enforcement_recommendation(
             risk_score=risk_score,
@@ -1790,6 +1863,26 @@ class HybridIntelligenceEngine:
             network_indicator=network_indicator,
             repeat_indicator=repeat_indicator,
         )
+        llm_summary = self._summarizer.generate(
+            article_text=source_text,
+            species=species,
+            state=state,
+            district=district,
+            suspects=involved_persons,
+            crime_type=crime_type,
+            default_summary=summary_text,
+            default_points=intel_points,
+            default_route=likely_smuggling_route,
+            default_recommendation=enforcement_recommendation,
+            default_confidence_explanation=confidence_explanation,
+        )
+        summary_text = str(llm_summary.get("summary") or summary_text)
+        key_facts = llm_summary.get("key_facts")
+        if isinstance(key_facts, list):
+            intel_points = [str(item) for item in key_facts if str(item).strip()]
+        likely_smuggling_route = str(llm_summary.get("smuggling_route") or likely_smuggling_route)
+        enforcement_recommendation = str(llm_summary.get("recommendation") or enforcement_recommendation)
+        confidence_explanation = str(llm_summary.get("confidence_explanation") or confidence_explanation)
 
         reason = (
             f"poach_prob={poach_prob:.2f}, rule_score={rule_score:.2f}, keyword_hits={keyword_hits}, "

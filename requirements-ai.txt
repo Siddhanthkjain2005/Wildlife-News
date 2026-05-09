@@ -1,0 +1,6 @@
+transformers==4.49.0
+sentence-transformers==3.4.1
+torch>=2.2,<3
+llama-cpp-python>=0.2.90
+setfit>=1.0.3
+gliner>=0.2.8

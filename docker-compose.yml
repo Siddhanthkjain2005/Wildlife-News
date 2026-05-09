@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wildlife-api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://wildlife:wildlife@db:5432/wildlife
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_ORIGIN: http://localhost:5173
+    volumes:
+      - wildlife_data:/data
+      - wildlife_logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: wildlife-db
+    environment:
+      POSTGRES_DB: wildlife
+      POSTGRES_USER: wildlife
+      POSTGRES_PASSWORD: wildlife
+    ports:
+      - "5432:5432"
+    volumes:
+      - wildlife_postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: wildlife-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - wildlife_redis:/data
+    restart: unless-stopped
+
+volumes:
+  wildlife_data:
+  wildlife_logs:
+  wildlife_postgres:
+  wildlife_redis:

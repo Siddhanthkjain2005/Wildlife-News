@@ -55,6 +55,8 @@ class WildlifeCrimePredictor:
         self._network_clusters: list[dict[str, Any]] = []
         self._person_frequency: list[dict[str, Any]] = []
         self._weekly_forecast: dict[str, Any] = {}
+        self._seasonal_analysis: dict[str, Any] = {}
+        self._smuggling_corridors: list[dict[str, Any]] = []
         self._model_metrics: dict[str, Any] = {}
         self._incremental_count: int = 0
 
@@ -200,7 +202,13 @@ class WildlifeCrimePredictor:
         # 9. Weekly forecast
         self._weekly_forecast = self._forecast_weekly_incidents(rows)
 
-        # 10. Model metrics
+        # 10. Seasonal crime patterns
+        self._seasonal_analysis = self._compute_seasonal_analysis(rows)
+
+        # 11. Smuggling corridor detection
+        self._smuggling_corridors = self._detect_smuggling_corridors(rows)
+
+        # 12. Model metrics
         duration = (datetime.utcnow() - start).total_seconds()
         self._model_metrics = {
             "training_duration_seconds": round(duration, 2),
@@ -641,6 +649,104 @@ class WildlifeCrimePredictor:
             "total_incidents": sum(counts),
         }
 
+    # ── Seasonal Analysis ──────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_seasonal_analysis(rows: list[NewsItem]) -> dict[str, Any]:
+        """Monthly crime heatmap with seasonal markers."""
+        monthly: dict[int, list[int]] = defaultdict(list)
+        for row in rows:
+            month = row.published_at.month
+            monthly[month].append(row.risk_score)
+
+        SEASON_MAP = {
+            1: "winter", 2: "winter", 3: "summer", 4: "summer",
+            5: "summer", 6: "monsoon", 7: "monsoon", 8: "monsoon",
+            9: "monsoon", 10: "post_monsoon", 11: "winter", 12: "winter",
+        }
+        MONTH_NAMES = {
+            1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+            7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+        }
+
+        monthly_data = []
+        for m in range(1, 13):
+            risks = monthly.get(m, [])
+            monthly_data.append({
+                "month": MONTH_NAMES[m],
+                "month_num": m,
+                "season": SEASON_MAP[m],
+                "incident_count": len(risks),
+                "avg_risk": round(sum(risks) / len(risks), 1) if risks else 0,
+                "max_risk": max(risks) if risks else 0,
+            })
+
+        # Find peak and low months
+        if monthly_data:
+            peak = max(monthly_data, key=lambda x: x["incident_count"])
+            low = min((m for m in monthly_data if m["incident_count"] > 0),
+                      key=lambda x: x["incident_count"], default=monthly_data[0])
+        else:
+            peak = low = {"month": "Unknown", "incident_count": 0}
+
+        # Season aggregates
+        season_agg: dict[str, int] = defaultdict(int)
+        for md in monthly_data:
+            season_agg[md["season"]] += md["incident_count"]
+
+        return {
+            "monthly": monthly_data,
+            "peak_month": peak["month"],
+            "peak_count": peak["incident_count"],
+            "low_month": low["month"],
+            "low_count": low["incident_count"],
+            "season_totals": dict(season_agg),
+            "peak_season": max(season_agg, key=season_agg.get) if season_agg else "unknown",
+        }
+
+    # ── Smuggling Corridor Detection ──────────────────────────────────
+
+    @staticmethod
+    def _detect_smuggling_corridors(rows: list[NewsItem]) -> list[dict[str, Any]]:
+        """Identify likely smuggling routes via state-pair and species co-occurrence."""
+        # Build route patterns from articles mentioning multiple states or transport
+        route_pairs: dict[tuple[str, str], dict] = defaultdict(lambda: {
+            "count": 0, "species": Counter(), "risk_sum": 0,
+        })
+
+        for row in rows:
+            state = (row.state or "").strip().title()
+            if not state:
+                continue
+            # Check for route mentions in text
+            text = f"{row.title or ''} {row.summary or ''}".lower()
+            route_keywords = ["from", "to", "smuggled", "transported", "interstate",
+                              "cross-border", "via", "route", "corridor", "trafficking"]
+            has_route = any(kw in text for kw in route_keywords)
+
+            if has_route and row.network_indicator:
+                # Try to find destination/origin mentions
+                species_list = [s.strip().lower() for s in (row.species or "").split(",") if s.strip()]
+                # Use this as a state-level route indicator
+                for sp in species_list:
+                    key = (state, sp)
+                    route_pairs[key]["count"] += 1
+                    route_pairs[key]["risk_sum"] += row.risk_score
+
+        corridors = []
+        for (state, species), data in route_pairs.items():
+            if data["count"] >= 1:
+                corridors.append({
+                    "origin_state": state,
+                    "species": species,
+                    "incident_count": data["count"],
+                    "avg_risk": round(data["risk_sum"] / data["count"], 1),
+                    "threat_level": "high" if data["count"] >= 3 else "moderate" if data["count"] >= 2 else "low",
+                })
+
+        corridors.sort(key=lambda x: (-x["incident_count"], -x["avg_risk"]))
+        return corridors[:20]
+
     # ── Persistence ───────────────────────────────────────────────────
 
     def _save_model(self) -> None:
@@ -658,6 +764,8 @@ class WildlifeCrimePredictor:
                 "network_clusters": self._network_clusters,
                 "person_frequency": self._person_frequency,
                 "weekly_forecast": self._weekly_forecast,
+                "seasonal_analysis": self._seasonal_analysis,
+                "smuggling_corridors": self._smuggling_corridors,
                 "model_metrics": self._model_metrics,
                 "incremental_count": self._incremental_count,
             }
@@ -688,6 +796,8 @@ class WildlifeCrimePredictor:
             self._network_clusters = data.get("network_clusters", [])
             self._person_frequency = data.get("person_frequency", [])
             self._weekly_forecast = data.get("weekly_forecast", {})
+            self._seasonal_analysis = data.get("seasonal_analysis", {})
+            self._smuggling_corridors = data.get("smuggling_corridors", [])
             self._model_metrics = data.get("model_metrics", {})
             self._incremental_count = data.get("incremental_count", 0)
             logger.info("Model state loaded: trained=%s, samples=%d", self._trained, self._training_sample_count)
@@ -709,6 +819,8 @@ class WildlifeCrimePredictor:
             "crime_type_distribution": self._crime_type_distribution,
             "network_clusters": self._network_clusters[:5],
             "top_persons_of_interest": self._person_frequency[:10],
+            "seasonal_analysis": self._seasonal_analysis,
+            "smuggling_corridors": self._smuggling_corridors[:10],
         }
 
     def get_hotspots(self) -> list[dict[str, Any]]:

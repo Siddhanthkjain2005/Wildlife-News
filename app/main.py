@@ -1,4 +1,5 @@
 from datetime import timezone, date, datetime, timedelta
+import hmac
 import json
 import re
 from difflib import SequenceMatcher
@@ -20,13 +21,24 @@ import requests
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api import admin, dashboard, exports, graph, health, incidents, predictions, rag, search, websocket
 from app.core.config import settings
 from app.core.backup import create_snapshot_export, create_sqlite_backup, sqlite_integrity_check, sqlite_path_from_url
-from app.core.cache import TTLCache
+from app.core.cache import build_cache
 from app.core.database import SessionLocal, diagnose_database, get_db, init_database
 from app.core.logger import get_logger, init_logging
+from app.core.realtime import build_event_bus
 from app.core.retry import retry_call
-from app.core.security import RateLimiter, admin_sessions, extract_admin_token, require_admin_access
+from app.core.security import (
+    RateLimiter,
+    admin_sessions,
+    authenticate_admin,
+    create_jwt_tokens,
+    decode_jwt_token,
+    extract_admin_token,
+    has_permission,
+    require_admin_access,
+)
 from app.excel_exporter import append_live_event_to_excel, export_news_to_excel
 from app.i18n import UI_TEXT, get_ui_text
 from app.models import Alert, AuditLog, DistrictStat, Entity, ExternalSignal, NewsItem, Report, SourceStat, SpeciesStat, SyncLog, Watchlist
@@ -91,6 +103,16 @@ def _configure_cors() -> None:
 _configure_cors()
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
+app.include_router(admin.router)
+app.include_router(dashboard.router)
+app.include_router(exports.router)
+app.include_router(graph.router)
+app.include_router(health.router)
+app.include_router(incidents.router)
+app.include_router(predictions.router)
+app.include_router(rag.router)
+app.include_router(search.router)
+app.include_router(websocket.router)
 
 init_logging()
 app_logger = get_logger("app.main")
@@ -109,7 +131,12 @@ sync_state_store = SyncStateStore()
 runtime_diagnostics: dict[str, object] = {"ai_model_ready": False, "startup_time": None}
 rate_limiter = RateLimiter(settings.api_rate_limit_per_minute)
 login_rate_limiter = RateLimiter(settings.login_rate_limit_per_minute)
-api_cache = TTLCache(settings.cache_ttl_seconds)
+api_cache = build_cache(
+    settings.cache_ttl_seconds,
+    redis_url=settings.redis_url,
+    key_prefix=settings.redis_key_prefix,
+)
+event_bus = build_event_bus(settings.redis_url, channel_prefix=settings.redis_key_prefix)
 DEFAULT_WATCHLISTS = [
     ("poaching", "threat"),
     ("tiger skin", "species"),
@@ -328,18 +355,17 @@ class AdminLoginPayload(BaseModel):
     password: str
 
 
+class AdminRefreshPayload(BaseModel):
+    refresh_token: str = ""
+
+
 @app.middleware("http")
 async def api_rate_limiter(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api") and path != "/api/admin/login" and not path.startswith("/api/public/"):
+    if path.startswith("/api") and path not in {"/api/admin/login", "/api/admin/refresh"} and not path.startswith("/api/public/"):
         if request.method.upper() != "OPTIONS":
             try:
-                require_admin_access(
-                    request,
-                    x_admin_token=request.headers.get("X-Admin-Token"),
-                    x_api_key=request.headers.get("X-API-Key"),
-                    authorization=request.headers.get("Authorization"),
-                )
+                _require_api_permission(request, _permission_for_api_path(path))
             except HTTPException as err:
                 return JSONResponse(status_code=err.status_code, content={"detail": err.detail})
         client = request.client.host if request.client else "unknown"
@@ -356,6 +382,50 @@ def _client_ip(request: Request | None) -> str:
     if request is None or request.client is None:
         return ""
     return str(request.client.host or "")[:64]
+
+
+def _permission_for_api_path(path: str) -> str:
+    if path.startswith("/api/admin"):
+        return "admin:access"
+    if path.startswith("/api/export"):
+        return "export:download"
+    if path.startswith("/api/search") or path.startswith("/api/similar"):
+        return "search:query"
+    if path.startswith("/api/rag"):
+        return "search:query"
+    if path.startswith("/api/graph"):
+        return "graph:read"
+    return "read:incidents"
+
+
+def _require_api_permission(request: Request, permission: str) -> None:
+    provided_api_key = (
+        request.headers.get("X-API-Key")
+        or str(request.query_params.get("api_key") or "")
+    ).strip()
+    if settings.admin_api_key and provided_api_key and hmac.compare_digest(provided_api_key, settings.admin_api_key):
+        return
+
+    admin_control_enabled = bool(
+        settings.admin_api_key or settings.admin_token or settings.admin_password or settings.admin_password_hash
+    )
+    if not admin_control_enabled:
+        return
+
+    token = extract_admin_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if settings.admin_token and token == settings.admin_token:
+        return
+    if admin_sessions.validate(token):
+        return
+
+    payload = decode_jwt_token(token)
+    if payload is None or str(payload.get("type") or "") != "access":
+        raise HTTPException(status_code=401, detail="Invalid or expired access token.")
+    role = str(payload.get("role") or "")
+    if not has_permission(role, permission):
+        raise HTTPException(status_code=403, detail="Insufficient permissions.")
 
 
 _AUDIT_LOCK_LOG_INTERVAL_SECONDS = 60.0
@@ -1153,6 +1223,7 @@ def _register_incident_event(event: dict[str, str | int | float]) -> None:
     except OSError as err:
         sync_logger.error("Live Excel append failed: %s", err)
     sync_state_store.append_incident(enriched)
+    event_bus.publish("incidents", {"type": "incident", "payload": enriched})
 
 
 def _complete_sync_success(trigger: str, stats: dict[str, object], excel_rows: int, duration: float) -> None:
@@ -1179,12 +1250,32 @@ def _complete_sync_success(trigger: str, stats: dict[str, object], excel_rows: i
         status="ok",
         notes=f"trigger={trigger}; scanned={stats.get('scanned', 0)}; inserted={stats.get('inserted', 0)}; updated={stats.get('updated', 0)}",
     )
+    event_bus.publish(
+        "sync_status",
+        {
+            "type": "sync_completed",
+            "trigger": trigger,
+            "duration_seconds": round(duration, 3),
+            "stats": enriched_stats,
+            "finished_at": sync_state_store.snapshot().get("finished_at"),
+        },
+    )
     sync_logger.info("Sync completed | trigger=%s | duration=%.2fs | stats=%s", trigger, duration, enriched_stats)
 
 
 def _complete_sync_error(trigger: str, error_message: str, duration: float) -> None:
     sync_state_store.fail(trigger=trigger, duration_seconds=duration, error=error_message)
     _audit(actor="system", action="sync_trigger", status="error", notes=f"trigger={trigger}; error={error_message}")
+    event_bus.publish(
+        "sync_status",
+        {
+            "type": "sync_failed",
+            "trigger": trigger,
+            "duration_seconds": round(duration, 3),
+            "error": error_message,
+            "finished_at": sync_state_store.snapshot().get("finished_at"),
+        },
+    )
     sync_logger.error("Sync failed | trigger=%s | duration=%.2fs | error=%s", trigger, duration, error_message)
 
 
@@ -1250,6 +1341,15 @@ def _run_sync_job(trigger: str) -> None:
             stats, rows = _sync_once(db)
             alert_dispatch = alert_engine.dispatch_pending_alerts(db=db)
             stats["alerts_dispatched"] = alert_dispatch
+            if int((alert_dispatch or {}).get("processed", 0)) > 0:
+                event_bus.publish(
+                    "alerts",
+                    {
+                        "type": "alerts_dispatched",
+                        "trigger": trigger,
+                        "stats": alert_dispatch,
+                    },
+                )
             _persist_sync_logs(db=db, started_at=started_at, ended_at=datetime.utcnow(), stats=stats)
         duration = perf_counter() - started
         _complete_sync_success(trigger=trigger, stats=stats, excel_rows=rows, duration=duration)
@@ -1274,7 +1374,16 @@ def _scheduled_sync_job() -> None:
 def _scheduled_alert_dispatch() -> None:
     try:
         with SessionLocal() as db:
-            alert_engine.dispatch_pending_alerts(db=db, limit=100)
+            stats = alert_engine.dispatch_pending_alerts(db=db, limit=100)
+            if int((stats or {}).get("processed", 0)) > 0:
+                event_bus.publish(
+                    "alerts",
+                    {
+                        "type": "alerts_dispatched",
+                        "trigger": "scheduled_alert_dispatch",
+                        "stats": stats,
+                    },
+                )
     except Exception as err:
         _audit(actor="system", action="alert_dispatch", status="error", notes=str(err))
         sync_logger.error("Scheduled alert dispatch failed: %s", err)
@@ -1472,23 +1581,27 @@ def _cleanup_existing_articles() -> dict:
                         item.involved_persons = new_persons
                         persons_cleaned += 1
 
-                # --- Fix state: extract from title using location dictionary ---
+                # --- Fix state: extract from title AND summary using location dictionary ---
                 if not (item.state or "").strip():
                     title = item.title or ""
+                    summary = item.summary or ""
                     found_state = ""
                     found_district = ""
-                    # Check both lowered and original text
-                    for text in [title.lower(), title]:
-                        for district, state in DISTRICT_TO_STATE.items():
-                            if district in text:
-                                found_state = state
-                                found_district = district
+                    # Search title first (higher signal), then summary
+                    for raw_text in [title, summary]:
+                        for text in [raw_text.lower(), raw_text]:
+                            for district, state in DISTRICT_TO_STATE.items():
+                                if district in text:
+                                    found_state = state
+                                    found_district = district
+                                    break
+                            if found_state:
                                 break
-                        if found_state:
-                            break
-                        for st in INDIA_STATES:
-                            if st in text:
-                                found_state = st
+                            for st in INDIA_STATES:
+                                if st in text:
+                                    found_state = st
+                                    break
+                            if found_state:
                                 break
                         if found_state:
                             break
@@ -1699,21 +1812,31 @@ def login_submit(
             {"request": request, "error": "Too many login attempts. Try again later.", "info": ""},
             status_code=429,
         )
-    try:
-        token = admin_sessions.create(username=username.strip(), password=password)
-    except HTTPException:
+    if not authenticate_admin(username=username.strip(), password=password):
         _audit(actor=username.strip() or "unknown", action="login_attempt", status="error", ip=ip, notes="invalid_credentials")
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Invalid username or password.", "info": ""},
             status_code=401,
         )
+    tokens = create_jwt_tokens(
+        user_id=username.strip() or settings.admin_username,
+        role=settings.default_user_role,
+    )
     _audit(actor=username.strip() or "admin", action="login_attempt", status="ok", ip=ip, notes="session_created")
     redirect = RedirectResponse(url="/admin/settings", status_code=303)
     redirect.set_cookie(
         key="admin_session",
-        value=token,
-        max_age=max(300, settings.admin_session_minutes * 60),
+        value=str(tokens["access_token"]),
+        max_age=max(60, settings.jwt_access_minutes * 60),
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    redirect.set_cookie(
+        key="admin_refresh",
+        value=str(tokens["refresh_token"]),
+        max_age=max(3600, settings.jwt_refresh_days * 24 * 60 * 60),
         httponly=True,
         secure=False,
         samesite="lax",
@@ -1729,6 +1852,7 @@ def logout(request: Request):
     _audit(actor="admin", action="logout", status="ok", ip=_client_ip(request), notes="")
     redirect = RedirectResponse(url="/login", status_code=303)
     redirect.delete_cookie("admin_session")
+    redirect.delete_cookie("admin_refresh")
     return redirect
 
 
@@ -1744,21 +1868,61 @@ def admin_login(payload: AdminLoginPayload, request: Request, response: Response
     if not login_rate_limiter.is_allowed(f"api-login:{ip}:{login_actor}"):
         _audit(actor=payload.username.strip() or "unknown", action="login_attempt", status="blocked", ip=ip, notes="api_rate_limited")
         raise HTTPException(status_code=429, detail="Too many login attempts.")
-    try:
-        token = admin_sessions.create(username=payload.username.strip(), password=payload.password)
-    except HTTPException:
+    if not authenticate_admin(username=payload.username.strip(), password=payload.password):
         _audit(actor=payload.username.strip() or "unknown", action="login_attempt", status="error", ip=ip, notes="invalid_credentials")
-        raise
+        raise HTTPException(status_code=401, detail="Invalid admin credentials.")
+    tokens = create_jwt_tokens(
+        user_id=payload.username.strip() or settings.admin_username,
+        role=settings.default_user_role,
+    )
     response.set_cookie(
         key="admin_session",
-        value=token,
-        max_age=max(300, settings.admin_session_minutes * 60),
+        value=str(tokens["access_token"]),
+        max_age=max(60, settings.jwt_access_minutes * 60),
         httponly=True,
         secure=False,
         samesite="lax",
     )
-    _audit(actor=payload.username.strip() or "admin", action="login_attempt", status="ok", ip=ip, notes="api_session_created")
-    return {"access_token": token, "token_type": "bearer", "expires_in_seconds": max(300, settings.admin_session_minutes * 60)}
+    response.set_cookie(
+        key="admin_refresh",
+        value=str(tokens["refresh_token"]),
+        max_age=max(3600, settings.jwt_refresh_days * 24 * 60 * 60),
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    _audit(actor=payload.username.strip() or "admin", action="login_attempt", status="ok", ip=ip, notes="api_jwt_issued")
+    return tokens
+
+
+@app.post("/api/admin/refresh")
+def admin_refresh(request: Request, response: Response, payload: AdminRefreshPayload | None = None):
+    refresh_token = ((payload.refresh_token if payload else "") or request.cookies.get("admin_refresh") or "").strip()
+    decoded = decode_jwt_token(refresh_token)
+    if decoded is None or str(decoded.get("type") or "") != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
+
+    user_id = str(decoded.get("sub") or settings.admin_username)
+    role = str(decoded.get("role") or settings.default_user_role)
+    tokens = create_jwt_tokens(user_id=user_id, role=role)
+    response.set_cookie(
+        key="admin_session",
+        value=str(tokens["access_token"]),
+        max_age=max(60, settings.jwt_access_minutes * 60),
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    response.set_cookie(
+        key="admin_refresh",
+        value=str(tokens["refresh_token"]),
+        max_age=max(3600, settings.jwt_refresh_days * 24 * 60 * 60),
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    _audit(actor=user_id, action="token_refresh", status="ok", ip=_client_ip(request), notes="")
+    return tokens
 
 
 @app.post("/api/admin/logout")
@@ -1768,6 +1932,7 @@ def admin_logout(request: Request, response: Response, _: None = Depends(require
         admin_sessions.destroy(token)
     _audit(actor="admin", action="api_logout", status="ok", ip=_client_ip(request), notes="session_cleared")
     response.delete_cookie("admin_session")
+    response.delete_cookie("admin_refresh")
     return {"ok": True}
 
 
@@ -1779,510 +1944,9 @@ def security_status(_: None = Depends(require_admin_access)):
         "rate_limit_per_minute": settings.api_rate_limit_per_minute,
         "api_key_enabled": bool(settings.admin_api_key),
         "cache_ttl_seconds": settings.cache_ttl_seconds,
-    }
-
-
-@app.get("/admin/settings")
-def admin_settings_page(request: Request):
-    try:
-        require_admin_access(request)
-    except HTTPException:
-        return RedirectResponse(url="/login", status_code=303)
-    cache_state = api_cache.snapshot()
-    return templates.TemplateResponse(
-        "admin_settings.html",
-        {
-            "request": request,
-            "settings_view": {
-                "enabled_providers": settings.enabled_providers,
-                "sync_interval_minutes": settings.sync_interval_minutes,
-                "cache_ttl_seconds": settings.cache_ttl_seconds,
-                "backup_interval_minutes": settings.backup_interval_minutes,
-                "admin_auth_enabled": bool(settings.admin_token or settings.admin_password or settings.admin_password_hash),
-                "admin_api_key_enabled": bool(settings.admin_api_key),
-            },
-            "cache_state": cache_state,
-            "sync_state": _sync_snapshot(),
-        },
-    )
-
-
-@app.post("/admin/settings/update")
-def admin_settings_update(
-    request: Request,
-    enabled_providers: str = Form(...),
-    sync_interval_minutes: int = Form(...),
-    cache_ttl_seconds: int = Form(...),
-    backup_interval_minutes: int = Form(...),
-    _: None = Depends(require_admin_access),
-):
-    settings.enabled_providers = enabled_providers.strip()
-    settings.sync_interval_minutes = max(1, min(180, int(sync_interval_minutes)))
-    settings.cache_ttl_seconds = max(5, min(900, int(cache_ttl_seconds)))
-    settings.backup_interval_minutes = max(10, min(1440, int(backup_interval_minutes)))
-    api_cache.ttl_seconds = settings.cache_ttl_seconds
-    if scheduler.running:
-        _reschedule_sync_job(settings.sync_interval_minutes)
-        scheduler.add_job(
-            _scheduled_backup_job,
-            trigger="interval",
-            minutes=settings.backup_interval_minutes,
-            id="poaching-db-backup",
-            replace_existing=True,
-            max_instances=1,
-        )
-    _clear_runtime_cache()
-    _audit(
-        actor="admin",
-        action="config_change",
-        status="ok",
-        ip=_client_ip(request),
-        notes=(
-            f"providers={settings.enabled_providers}; sync_interval={settings.sync_interval_minutes}; "
-            f"cache_ttl={settings.cache_ttl_seconds}; backup_interval={settings.backup_interval_minutes}"
-        ),
-    )
-    return RedirectResponse(url="/admin/settings", status_code=303)
-
-
-@app.post("/admin/settings/cache-clear")
-def admin_cache_clear(request: Request, _: None = Depends(require_admin_access)):
-    _clear_runtime_cache()
-    _audit(actor="admin", action="cache_clear", status="ok", ip=_client_ip(request), notes="")
-    return RedirectResponse(url="/admin/settings", status_code=303)
-
-
-@app.post("/admin/settings/run-backup")
-def admin_run_backup(request: Request, _: None = Depends(require_admin_access)):
-    result = _run_backup_now()
-    status = "ok" if result.get("ok") else "error"
-    _audit(
-        actor="admin",
-        action="manual_backup",
-        status=status,
-        ip=_client_ip(request),
-        notes=str(result.get("error") or f"backup={result.get('backup')}"),
-    )
-    return RedirectResponse(url="/admin/settings", status_code=303)
-
-
-@app.post("/admin/settings/test-telegram")
-def admin_test_telegram(request: Request, _: None = Depends(require_admin_access)):
-    ok = alert_engine._telegram_send("Wildlife Intelligence test alert from admin settings panel.")
-    _audit(
-        actor="admin",
-        action="alert_test_telegram",
-        status="ok" if ok else "error",
-        ip=_client_ip(request),
-        notes="",
-    )
-    return RedirectResponse(url="/admin/settings", status_code=303)
-
-
-@app.post("/admin/settings/test-email")
-def admin_test_email(request: Request, _: None = Depends(require_admin_access)):
-    ok = alert_engine._email_send(
-        "Wildlife Intelligence Test Email",
-        "This is a test email from Wildlife Crime Intelligence admin settings.",
-    )
-    _audit(
-        actor="admin",
-        action="alert_test_email",
-        status="ok" if ok else "error",
-        ip=_client_ip(request),
-        notes="",
-    )
-    return RedirectResponse(url="/admin/settings", status_code=303)
-
-
-@app.get("/api/admin/audit-logs")
-def admin_audit_logs(limit: int = 200, _: None = Depends(require_admin_access), db: Session = Depends(get_db)):
-    safe_limit = max(1, min(1000, limit))
-    rows = db.execute(select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(safe_limit)).scalars().all()
-    return [
-        {
-            "id": row.id,
-            "timestamp": row.timestamp.isoformat(),
-            "actor": row.actor,
-            "action": row.action,
-            "status": row.status,
-            "ip": row.ip,
-            "notes": row.notes,
-        }
-        for row in rows
-    ]
-
-
-@app.get("/api/news")
-def get_news(
-    db: Session = Depends(get_db),
-    lang: str = "",
-    min_score: float = settings.ai_threshold,
-    limit: int = 100,
-):
-    safe_limit = max(1, min(500, limit))
-    stmt = (
-        select(NewsItem)
-        .where(NewsItem.is_poaching.is_(True))
-        .where(NewsItem.confidence >= min_score)
-        .order_by(NewsItem.published_at.desc())
-        .limit(safe_limit)
-    )
-    stmt = _apply_today_news_scope(stmt)
-    if lang:
-        stmt = stmt.where(NewsItem.language == lang)
-
-    rows = db.execute(stmt).scalars().all()
-    return [
-        {
-            "id": row.id,
-            "title": row.title,
-            "article_summary": row.summary,
-            "source": row.source,
-            "url": row.url,
-            "open_url": f"/open/{row.id}",
-            "language": row.language,
-            "published_at": row.published_at.isoformat(),
-            "is_poaching": row.is_poaching,
-            "is_india": row.is_india,
-            "confidence": row.confidence,
-            "risk_score": row.risk_score,
-            "crime_type": row.crime_type,
-            "species": row.species,
-            "state": row.state,
-            "district": row.district,
-            "involved_persons": row.involved_persons,
-            "location": row.location,
-            "network_indicator": row.network_indicator,
-            "repeat_indicator": row.repeat_indicator,
-            "summary": row.intel_summary,
-            "two_line_summary": row.intel_summary,
-            "intel_points": _parse_intel_points(row.intel_points),
-            "key_intelligence_points": _parse_intel_points(row.intel_points),
-            "likely_smuggling_route": row.likely_smuggling_route,
-            "enforcement_recommendation": row.enforcement_recommendation
-            or _action_recommendation(
-                row.risk_score,
-                species=row.species,
-                crime_type=row.crime_type,
-                state=row.state,
-                district=row.district,
-                network_indicator=row.network_indicator,
-                repeat_indicator=row.repeat_indicator,
-            ),
-            "confidence_explanation": row.confidence_explanation or row.ai_reason,
-            "duplicate_confidence": row.duplicate_confidence,
-            "source_count": row.source_count,
-            "report_count": row.report_count,
-            "merged_sources": row.merged_sources,
-        }
-        for row in rows
-    ]
-
-
-@app.get("/api/live-incidents")
-def live_incidents(
-    db: Session = Depends(get_db),
-    since_id: int = 0,
-    min_score: float = settings.ai_threshold,
-    limit: int = 30,
-):
-    safe_limit = max(1, min(100, limit))
-    stmt = (
-        select(NewsItem)
-        .where(NewsItem.is_poaching.is_(True))
-        .where(NewsItem.confidence >= min_score)
-        .where(NewsItem.id > since_id)
-        .order_by(NewsItem.id.asc())
-        .limit(safe_limit)
-    )
-    stmt = _apply_today_news_scope(stmt)
-    rows = db.execute(stmt).scalars().all()
-    return [
-        {
-            "id": row.id,
-            "title": row.title,
-            "source": row.source,
-            "language": row.language,
-            "published_at": row.published_at.isoformat(),
-            "ai_score": row.confidence,
-            "severity": "critical" if row.risk_score >= 85 else ("high" if row.risk_score >= 70 else "medium"),
-            "risk_score": row.risk_score,
-            "crime_type": row.crime_type,
-            "species": row.species,
-            "state": row.state,
-            "district": row.district,
-            "involved_persons": row.involved_persons,
-            "two_line_summary": row.intel_summary,
-            "key_intelligence_points": _parse_intel_points(row.intel_points),
-            "likely_smuggling_route": row.likely_smuggling_route,
-            "enforcement_recommendation": row.enforcement_recommendation
-            or _action_recommendation(
-                row.risk_score,
-                species=row.species,
-                crime_type=row.crime_type,
-                state=row.state,
-                district=row.district,
-                network_indicator=row.network_indicator,
-                repeat_indicator=row.repeat_indicator,
-            ),
-            "confidence_explanation": row.confidence_explanation or row.ai_reason,
-            "duplicate_confidence": row.duplicate_confidence,
-            "source_count": row.source_count,
-            "report_count": row.report_count,
-            "merged_sources": row.merged_sources,
-            "url": row.url,
-            "open_url": f"/open/{row.id}",
-        }
-        for row in rows
-    ]
-
-
-@app.get("/api/officer-metrics")
-def officer_metrics(db: Session = Depends(get_db)):
-    data = _officer_metrics(db)
-    data["sync_running"] = _sync_snapshot()["running"]
-    return data
-
-
-@app.get("/api/dashboard-summary")
-def dashboard_summary(db: Session = Depends(get_db)):
-    key = _cache_key("dashboard_summary")
-    return _cache_get_or_compute(key, lambda: _dashboard_summary(db))
-
-
-@app.get("/api/map-data")
-def map_data(db: Session = Depends(get_db), limit: int = 400):
-    safe_limit = max(50, min(1200, limit))
-    rows = (
-        db.execute(
-            _apply_today_news_scope(
-                select(NewsItem)
-                .where(NewsItem.is_poaching.is_(True))
-                .order_by(NewsItem.published_at.desc())
-                .limit(safe_limit)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    markers = [_marker_from_news(row) for row in rows]
-    state_counts: dict[str, int] = {}
-    for row in rows:
-        state = (row.state or "").strip().title() or "Unknown"
-        state_counts[state] = state_counts.get(state, 0) + max(1, row.report_count)
-    heatmap = []
-    for state, count in sorted(state_counts.items(), key=lambda item: item[1], reverse=True):
-        lat, lng = centroid_for_state(state)
-        heatmap.append({"state": state, "count": count, "lat": lat, "lng": lng})
-    return {
-        "center": {"lat": INDIA_CENTER[0], "lng": INDIA_CENTER[1]},
-        "markers": markers,
-        "state_heatmap": heatmap,
-    }
-
-
-@app.get("/api/chart-data")
-def chart_data(db: Session = Depends(get_db)):
-    key = _cache_key("chart_data")
-
-    def _compute_chart_data():
-        now_utc = datetime.utcnow()
-        if _scope_from_start_enabled():
-            start_date = _start_from_utc()
-            window_days = max(1, (now_utc.date() - start_date.date()).days + 1)
-            aggregate_weekly = window_days > 90
-        else:
-            recent_30_count = int(
-                db.scalar(
-                    select(func.count())
-                    .select_from(NewsItem)
-                    .where(NewsItem.is_poaching.is_(True))
-                    .where(NewsItem.published_at >= (now_utc - timedelta(days=30)))
-                )
-                or 0
-            )
-            if recent_30_count >= 20:
-                window_days = 30
-            elif recent_30_count >= 8:
-                window_days = 120
-            else:
-                window_days = 365
-            start_date = now_utc - timedelta(days=window_days - 1)
-            aggregate_weekly = window_days > 90
-        rows_stmt = (
-            select(NewsItem)
-            .where(NewsItem.is_poaching.is_(True))
-            .where(NewsItem.published_at >= start_date)
-            .order_by(NewsItem.published_at.asc())
-        )
-        rows = db.execute(rows_stmt).scalars().all()
-
-        timeline: dict[str, dict[str, int]] = {}
-        state_totals: dict[str, int] = {}
-        species_totals: dict[str, int] = {}
-        source_totals: dict[str, dict[str, float]] = {}
-        crime_types: set[str] = set()
-        for row in rows:
-            if aggregate_weekly:
-                week_start = (row.published_at - timedelta(days=row.published_at.weekday())).date()
-                day = week_start.isoformat()
-            else:
-                day = row.published_at.date().isoformat()
-            bucket = timeline.setdefault(day, {"incidents": 0, "high_risk": 0})
-            bucket["incidents"] += 1
-            if row.risk_score > settings.risk_alert_threshold:
-                bucket["high_risk"] += 1
-            state_key = (row.state or "Unknown").strip().title() or "Unknown"
-            state_totals[state_key] = state_totals.get(state_key, 0) + 1
-            source_name = (row.source or "Unknown").strip() or "Unknown"
-            source_bucket = source_totals.setdefault(source_name, {"count": 0.0, "confidence_sum": 0.0})
-            source_bucket["count"] += 1.0
-            source_bucket["confidence_sum"] += float(row.confidence or 0.0)
-            incident_species = {
-                item.strip().lower()
-                for item in str(row.species or "").split(",")
-                if item.strip()
-            }
-            for species_name in incident_species:
-                species_totals[species_name] = species_totals.get(species_name, 0) + 1
-            if row.crime_type:
-                crime_types.add(row.crime_type)
-
-        species_rows = sorted(
-            [{"species": species, "count": count} for species, count in species_totals.items()],
-            key=lambda item: item["count"],
-            reverse=True,
-        )[:12]
-        source_rows = sorted(
-            [
-                {
-                    "source": source,
-                    "reliability_score": round(
-                        stats["confidence_sum"] / stats["count"], 4
-                    ) if stats["count"] > 0 else 0.0,
-                    "article_count": int(stats["count"]),
-                }
-                for source, stats in source_totals.items()
-            ],
-            key=lambda item: (item["reliability_score"], item["article_count"]),
-            reverse=True,
-        )[:12]
-
-        all_states = db.execute(
-            _apply_today_news_scope(
-                select(func.distinct(NewsItem.state))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.state != "")
-                .order_by(NewsItem.state.asc())
-            )
-        ).scalars().all()
-        all_sources = db.execute(
-            _apply_today_news_scope(
-                select(func.distinct(NewsItem.source))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.source != "")
-                .order_by(NewsItem.source.asc())
-            )
-        ).scalars().all()
-        all_crime_types = db.execute(
-            _apply_today_news_scope(
-                select(func.distinct(NewsItem.crime_type))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.crime_type != "")
-                .order_by(NewsItem.crime_type.asc())
-            )
-        ).scalars().all()
-        all_species = sorted(species_totals.keys())
-
-        timeline_labels = sorted(timeline.keys())
-        return {
-            "timeline": {
-                "labels": timeline_labels,
-                "incidents": [timeline[label]["incidents"] for label in timeline_labels],
-                "high_risk": [timeline[label]["high_risk"] for label in timeline_labels],
-                "window_days": window_days,
-                "granularity": "weekly" if aggregate_weekly else "daily",
-            },
-            "top_states": sorted(
-                [{"state": state, "count": count} for state, count in state_totals.items()],
-                key=lambda item: item["count"],
-                reverse=True,
-            )[:10],
-            "species_distribution": species_rows,
-            "source_rankings": source_rows,
-            "filters": {
-                "states": [str(value) for value in all_states if value],
-                "species": [str(value) for value in all_species if value],
-                "crime_types": sorted({*crime_types, *[str(value) for value in all_crime_types if value]}),
-                "sources": [str(value) for value in all_sources if value],
-            },
-        }
-
-    return _cache_get_or_compute(key, _compute_chart_data)
-
-
-@app.get("/api/filter-news")
-def filter_news(
-    db: Session = Depends(get_db),
-    q: str = "",
-    species: str = "",
-    state: str = "",
-    date_from: str = "",
-    date_to: str = "",
-    crime_type: str = "",
-    severity: str = "",
-    source: str = "",
-    min_confidence: float = 0.0,
-    limit: int = 200,
-):
-    rows = _fetch_filtered_news_rows(
-        db=db,
-        q=q,
-        species=species,
-        state=state,
-        date_from=date_from,
-        date_to=date_to,
-        crime_type=crime_type,
-        severity=severity,
-        source=source,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
-    return {
-        "items": [
-            {
-                "id": row.id,
-                "date": row.published_at.isoformat(sep=" ", timespec="seconds"),
-                "risk_score": row.risk_score,
-                "species": row.species,
-                "state": row.state,
-                "district": row.district,
-                "involved_persons": row.involved_persons,
-                "crime_type": row.crime_type,
-                "source": row.source,
-                "confidence": row.confidence,
-                "title": row.title,
-                "summary": row.intel_summary,
-                "two_line_summary": row.intel_summary,
-                "key_intelligence_points": _parse_intel_points(row.intel_points),
-                "likely_smuggling_route": row.likely_smuggling_route,
-                "action_recommendation": row.enforcement_recommendation
-                or _action_recommendation(
-                    row.risk_score,
-                    species=row.species,
-                    crime_type=row.crime_type,
-                    state=row.state,
-                    district=row.district,
-                    network_indicator=row.network_indicator,
-                    repeat_indicator=row.repeat_indicator,
-                ),
-                "confidence_explanation": row.confidence_explanation or row.ai_reason,
-                "open_url": f"/open/{row.id}",
-            }
-            for row in rows
-        ],
-        "count": len(rows),
+        "jwt_enabled": True,
+        "rbac_enabled": bool(settings.rbac_enabled),
+        "roles": sorted(list({"admin", "analyst", "viewer"})),
     }
 
 
@@ -2533,257 +2197,6 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
         "backup_created": str(backup_path) if backup_path else None,
         "predictor_retrained": retrained,
     }
-
-
-@app.get("/api/export/csv")
-@app.get("/export/csv")
-def export_csv(
-    request: Request,
-    db: Session = Depends(get_db),
-    q: str = "",
-    species: str = "",
-    state: str = "",
-    date_from: str = "",
-    date_to: str = "",
-    crime_type: str = "",
-    severity: str = "",
-    source: str = "",
-    min_confidence: float = 0.0,
-    limit: int = 500,
-    _: None = Depends(require_admin_access),
-):
-    rows = _fetch_filtered_news_rows(
-        db=db,
-        q=q,
-        species=species,
-        state=state,
-        date_from=date_from,
-        date_to=date_to,
-        crime_type=crime_type,
-        severity=severity,
-        source=source,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
-    payload = [_to_export_payload(row) for row in rows]
-    csv_bytes = build_csv_bytes(payload)
-    _audit(actor="admin", action="export_csv", status="ok", ip=_client_ip(request), notes=f"rows={len(payload)}")
-    return StreamingResponse(
-        iter([csv_bytes]),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=wildlife_intelligence_report.csv"},
-    )
-
-
-@app.get("/api/export/pdf")
-@app.get("/export/pdf")
-def export_pdf(
-    request: Request,
-    db: Session = Depends(get_db),
-    q: str = "",
-    species: str = "",
-    state: str = "",
-    date_from: str = "",
-    date_to: str = "",
-    crime_type: str = "",
-    severity: str = "",
-    source: str = "",
-    min_confidence: float = 0.0,
-    limit: int = 300,
-    _: None = Depends(require_admin_access),
-):
-    rows = _fetch_filtered_news_rows(
-        db=db,
-        q=q,
-        species=species,
-        state=state,
-        date_from=date_from,
-        date_to=date_to,
-        crime_type=crime_type,
-        severity=severity,
-        source=source,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
-    payload = [_to_export_payload(row) for row in rows]
-    pdf_bytes = build_pdf_bytes(payload)
-    _audit(actor="admin", action="export_pdf", status="ok", ip=_client_ip(request), notes=f"rows={len(payload)}")
-    return StreamingResponse(
-        iter([pdf_bytes]),
-        media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=wildlife_intelligence_report.pdf"},
-    )
-
-
-@app.get("/api/export/excel")
-@app.get("/export/excel")
-def export_excel(
-    request: Request,
-    db: Session = Depends(get_db),
-    q: str = "",
-    species: str = "",
-    state: str = "",
-    date_from: str = "",
-    date_to: str = "",
-    crime_type: str = "",
-    severity: str = "",
-    source: str = "",
-    min_confidence: float = 0.0,
-    limit: int = 500,
-    _: None = Depends(require_admin_access),
-):
-    rows = _fetch_filtered_news_rows(
-        db=db,
-        q=q,
-        species=species,
-        state=state,
-        date_from=date_from,
-        date_to=date_to,
-        crime_type=crime_type,
-        severity=severity,
-        source=source,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
-    payload = [_to_export_payload(row) for row in rows]
-    excel_bytes = build_excel_bytes(payload, title="Wildlife Crime Intelligence Brief")
-    _audit(actor="admin", action="export_excel", status="ok", ip=_client_ip(request), notes=f"rows={len(payload)}")
-    return StreamingResponse(
-        iter([excel_bytes]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=wildlife_intelligence_report.xlsx"},
-    )
-
-
-@app.get("/api/export/excel-incidents-reports")
-@app.get("/export/excel-incidents-reports")
-def export_excel_incidents_reports(
-    request: Request,
-    db: Session = Depends(get_db),
-    q: str = "",
-    species: str = "",
-    state: str = "",
-    date_from: str = "",
-    date_to: str = "",
-    crime_type: str = "",
-    severity: str = "",
-    source: str = "",
-    min_confidence: float = 0.0,
-    limit: int = 1000,
-    _: None = Depends(require_admin_access),
-):
-    rows = _fetch_filtered_news_rows(
-        db=db,
-        q=q,
-        species=species,
-        state=state,
-        date_from=date_from,
-        date_to=date_to,
-        crime_type=crime_type,
-        severity=severity,
-        source=source,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
-    payload = [_to_export_payload(row) for row in rows]
-    excel_bytes = build_excel_incidents_reports_bytes(payload, title="Total Incidents and Reports Today")
-    _audit(
-        actor="admin",
-        action="export_excel_incidents_reports",
-        status="ok",
-        ip=_client_ip(request),
-        notes=f"rows={len(payload)}",
-    )
-    return StreamingResponse(
-        iter([excel_bytes]),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=wildlife_incidents_reports_today.xlsx"},
-    )
-
-
-@app.get("/api/export/briefing-pack")
-def export_briefing_pack(
-    request: Request,
-    db: Session = Depends(get_db),
-    q: str = "",
-    species: str = "",
-    state: str = "",
-    date_from: str = "",
-    date_to: str = "",
-    crime_type: str = "",
-    severity: str = "",
-    source: str = "",
-    min_confidence: float = 0.0,
-    limit: int = 200,
-    _: None = Depends(require_admin_access),
-):
-    rows = _fetch_filtered_news_rows(
-        db=db,
-        q=q,
-        species=species,
-        state=state,
-        date_from=date_from,
-        date_to=date_to,
-        crime_type=crime_type,
-        severity=severity,
-        source=source,
-        min_confidence=min_confidence,
-        limit=limit,
-    )
-    incidents = [
-        {
-            "id": row.id,
-            "date": row.published_at.isoformat(sep=" ", timespec="seconds"),
-            "title": row.title,
-            "two_line_summary": row.intel_summary,
-            "key_intelligence_points": _parse_intel_points(row.intel_points),
-            "likely_smuggling_route": row.likely_smuggling_route,
-            "enforcement_recommendation": row.enforcement_recommendation
-            or _action_recommendation(
-                row.risk_score,
-                species=row.species,
-                crime_type=row.crime_type,
-                state=row.state,
-                district=row.district,
-                network_indicator=row.network_indicator,
-                repeat_indicator=row.repeat_indicator,
-            ),
-            "confidence_explanation": row.confidence_explanation or row.ai_reason,
-            "risk_score": row.risk_score,
-            "confidence": round(row.confidence, 4),
-            "species": row.species,
-            "state": row.state,
-            "district": row.district,
-            "involved_persons": row.involved_persons,
-            "crime_type": row.crime_type,
-            "source": row.source,
-            "open_url": f"/open/{row.id}",
-        }
-        for row in rows
-    ]
-    pack = {
-        "generated_at_utc": datetime.utcnow().isoformat(),
-        "total_incidents": len(incidents),
-        "filters": {
-            "q": q,
-            "species": species,
-            "state": state,
-            "date_from": date_from,
-            "date_to": date_to,
-            "crime_type": crime_type,
-            "severity": severity,
-            "source": source,
-            "min_confidence": min_confidence,
-        },
-        "incidents": incidents,
-    }
-    payload = json.dumps(pack, ensure_ascii=False, indent=2).encode("utf-8")
-    _audit(actor="admin", action="export_briefing_pack", status="ok", ip=_client_ip(request), notes=f"rows={len(incidents)}")
-    return StreamingResponse(
-        iter([payload]),
-        media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=wildlife_analyst_briefing_pack.json"},
-    )
 
 
 @app.get("/api/external-signals")
@@ -3121,54 +2534,6 @@ def get_sync_history(db: Session = Depends(get_db), limit: int = 100):
     ]
 
 
-@app.get("/health")
-def health(db: Session = Depends(get_db)):
-    db_diag = diagnose_database()
-    total_rows = db.scalar(_apply_today_news_scope(select(func.count()).select_from(NewsItem))) or 0
-    snapshot = _sync_snapshot()
-    started_at = runtime_diagnostics.get("startup_time")
-    uptime_seconds = 0.0
-    if isinstance(started_at, str):
-        try:
-            uptime_seconds = max(0.0, (datetime.now(tz=timezone.utc) - datetime.fromisoformat(started_at)).total_seconds())
-        except ValueError:
-            uptime_seconds = 0.0
-    pending_alerts = int(
-        db.scalar(
-            select(func.count())
-            .select_from(Alert)
-            .where((Alert.sent_popup.is_(False)) | (Alert.sent_email.is_(False)) | (Alert.sent_telegram.is_(False)))
-        )
-        or 0
-    )
-    return {
-        "status": "ok" if db_diag.get("ok") else "degraded",
-        "db": db_diag,
-        "ai_model": {
-            "ready": bool(runtime_diagnostics.get("ai_model_ready")),
-            "model": settings.model_name,
-        },
-        "scheduler": {
-            "running": scheduler.running,
-            "interval_minutes": settings.sync_interval_minutes,
-        },
-        "alerts": {
-            "pending": pending_alerts,
-            "dispatch_interval_seconds": settings.alert_dispatch_interval_seconds,
-        },
-        "cache": api_cache.snapshot(),
-        "security": {
-            "admin_auth_enabled": bool(settings.admin_token or settings.admin_password or settings.admin_password_hash),
-            "rate_limit_per_minute": settings.api_rate_limit_per_minute,
-        },
-        "last_sync": snapshot.get("finished_at"),
-        "uptime_seconds": round(uptime_seconds, 2),
-        "queue_backlog": collector.queue_backlog,
-        "total_news_rows": int(total_rows),
-        "predictor": wildlife_predictor.model_info,
-    }
-
-
 @app.get("/api/sync-status")
 def sync_status():
     return _sync_snapshot()
@@ -3192,79 +2557,3 @@ def open_article(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Could not resolve article URL")
 
     return RedirectResponse(url=redirect_target, status_code=307)
-
-
-# ── Predictive AI Model Endpoints ─────────────────────────────────────
-
-
-@app.post("/api/predictions/train")
-def train_predictor(db: Session = Depends(get_db)):
-    """Trigger retraining of the predictive model on all collected data."""
-    result = wildlife_predictor.train(db)
-    return result
-
-
-@app.get("/api/predictions")
-def get_predictions():
-    """Get all predictions: hotspots, species forecasts, network analysis, persons of interest."""
-    return wildlife_predictor.get_predictions()
-
-
-@app.get("/api/predictions/hotspots")
-def get_hotspots():
-    """Predicted poaching hotspots with risk scores."""
-    data = wildlife_predictor.get_hotspots()
-    if not data:
-        return {"error": "Model not trained yet.", "hotspots": []}
-    return {"hotspots": data}
-
-
-@app.get("/api/predictions/species")
-def get_species_forecast():
-    """Species threat forecast — which species are increasingly targeted."""
-    data = wildlife_predictor.get_species_forecast()
-    if not data:
-        return {"error": "Model not trained yet.", "species": []}
-    return {"species": data}
-
-
-@app.get("/api/predictions/persons")
-def get_persons_of_interest():
-    """Persons of interest — repeat offenders, kingpins, multi-state suspects."""
-    data = wildlife_predictor.get_persons_of_interest()
-    if not data:
-        return {"error": "Model not trained yet.", "persons": []}
-    return {"persons": data}
-
-
-@app.get("/api/predictions/networks")
-def get_network_analysis():
-    """Crime network cluster analysis — syndicate identification."""
-    data = wildlife_predictor.get_network_analysis()
-    if not data:
-        return {"error": "Model not trained yet.", "networks": []}
-    return {"networks": data}
-
-
-@app.get("/api/predictions/states")
-def get_state_profiles():
-    """State-level risk profiles and threat scores."""
-    data = wildlife_predictor.get_state_profiles()
-    if not data:
-        return {"error": "Model not trained yet.", "states": {}}
-    return {"states": data}
-
-
-@app.get("/api/predictions/forecast")
-def get_weekly_forecast():
-    """Weekly incident forecast using exponential moving average."""
-    data = wildlife_predictor.get_weekly_forecast()
-    if not data:
-        return {"error": "Model not trained yet.", "forecast": {}}
-    return {"forecast": data}
-
-
-@app.get("/api/predictions/model-info")
-def get_model_info():
-    """Get model training status and metrics."""
-    return wildlife_predictor.model_info

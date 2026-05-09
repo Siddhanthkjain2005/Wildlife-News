@@ -1868,6 +1868,7 @@ class NewsCollector:
                             title=title,
                             summary=(analysis_summary or summary),
                             prior_source_hits=prior_source,
+                            source=source,
                         )
                         prior_district = self._prior_district_hits(db, initial_intel.district)
                         intel = self.intelligence_engine.analyze(
@@ -1875,6 +1876,7 @@ class NewsCollector:
                             summary=(analysis_summary or summary),
                             prior_district_hits=prior_district,
                             prior_source_hits=prior_source,
+                            source=source,
                         )
 
                         dedupe_decision = self.dedupe_engine.find_duplicate(
@@ -1886,6 +1888,8 @@ class NewsCollector:
                             source=source,
                             state=intel.state,
                             district=intel.district,
+                            species=intel.species,
+                            involved_persons=intel.involved_persons,
                         )
                         self._upsert_external_signal(
                             db=db,

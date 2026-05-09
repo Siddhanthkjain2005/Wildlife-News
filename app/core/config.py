@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     article_enrichment_enabled: bool = True
     article_enrichment_min_chars: int = 280
     article_enrichment_max_chars: int = 3500
+    llm_summary_enabled: bool = False
+    llm_summary_model_path: str = ""
+    llm_summary_max_tokens: int = 320
+    llm_summary_temperature: float = 0.2
+    rag_qa_enabled: bool = False
+    rag_qa_max_tokens: int = 420
+    setfit_enabled: bool = False
+    setfit_model_path: str = "./models/setfit-wildlife"
+    gliner_enabled: bool = False
+    gliner_model_name: str = "urchade/gliner_multi-v2.1"
+    gliner_threshold: float = 0.6
 
     # Providers
     enabled_providers: str = (
@@ -86,11 +97,24 @@ class Settings(BaseSettings):
     api_rate_limit_per_minute: int = 180
     login_rate_limit_per_minute: int = 10
     sync_rate_limit_per_minute: int = 8
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_access_minutes: int = 30
+    jwt_refresh_days: int = 7
+    rbac_enabled: bool = True
+    default_user_role: str = "admin"
 
     # Cache / Backup
     cache_ttl_seconds: int = 45
     backup_interval_minutes: int = 120
     backups_dir: str = "./data/backups"
+    redis_url: str = ""
+    redis_key_prefix: str = "wildlife"
+    celery_enabled: bool = False
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = ""
+    celery_sync_queue: str = "sync"
+    celery_ai_queue: str = "ai"
 
     model_config = SettingsConfigDict(
         env_file=".env",

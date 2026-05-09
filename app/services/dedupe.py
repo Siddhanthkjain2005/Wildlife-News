@@ -150,6 +150,10 @@ class DedupeEngine:
         title: str,
         summary: str,
         candidates: list[NewsItem],
+        *,
+        species: list[str] | None = None,
+        involved_persons: list[str] | None = None,
+        published_at: datetime | None = None,
     ) -> tuple[NewsItem | None, float, str]:
         title_norm = self._normalize_title(title)
         if not title_norm:
@@ -160,6 +164,9 @@ class DedupeEngine:
         best_score = 0.0
         best_reason = "none"
 
+        input_persons = {p.strip().lower() for p in (involved_persons or []) if p.strip()}
+        input_species = {s.strip().lower() for s in (species or []) if s.strip()}
+
         for candidate in candidates:
             candidate_title = self._normalize_title(candidate.title or "")
             if not candidate_title:
@@ -169,10 +176,41 @@ class DedupeEngine:
             candidate_text = f"{candidate.title or ''}. {candidate.summary or ''}".strip()
             semantic_similarity = self._semantic_similarity(input_text, candidate_text)
             score = max(title_similarity, semantic_similarity)
-            if score > best_score:
-                best_score = score
+
+            # Entity-aware boost: shared persons or species push borderline matches over threshold
+            entity_boost = 0.0
+            if input_persons and score >= 0.70:
+                cand_persons = {p.strip().lower() for p in (candidate.involved_persons or "").split(",") if p.strip()}
+                shared = input_persons & cand_persons
+                if shared:
+                    entity_boost += min(0.15, len(shared) * 0.07)
+            if input_species and score >= 0.70:
+                cand_species = {s.strip().lower() for s in (candidate.species or "").split(",") if s.strip()}
+                shared_sp = input_species & cand_species
+                if shared_sp:
+                    entity_boost += min(0.08, len(shared_sp) * 0.04)
+
+            # Temporal decay: prefer recent matches, penalize old ones
+            temporal_factor = 0.0
+            if published_at and candidate.published_at:
+                try:
+                    days_apart = abs((published_at - candidate.published_at).days)
+                    if days_apart <= 1:
+                        temporal_factor = 0.03
+                    elif days_apart <= 3:
+                        temporal_factor = 0.01
+                    elif days_apart >= 10:
+                        temporal_factor = -0.03
+                except (TypeError, AttributeError):
+                    pass
+
+            composite = score + entity_boost + temporal_factor
+            if composite > best_score:
+                best_score = composite
                 if title_similarity >= semantic_similarity:
                     best_reason = "title_similarity"
+                elif entity_boost > 0:
+                    best_reason = "entity_match"
                 else:
                     best_reason = "semantic_similarity"
                 best_match = candidate
@@ -196,6 +234,8 @@ class DedupeEngine:
         source: str,
         state: str,
         district: str,
+        species: list[str] | None = None,
+        involved_persons: list[str] | None = None,
     ) -> DuplicateDecision:
         canonical_url = self.canonicalize_url(url)
         hash_value = self.url_hash(canonical_url)
@@ -241,7 +281,14 @@ class DedupeEngine:
             if district_candidates:
                 candidates = district_candidates
 
-        best_match, confidence, reason = self._best_similarity_match(title=title, summary=summary, candidates=candidates)
+        best_match, confidence, reason = self._best_similarity_match(
+            title=title,
+            summary=summary,
+            candidates=candidates,
+            species=species,
+            involved_persons=involved_persons,
+            published_at=published_at,
+        )
         if best_match is None:
             return DuplicateDecision(
                 matched_news_id=None,
