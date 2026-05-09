@@ -1,6 +1,9 @@
 import logging
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 from app.models.news import NewsItem
+from app.models.report import Report
+from app.models.intelligence import Alert, Entity
 from app.services.intelligence import HybridIntelligenceEngine
 
 logger = logging.getLogger("app.maintenance")
@@ -32,7 +35,13 @@ def run_deep_maintenance(db: Session):
                     is_india = False
             
             if not is_india:
+                print(f"❌ Removing non-India/irrelevant article (ID {item.id}): {item.title[:60]}...")
+                # Manually handle cascading deletes for foreign key constraints
+                db.execute(delete(Report).where(Report.news_id == item.id))
+                db.execute(delete(Alert).where(Alert.news_id == item.id))
+                db.execute(delete(Entity).where(Entity.news_id == item.id))
                 db.delete(item)
+                db.flush() 
                 deleted += 1
                 continue
                 
