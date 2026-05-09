@@ -1,0 +1,64 @@
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy on Oracle VM via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          ORACLE_APP_DIR: ${{ secrets.ORACLE_APP_DIR }}
+          ORACLE_BRANCH: ${{ secrets.ORACLE_BRANCH }}
+          ORACLE_GIT_URL: ${{ secrets.ORACLE_GIT_URL }}
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: ORACLE_APP_DIR,ORACLE_BRANCH,ORACLE_GIT_URL
+          script: |
+            set -euo pipefail
+
+            APP_DIR="${ORACLE_APP_DIR:-/opt/wildlife-news}"
+            BRANCH="${ORACLE_BRANCH:-main}"
+            REPO_URL="${ORACLE_GIT_URL:-https://github.com/Siddhanthkjain2005/Wildlife-News.git}"
+
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "Docker is required on Oracle VM. Install Docker first."
+              exit 1
+            fi
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              sudo mkdir -p "$APP_DIR"
+              sudo chown -R "$USER":"$USER" "$APP_DIR"
+              git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+            fi
+
+            cd "$APP_DIR"
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            mkdir -p data logs
+
+            docker build -t wildlife-news:latest .
+            docker rm -f wildlife-news >/dev/null 2>&1 || true
+            docker run -d \
+              --name wildlife-news \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              --env-file .env \
+              -e FRONTEND_ORIGIN="https://wildlife-news.vercel.app,https://*.vercel.app" \
+              -v "$APP_DIR/data:/app/data" \
+              -v "$APP_DIR/logs:/app/logs" \
+              wildlife-news:latest
+
+            curl -fsS "http://127.0.0.1:8000/health" >/dev/null
