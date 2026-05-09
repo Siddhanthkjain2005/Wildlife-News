@@ -447,6 +447,110 @@ PERSON_NAME_STOPWORDS = {
     "reuters",
     "afp",
     "representative",
+    # Common false-positive words from actual data analysis
+    "the",
+    "was",
+    "were",
+    "has",
+    "have",
+    "had",
+    "been",
+    "being",
+    "is",
+    "are",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "can",
+    "shall",
+    "did",
+    "does",
+    "do",
+    "some",
+    "most",
+    "all",
+    "any",
+    "each",
+    "every",
+    "both",
+    "few",
+    "more",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "twenty",
+    "hundred",
+    "following",
+    "another",
+    "also",
+    "additionally",
+    "meanwhile",
+    "however",
+    "according",
+    "sources",
+    "source",
+    "said",
+    "told",
+    "reported",
+    "news",
+    "report",
+    "update",
+    "breaking",
+    "msn",
+    "ndtv",
+    "toi",
+    "bbc",
+    "cnn",
+    "today",
+    "yesterday",
+    "morning",
+    "evening",
+    "night",
+    "local",
+    "state",
+    "central",
+    "government",
+    "authorities",
+    "authority",
+    "task",
+    "force",
+    "joint",
+    "operation",
+    "special",
+    "gang",
+    "illegal",
+    "smuggling",
+    "hunting",
+    "poaching",
+    "trafficking",
+    "trade",
+    "crime",
+    "criminal",
+    "minor",
+    "major",
+    "sale",
+    "sold",
+    "selling",
+    "buying",
+    "bought",
+    "worth",
+    "valued",
+    "crore",
+    "lakh",
+    "rupees",
 }
 
 PERSON_COUNT_WORDS = {
@@ -1054,12 +1158,78 @@ class HybridIntelligenceEngine:
             candidate_scores[key] = candidate_scores.get(key, 0) + 1
 
         ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
-        involved_persons = [display_names[name] for name, score in ranked if score >= 2][:8]
+        raw_persons = [display_names[name] for name, score in ranked if score >= 2][:12]
+
+        # Post-filter: remove obvious false positives
+        involved_persons = []
+        _start_block = re.compile(
+            r"^(?:in|at|of|for|from|by|with|to|the|a|an|as|on|is|was|were|has|have|had|"
+            r"this|that|these|those|and|or|but|not|no|its|their|our|who|which|what|where|"
+            r"when|how|why|after|before|during|while|about|against|between|through|under|"
+            r"over|into|upon|until|within|without|some|most|many|several|few|all|any|such|"
+            r"also|additionally|meanwhile|however|further|moreover|hence|thus|therefore|"
+            r"yet|still|already|just|only|even|much|more|less|very|too|quite|rather|here|"
+            r"there|now|then|often|never|always|sometimes|recently|usually|finally)\b",
+            re.IGNORECASE,
+        )
+        _contains_block = re.compile(
+            r"\b(?:district|state|forest|police|crime|branch|bureau|wildlife|poaching|hunting|"
+            r"smuggling|trafficking|smuggler|smugglers|trafficker|traffickers|arrested|detained|"
+            r"seized|seizure|national|international|park|sanctuary|reserve|government|ministry|"
+            r"department|court|bench|tribunal|committee|commission|board|authority|agency|office|"
+            r"organization|organisation|council|news|media|times|today|daily|express|herald|"
+            r"telegraph|gazette|post|reporter|correspondent|editor|publication|website|online|"
+            r"digital|india|indian|bharat|hindustan|airport|station|highway|road|bridge|border|"
+            r"river|lake|village|town|city|area|region|zone|sector|block|tehsil|taluk|mandal|"
+            r"panchayat|assembly|parliament|lok|rajya|sabha|pradesh|nagar|gang|racket|syndicate|"
+            r"network|nexus|cartel|mafia|ring|sold|repatriated|released|rescued|recovered|"
+            r"deported|blue|red|green|white|black|minor|major|old|new|young|small|big|large|"
+            r"that\s+was|that\s+were|left|right|long|short|good|bad|wing|ran|"
+            r"towards|behind|front|above|below|inside|outside|nearby|forward|backward|"
+            r"birds|animals|deer|peacock|peacocks|monkey|monkeys|cattle|horses|cows|dogs|cats|"
+            r"meter|metre|newsmeter|deccan|navbharat|eenadu|sakshi|mathrubhumi|manorama|"
+            r"dainik|jagran|amar|ujala|rajasthan|patrika|divya|bhaskar|lokmat|sakal|"
+            r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|"
+            r"dinamani|dinakaran)\b",
+            re.IGNORECASE,
+        )
+        _number_word = re.compile(
+            r"^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|"
+            r"fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|several|many|few|multiple|numerous|duo|trio)$",
+            re.IGNORECASE,
+        )
+        for person in raw_persons:
+            if _start_block.match(person):
+                continue
+            if _contains_block.search(person):
+                continue
+            words = person.split()
+            if all(len(w.strip(".")) <= 1 for w in words):
+                continue
+            if re.match(r"^\d+", person):
+                continue
+            if _number_word.match(person.strip()):
+                continue
+            # Skip all-caps short strings (likely acronyms/sources not names)
+            if len(person) <= 5 and person == person.upper():
+                continue
+            # Skip if contains common verbs indicating sentence fragment
+            if re.search(r"\b(?:ran|went|came|said|told|asked|made|took|gave|got|saw|"
+                         r"found|knew|thought|called|tried|used|turned|started|moved|"
+                         r"brought|kept|held|sent|happened|appeared|seemed|became|"
+                         r"towards|against|behind|before|between)\b", person, re.IGNORECASE):
+                continue
+            # Must have at least one word with 2+ alphabetic chars
+            if not any(len(re.sub(r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]", "", w)) >= 2 for w in words):
+                continue
+            involved_persons.append(person)
+            if len(involved_persons) >= 8:
+                break
         if 0 < involved_count_hint <= 20 and involved_count_hint > len(involved_persons) and len(involved_persons) < 6:
             remaining = involved_count_hint - len(involved_persons)
             suffix = "other unnamed suspect" if remaining == 1 else "other unnamed suspects"
             involved_persons.append(f"{remaining} {suffix}")
-        return involved_persons[:6]
+        return involved_persons[:8]
 
     @staticmethod
     def _is_india(text: str, state: str, district: str, india_prob: float, outside_prob: float) -> tuple[bool, float]:
@@ -1423,6 +1593,10 @@ class HybridIntelligenceEngine:
         keyword_hits = self._keyword_signal_hits(text)
         species = self._extract_species(text)
         state, district, location = self._extract_location(text)
+
+        # Also try extracting from original (non-lowered) text for regional scripts
+        if not state and not district:
+            state, district, location = self._extract_location(source_text)
 
         # AI fallback: use NER to detect state/district when rules found nothing
         if not state and not district:
