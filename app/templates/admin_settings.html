@@ -82,6 +82,9 @@
         <form method="post" action="/admin/settings/run-backup">
           <button class="btn btn-outline-success btn-sm">Run Backup</button>
         </form>
+        <form method="post" action="/admin/settings/deep-maintenance" onsubmit="return confirm('Deep Maintenance will delete non-India articles and re-scan unknowns. This may take a minute. Proceed?')">
+          <button class="btn btn-danger btn-sm">Run Deep Maintenance</button>
+        </form>
       </div>
     </div>
   </div>

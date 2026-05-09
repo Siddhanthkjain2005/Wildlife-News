@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import require_admin_access
 from app.models import AuditLog
+from app.services.maintenance import run_deep_maintenance
 
 router = APIRouter(tags=["admin"])
 
@@ -135,6 +136,21 @@ def admin_test_email(request: Request, _: None = Depends(require_admin_access)):
         status="ok" if ok else "error",
         ip=m._client_ip(request),
         notes="",
+    )
+    return RedirectResponse(url="/admin/settings", status_code=303)
+
+
+@router.post("/admin/settings/deep-maintenance")
+def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_access), db: Session = Depends(get_db)):
+    result = run_deep_maintenance(db)
+    status = "ok" if result.get("ok") else "error"
+    m = _main()
+    m._audit(
+        actor="admin",
+        action="deep_maintenance",
+        status=status,
+        ip=m._client_ip(request),
+        notes=f"deleted={result.get('deleted', 0)}; updated={result.get('updated', 0)}; error={result.get('error', '')}"
     )
     return RedirectResponse(url="/admin/settings", status_code=303)
 
