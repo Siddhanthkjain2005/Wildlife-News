@@ -1030,6 +1030,15 @@ class HybridIntelligenceEngine:
                     break
             if state: break
 
+        # Aggressive Fallback: If still unknown, scan the text for exact district names
+        if not state:
+            lower_text = text.lower()
+            for d, s in DISTRICT_TO_STATE.items():
+                if f" {d} " in f" {lower_text} ":
+                    district = d
+                    state = s
+                    break
+
         return state, district
 
     @staticmethod
