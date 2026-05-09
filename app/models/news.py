@@ -55,3 +55,6 @@ class NewsItem(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    # Vector embedding for semantic search (pgvector on Postgres, Text/JSON on SQLite)
+    embedding: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
     celery_sync_queue: str = "sync"
     celery_ai_queue: str = "ai"
+    s3_backup_bucket: str = ""
+    s3_backup_prefix: str = "backups/"
+    aws_region: str = "us-east-1"
 
     model_config = SettingsConfigDict(
         env_file=".env",

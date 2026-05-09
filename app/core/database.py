@@ -83,6 +83,7 @@ def _ensure_news_items_schema() -> None:
         "source_count": "ALTER TABLE news_items ADD COLUMN source_count INTEGER NOT NULL DEFAULT 1",
         "report_count": "ALTER TABLE news_items ADD COLUMN report_count INTEGER NOT NULL DEFAULT 1",
         "merged_sources": "ALTER TABLE news_items ADD COLUMN merged_sources TEXT NOT NULL DEFAULT ''",
+        "embedding": "ALTER TABLE news_items ADD COLUMN embedding TEXT",
     }
 
     required_postgres_columns: dict[str, str] = {
@@ -107,6 +108,7 @@ def _ensure_news_items_schema() -> None:
         "source_count": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS source_count INTEGER NOT NULL DEFAULT 1",
         "report_count": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS report_count INTEGER NOT NULL DEFAULT 1",
         "merged_sources": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS merged_sources TEXT NOT NULL DEFAULT ''",
+        "embedding": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS embedding TEXT",
     }
 
     existing = _existing_columns("news_items")

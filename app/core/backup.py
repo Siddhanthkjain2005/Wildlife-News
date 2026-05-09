@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -43,3 +44,26 @@ def create_snapshot_export(db_path: Path, backups_dir: Path) -> Path:
             for line in conn.iterdump():
                 handle.write(f"{line}\n")
     return snapshot
+
+
+def upload_to_s3(file_path: Path, bucket_name: str, object_name: str | None = None) -> bool:
+    """Upload a file to an S3 bucket."""
+    import boto3
+    from botocore.exceptions import ClientError
+    
+    if object_name is None:
+        object_name = file_path.name
+        
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        region_name=os.getenv("AWS_REGION")
+    )
+    
+    try:
+        s3_client.upload_file(str(file_path), bucket_name, object_name)
+    except ClientError as e:
+        print(f"S3 upload error: {e}")
+        return False
+    return True

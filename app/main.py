@@ -495,10 +495,20 @@ def _run_backup_now() -> dict[str, object]:
     backups_dir = Path(settings.backups_dir).resolve()
     backup_path = create_sqlite_backup(db_path=db_path, backups_dir=backups_dir)
     snapshot_path = create_snapshot_export(db_path=db_path, backups_dir=backups_dir)
+    
+    s3_status = "not_configured"
+    if settings.s3_backup_bucket:
+        from app.core.backup import upload_to_s3
+        prefix = (settings.s3_backup_prefix or "").strip()
+        ok_backup = upload_to_s3(backup_path, settings.s3_backup_bucket, f"{prefix}{backup_path.name}")
+        ok_snapshot = upload_to_s3(snapshot_path, settings.s3_backup_bucket, f"{prefix}{snapshot_path.name}")
+        s3_status = "ok" if (ok_backup and ok_snapshot) else "partial_error"
+
     return {
         "ok": True,
         "backup": str(backup_path),
         "snapshot": str(snapshot_path),
+        "s3_status": s3_status,
     }
 
 
@@ -2560,3 +2570,18 @@ def open_article(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Could not resolve article URL")
 
     return RedirectResponse(url=redirect_target, status_code=307)
+
+
+@app.get("/{path:path}")
+async def serve_spa(path: str):
+    # Static files mount handled by /static, so we only handle the root and other routes
+    if path.startswith("api/") or path.startswith("static/"):
+        raise HTTPException(status_code=404)
+        
+    react_index = Path("app/static/react-build/index.html")
+    if react_index.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(react_index)
+    
+    # Fallback to simple HTML if build doesn't exist
+    return Response(content="<h1>Wildlife Crime Intelligence Center</h1><p>Frontend build missing. Run 'npm run build' in updated_frontend.</p>", media_type="text/html")
