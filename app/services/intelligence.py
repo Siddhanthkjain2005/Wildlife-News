@@ -1316,6 +1316,7 @@ class HybridIntelligenceEngine:
         rule_score = min(1.0, rule_score)
         india_score = min(1.0, 0.65 * india_prob + 0.35 * rule_score)
         
+        lower_text = text.lower()
         # International Veto: If specific international hubs are mentioned without strong India context
         # Hard Veto for international trade hubs unless India is explicitly present
         if any(f" {term} " in f" {lower_text} " for term in STOP_COUNTRIES):
