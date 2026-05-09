@@ -2,6 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Network, Users, MapPin, AlertTriangle, ChevronRight, User, Briefcase, ExternalLink, RefreshCw } from 'lucide-react';
 import { fetchJson, ENDPOINTS } from '../lib/api';
 
+const STOP_COUNTRIES = [
+  "myanmar", "thailand", "singapore", "vietnam", "laos", "cambodia", "china",
+  "nepal", "bhutan", "bangladesh", "sri lanka", "malaysia", "indonesia",
+  "africa", "south africa", "kenya", "tanzania", "nigeria", "congo",
+  "europe", "usa", "uk", "russia", "australia", "brazil", "dubai", "uae"
+];
+
 export default function NetworkGraph() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -106,12 +113,11 @@ export default function NetworkGraph() {
                     {selectedNetwork.top_actors
                       ?.filter(actor => {
                         const name = (actor.name || "").toLowerCase();
-                        const banned = ["thailand", "myanmar", "singapore", "vietnam", "ghosh", "india", "unknown"];
+                        const banned = [...STOP_COUNTRIES, "india", "ghosh", "unknown"];
                         return !banned.includes(name);
                       })
                       .map((actor, idx) => (
-                      <div key={idx} className="actor-card">
-                        <div className="actor-rank">#{idx + 1}</div>
+                      <div key={idx} className="actor-card animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
                         <div className="actor-main">
                           <div className="actor-name">{actor.name}</div>
                           <div className="actor-meta">

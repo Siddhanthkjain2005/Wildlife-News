@@ -117,7 +117,7 @@ class GraphIntelligenceEngine:
                 ],
                 key=lambda item: (item["centrality"], item["incident_count"]),
                 reverse=True,
-            )[:5]
+            )[:40]
 
             incident_ids: set[int] = set()
             state_counter: Counter[str] = Counter()
@@ -211,6 +211,6 @@ class GraphIntelligenceEngine:
         return {
             "person": graph.nodes[node_id].get("name", target),
             "incident_count": int(graph.nodes[node_id].get("incident_count", 0)),
-            "connections": connections[:20],
-            "incidents": related_incidents[:50],
+            "connections": connections[:50],
+            "incidents": related_incidents[:100],
         }
