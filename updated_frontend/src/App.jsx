@@ -361,7 +361,7 @@ export default function App() {
           <div className="section-title">
             <div>
               <h2>National Overview</h2>
-              <p>Real-time wildlife threat monitoring across India. Auto-refresh every 15s.</p>
+              <p>Real-time wildlife threat monitoring across India with automated 15-second data refresh.</p>
             </div>
           </div>
 
@@ -372,10 +372,10 @@ export default function App() {
             <AlertFeed alerts={alerts} />
           </div>
 
-          <div className="section-title" style={{ marginTop: 4 }}>
+          <div className="section-title" style={{ marginTop: 8 }}>
             <div>
-              <h2>Analytics</h2>
-              <p>Trends, distributions, and source reliability.</p>
+              <h2>Intelligence Analytics</h2>
+              <p>Comprehensive trends, species distributions, and source reliability metrics.</p>
             </div>
           </div>
 

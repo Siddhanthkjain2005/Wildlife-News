@@ -119,7 +119,6 @@ export default function TopBar({
           <button
             type="button"
             className="btn"
-            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#fff" }}
             onClick={() => {
               const input = document.createElement("input");
               input.type = "file";
@@ -135,13 +134,13 @@ export default function TopBar({
                   const res = await fetch(`${base}/api/public/upload-db`, { method: "POST", body: form });
                   const data = await res.json();
                   if (data.ok) {
-                    alert(`✅ Database restored!\n\nTotal rows: ${data.total_rows}\nPoaching articles: ${data.poaching_rows}\nPredictor retrained: ${data.predictor_retrained ? "Yes" : "No"}`);
+                    alert(`Database restored!\n\nTotal rows: ${data.total_rows}\nPoaching articles: ${data.poaching_rows}\nPredictor retrained: ${data.predictor_retrained ? "Yes" : "No"}`);
                     window.location.reload();
                   } else {
-                    alert(`❌ Restore failed: ${data.detail || "Unknown error"}`);
+                    alert(`Restore failed: ${data.detail || "Unknown error"}`);
                   }
                 } catch (err) {
-                  alert(`❌ Upload failed: ${err.message}`);
+                  alert(`Upload failed: ${err.message}`);
                 }
               };
               input.click();

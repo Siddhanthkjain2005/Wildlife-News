@@ -3,7 +3,10 @@ import { AlertOctagon, Flame, MapPin, Fish, Database, FileCheck2 } from "lucide-
 function formatNumber(value) {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("en-US");
+  if (n >= 1000) {
+    return n.toLocaleString("en-US");
+  }
+  return n.toString();
 }
 
 export default function Kpis({ summary, loading }) {
@@ -83,7 +86,7 @@ export default function Kpis({ summary, loading }) {
               <Icon size={15} strokeWidth={2} />
             </div>
           </div>
-          <div className="kpi-value mono">{formatNumber(value)}</div>
+          <div className="kpi-value">{formatNumber(value)}</div>
           <div className="kpi-meta">{hint}</div>
         </article>
       ))}
