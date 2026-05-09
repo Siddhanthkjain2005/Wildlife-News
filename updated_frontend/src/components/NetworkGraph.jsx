@@ -113,7 +113,7 @@ export default function NetworkGraph() {
                     {selectedNetwork.top_actors
                       ?.filter(actor => {
                         const name = (actor.name || "").toLowerCase();
-                        const banned = [...STOP_COUNTRIES, "india", "ghosh", "unknown"];
+                        const banned = [...STOP_COUNTRIES, "india", "unknown"];
                         return !banned.includes(name);
                       })
                       .map((actor, idx) => (

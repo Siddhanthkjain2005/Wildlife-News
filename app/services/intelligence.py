@@ -1288,7 +1288,7 @@ class HybridIntelligenceEngine:
             candidate_scores[key] = candidate_scores.get(key, 0) + 1
 
         ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
-        raw_persons = [display_names[name] for name, score in ranked if score >= 2][:12]
+        raw_persons = [display_names[name] for name, score in ranked if score >= 2][:40]
 
         # Post-filter: remove obvious false positives
         involved_persons = []
@@ -1296,13 +1296,13 @@ class HybridIntelligenceEngine:
             if self._is_bad_person(person):
                 continue
             involved_persons.append(person)
-            if len(involved_persons) >= 8:
+            if len(involved_persons) >= 30:
                 break
         if 0 < involved_count_hint <= 20 and involved_count_hint > len(involved_persons) and len(involved_persons) < 6:
             remaining = involved_count_hint - len(involved_persons)
             suffix = "other unnamed suspect" if remaining == 1 else "other unnamed suspects"
             involved_persons.append(f"{remaining} {suffix}")
-        return involved_persons[:20]
+        return involved_persons[:40]
 
     @staticmethod
     def _is_india(text: str, state: str, district: str, india_prob: float = 0.5, outside_prob: float = 0.1) -> tuple[bool, float]:
