@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Intelligence thresholds
     ai_threshold: float = 0.62
-    india_threshold: float = 0.55
+    india_threshold: float = 0.70
     india_only: bool = True
     strict_ai_mode: bool = False
     risk_alert_threshold: int = 80

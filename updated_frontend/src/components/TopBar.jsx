@@ -123,6 +123,10 @@ export default function TopBar({
           <span className="sep">/</span>
           <strong>{titles[activeSection] || "Overview"}</strong>
         </div>
+        <div className="india-exclusive-badge hidden md:flex">
+          <span className="dot animate-pulse" />
+          <span>India Exclusive Intelligence</span>
+        </div>
       </div>
 
       <div className="topbar-center">

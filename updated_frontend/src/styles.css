@@ -391,6 +391,37 @@ button {
   font-weight: 300;
 }
 
+.india-exclusive-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--success-soft);
+  border: 1px solid var(--success-border);
+  border-radius: var(--r-full);
+  color: var(--success);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.india-exclusive-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.animate-pulse {
+  animation: pulse-simple 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-simple {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .topbar-center {
   display: flex;
   align-items: center;

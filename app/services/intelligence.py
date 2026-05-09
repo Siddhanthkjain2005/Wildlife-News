@@ -1300,6 +1300,16 @@ class HybridIntelligenceEngine:
             rule_score += 0.25
         rule_score = min(1.0, rule_score)
         india_score = min(1.0, 0.65 * india_prob + 0.35 * rule_score)
+        
+        # International Veto: If specific international hubs are mentioned without strong India context
+        veto_terms = {"vietnam", "south africa", "kenya", "tanzania", "laos", "cambodia", "china", "europe", "usa", "uk"}
+        lower_text = text.lower()
+        if any(term in lower_text for term in veto_terms):
+            # Only allow if an Indian state/district is EXPLICITLY present
+            if not (state or district):
+                return False, 0.0
+            india_score -= 0.15 # Penalize international mentions
+
         is_india = india_score >= settings.india_threshold and india_score >= (outside_prob - 0.05)
         return is_india, india_score
 
