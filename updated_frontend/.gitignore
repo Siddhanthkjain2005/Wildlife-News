@@ -5,7 +5,6 @@ __v0_jsx-dev-runtime.ts
 
 # Common ignores
 node_modules
-dist
 .next/
 .env*.local
 .DS_Store

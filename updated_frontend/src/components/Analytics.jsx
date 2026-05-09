@@ -1,9 +1,9 @@
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { Activity, BarChart3, PieChart, ShieldCheck } from "lucide-react";
 
-const AXIS_COLOR = "#64748b";
-const GRID_COLOR = "rgba(148, 163, 184, 0.08)";
-const LEGEND_COLOR = "#94a3b8";
+const AXIS_COLOR = "#6B6966";
+const GRID_COLOR = "rgba(26, 25, 23, 0.06)";
+const LEGEND_COLOR = "#6B6966";
 
 const baseOptions = {
   responsive: true,
@@ -20,15 +20,15 @@ const baseOptions = {
       }
     },
     tooltip: {
-      backgroundColor: "#0b101c",
-      borderColor: "rgba(148, 163, 184, 0.2)",
+      backgroundColor: "#FFFFFF",
+      borderColor: "rgba(26, 25, 23, 0.12)",
       borderWidth: 1,
-      titleColor: "#f1f5f9",
-      bodyColor: "#cbd5e1",
-      padding: 10,
-      boxPadding: 4,
-      cornerRadius: 8,
-      titleFont: { family: "Inter, sans-serif", size: 12, weight: "600" },
+      titleColor: "#1A1917",
+      bodyColor: "#6B6966",
+      padding: 12,
+      boxPadding: 6,
+      cornerRadius: 12,
+      titleFont: { family: "Inter, sans-serif", size: 13, weight: "600" },
       bodyFont: { family: "JetBrains Mono, monospace", size: 11 }
     }
   },
@@ -66,10 +66,10 @@ const doughnutOptions = {
 };
 
 export default function Analytics({ chartData }) {
-  const timeline = chartData?.timeline || { labels: [], incidents: [], high_risk: [], granularity: "daily" };
+  const timeline = chartData?.timeline || { labels: [], incidents: [], high_risk: [], granularity: "monthly" };
   const topStates = chartData?.top_states || [];
-  const speciesDist = chartData?.species_distribution || [];
-  const sourceRank = chartData?.source_rankings || [];
+  const speciesDist = chartData?.species_dist || chartData?.species_distribution || [];
+  const sourceRank = chartData?.source_rank || chartData?.source_rankings || [];
 
   const timelineChart = {
     labels: timeline.labels,
@@ -77,40 +77,40 @@ export default function Analytics({ chartData }) {
       {
         label: "Incidents",
         data: timeline.incidents,
-        borderColor: "#10b981",
+        borderColor: "#C17F59",
         backgroundColor: (context) => {
           const { ctx, chartArea } = context.chart;
-          if (!chartArea) return "rgba(16, 185, 129, 0.15)";
+          if (!chartArea) return "rgba(193, 127, 89, 0.12)";
           const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, "rgba(16, 185, 129, 0.25)");
-          gradient.addColorStop(1, "rgba(16, 185, 129, 0)");
+          gradient.addColorStop(0, "rgba(193, 127, 89, 0.2)");
+          gradient.addColorStop(1, "rgba(193, 127, 89, 0)");
           return gradient;
         },
         fill: true,
         tension: 0.4,
-        borderWidth: 2,
+        borderWidth: 2.5,
         pointRadius: 0,
-        pointHoverRadius: 4,
-        pointHoverBackgroundColor: "#10b981"
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: "#C17F59"
       },
       {
         label: "High Risk",
         data: timeline.high_risk,
-        borderColor: "#ef4444",
+        borderColor: "#C75050",
         backgroundColor: (context) => {
           const { ctx, chartArea } = context.chart;
-          if (!chartArea) return "rgba(239, 68, 68, 0.12)";
+          if (!chartArea) return "rgba(199, 80, 80, 0.1)";
           const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, "rgba(239, 68, 68, 0.22)");
-          gradient.addColorStop(1, "rgba(239, 68, 68, 0)");
+          gradient.addColorStop(0, "rgba(199, 80, 80, 0.18)");
+          gradient.addColorStop(1, "rgba(199, 80, 80, 0)");
           return gradient;
         },
         fill: true,
         tension: 0.4,
-        borderWidth: 2,
+        borderWidth: 2.5,
         pointRadius: 0,
-        pointHoverRadius: 4,
-        pointHoverBackgroundColor: "#ef4444"
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: "#C75050"
       }
     ]
   };
@@ -121,18 +121,18 @@ export default function Analytics({ chartData }) {
       {
         label: "Incidents",
         data: topStates.map((x) => x.count),
-        backgroundColor: "rgba(16, 185, 129, 0.7)",
-        hoverBackgroundColor: "#10b981",
-        borderRadius: 4,
+        backgroundColor: "rgba(193, 127, 89, 0.75)",
+        hoverBackgroundColor: "#C17F59",
+        borderRadius: 6,
         borderSkipped: false,
-        barThickness: 14
+        barThickness: 16
       }
     ]
   };
 
   const speciesColors = [
-    "#10b981", "#34d399", "#f59e0b", "#ef4444", "#3b82f6",
-    "#8b5cf6", "#06b6d4", "#f97316", "#ec4899", "#64748b"
+    "#C17F59", "#D4956F", "#C9933D", "#C75050", "#5B7BA8",
+    "#5A9E6F", "#8B7355", "#A67B5B", "#9C7B56", "#7D7471"
   ];
   const speciesChart = {
     labels: speciesDist.slice(0, 10).map((x) => x.species),
@@ -140,9 +140,9 @@ export default function Analytics({ chartData }) {
       {
         data: speciesDist.slice(0, 10).map((x) => x.count),
         backgroundColor: speciesColors,
-        borderColor: "#0b101c",
-        borderWidth: 2,
-        hoverOffset: 6
+        borderColor: "#FFFFFF",
+        borderWidth: 3,
+        hoverOffset: 8
       }
     ]
   };
@@ -153,11 +153,11 @@ export default function Analytics({ chartData }) {
       {
         label: "Reliability",
         data: sourceRank.slice(0, 10).map((x) => Number(x.reliability_score || 0)),
-        backgroundColor: "rgba(59, 130, 246, 0.7)",
-        hoverBackgroundColor: "#3b82f6",
-        borderRadius: 4,
+        backgroundColor: "rgba(91, 123, 168, 0.75)",
+        hoverBackgroundColor: "#5B7BA8",
+        borderRadius: 6,
         borderSkipped: false,
-        barThickness: 12
+        barThickness: 14
       }
     ]
   };

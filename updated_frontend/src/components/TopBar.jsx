@@ -1,4 +1,5 @@
-import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut, Database, HardDrive } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut, Database, HardDrive, Upload, ChevronDown } from "lucide-react";
 
 export default function TopBar({
   activeSection,
@@ -33,6 +34,79 @@ export default function TopBar({
   if (query) syncMetaParts.push(`q: ${query}`);
   const syncMeta = isSearching ? (syncMetaParts.join(" • ") || syncMessage || "Collecting live reports") : "";
 
+  const [openMenu, setOpenMenu] = useState(null); // 'export' | 'database' | null
+  const exportRef = useRef(null);
+  const databaseRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (
+        exportRef.current && !exportRef.current.contains(e.target) &&
+        databaseRef.current && !databaseRef.current.contains(e.target)
+      ) {
+        setOpenMenu(null);
+      }
+    }
+    function handleEsc(e) {
+      if (e.key === "Escape") setOpenMenu(null);
+    }
+    if (openMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleEsc);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [openMenu]);
+
+  const apiBase = () =>
+    typeof import.meta !== "undefined"
+      ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "")
+      : "";
+
+  const handleExport = (type) => {
+    onExport(type);
+    setOpenMenu(null);
+  };
+
+  const handleDownloadAllCsv = () => {
+    window.location.href = `${apiBase()}/api/public/download-csv`;
+    setOpenMenu(null);
+  };
+
+  const handleDownloadDb = () => {
+    window.location.href = `${apiBase()}/api/public/download-db`;
+    setOpenMenu(null);
+  };
+
+  const handleUploadDb = () => {
+    setOpenMenu(null);
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".db,.sqlite,.sqlite3";
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!confirm(`Restore database from "${file.name}"? This will replace all current data.`)) return;
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const res = await fetch(`${apiBase()}/api/public/upload-db`, { method: "POST", body: form });
+        const data = await res.json();
+        if (data.ok) {
+          alert(`Database restored!\n\nTotal rows: ${data.total_rows}\nPoaching articles: ${data.poaching_rows}\nPredictor retrained: ${data.predictor_retrained ? "Yes" : "No"}`);
+          window.location.reload();
+        } else {
+          alert(`Restore failed: ${data.detail || "Unknown error"}`);
+        }
+      } catch (err) {
+        alert(`Upload failed: ${err.message}`);
+      }
+    };
+    input.click();
+  };
+
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -51,12 +125,80 @@ export default function TopBar({
         </div>
       </div>
 
-      <div className="topbar-right">
+      <div className="topbar-center">
         <div className={`sync-pill ${isSearching ? "is-running" : "is-idle"}`} role="status" aria-live="polite">
           <span className="sync-pill-dot" aria-hidden="true" />
           <span className="sync-pill-label">{syncLabel}</span>
           {syncMeta ? <span className="sync-pill-meta">{syncMeta}</span> : null}
         </div>
+      </div>
+
+      <div className="topbar-right">
+        <div className="dropdown" ref={exportRef}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setOpenMenu(openMenu === "export" ? null : "export")}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === "export"}
+          >
+            <Download size={15} />
+            <span className="btn-label">Export</span>
+            <ChevronDown size={13} className={`dropdown-caret ${openMenu === "export" ? "is-open" : ""}`} />
+          </button>
+          {openMenu === "export" && (
+            <div className="dropdown-menu" role="menu">
+              <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("csv")}>
+                <Download size={14} />
+                <span>Export as CSV</span>
+              </button>
+              <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("excel")}>
+                <FileSpreadsheet size={14} />
+                <span>Export as Excel</span>
+              </button>
+              <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("excel_incidents_reports")}>
+                <FileSpreadsheet size={14} />
+                <span>Excel (2-Sheet)</span>
+              </button>
+              <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("pdf")}>
+                <FileText size={14} />
+                <span>Export as PDF</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="dropdown" ref={databaseRef}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setOpenMenu(openMenu === "database" ? null : "database")}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === "database"}
+          >
+            <Database size={15} />
+            <span className="btn-label">Database</span>
+            <ChevronDown size={13} className={`dropdown-caret ${openMenu === "database" ? "is-open" : ""}`} />
+          </button>
+          {openMenu === "database" && (
+            <div className="dropdown-menu" role="menu">
+              <button type="button" role="menuitem" className="dropdown-item" onClick={handleDownloadAllCsv}>
+                <Download size={14} />
+                <span>Download All Data (CSV)</span>
+              </button>
+              <button type="button" role="menuitem" className="dropdown-item" onClick={handleDownloadDb}>
+                <HardDrive size={14} />
+                <span>Download Database</span>
+              </button>
+              <button type="button" role="menuitem" className="dropdown-item" onClick={handleUploadDb}>
+                <Upload size={14} />
+                <span>Upload Database</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="topbar-divider" />
 
         <button
           type="button"
@@ -73,85 +215,6 @@ export default function TopBar({
           <LogOut size={15} />
           <span className="btn-label">Logout</span>
         </button>
-
-        <div className="btn-group" role="group" aria-label="Export options">
-          <button type="button" className="btn" onClick={() => onExport("csv")}>
-            <Download size={14} />
-            <span className="btn-label">CSV</span>
-          </button>
-          <button type="button" className="btn" onClick={() => onExport("excel")}>
-            <FileSpreadsheet size={14} />
-            <span className="btn-label">Excel</span>
-          </button>
-          <button type="button" className="btn" onClick={() => onExport("excel_incidents_reports")}>
-            <FileSpreadsheet size={14} />
-            <span className="btn-label">Excel 2-Sheet</span>
-          </button>
-          <button type="button" className="btn" onClick={() => onExport("pdf")}>
-            <FileText size={14} />
-            <span className="btn-label">PDF</span>
-          </button>
-        </div>
-
-        <div className="btn-group" role="group" aria-label="Data backup">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              const base = typeof import.meta !== "undefined" ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "") : "";
-              window.location.href = `${base}/api/public/download-csv`;
-            }}
-          >
-            <Database size={14} />
-            <span className="btn-label">All Data CSV</span>
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => {
-              const base = typeof import.meta !== "undefined" ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "") : "";
-              window.location.href = `${base}/api/public/download-db`;
-            }}
-          >
-            <HardDrive size={14} />
-            <span className="btn-label">Download DB</span>
-          </button>
-          <button
-            type="button"
-            className="btn"
-            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#fff" }}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.accept = ".db,.sqlite,.sqlite3";
-              input.onchange = async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                if (!confirm(`Restore database from "${file.name}"? This will replace all current data.`)) return;
-                const base = typeof import.meta !== "undefined" ? String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "") : "";
-                const form = new FormData();
-                form.append("file", file);
-                try {
-                  const res = await fetch(`${base}/api/public/upload-db`, { method: "POST", body: form });
-                  const data = await res.json();
-                  if (data.ok) {
-                    alert(`✅ Database restored!\n\nTotal rows: ${data.total_rows}\nPoaching articles: ${data.poaching_rows}\nPredictor retrained: ${data.predictor_retrained ? "Yes" : "No"}`);
-                    window.location.reload();
-                  } else {
-                    alert(`❌ Restore failed: ${data.detail || "Unknown error"}`);
-                  }
-                } catch (err) {
-                  alert(`❌ Upload failed: ${err.message}`);
-                }
-              };
-              input.click();
-            }}
-          >
-            <Database size={14} />
-            <span className="btn-label">Upload DB</span>
-          </button>
-        </div>
-
       </div>
 
       <style>{`

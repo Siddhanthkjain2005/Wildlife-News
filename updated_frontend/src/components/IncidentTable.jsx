@@ -12,9 +12,9 @@ export default function IncidentTable({ rows, loading }) {
         </div>
         <span className="card-count mono">{rows.length} rows</span>
       </div>
-      <div className="card-body-flush">
+      <div className="card-body-flush" style={{ maxHeight: "600px", overflowY: "auto" }}>
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Date</th>

@@ -50,7 +50,7 @@ export default function Sidebar({ activeSection, onSelect, isOpen, syncStatus, l
     <aside className={`sidebar ${isOpen ? "is-open" : ""}`} aria-label="Primary navigation">
       <div className="sidebar-head">
         <div className="brand-mark" aria-hidden="true">
-          <Shield size={18} strokeWidth={2.2} />
+          <Shield size={20} strokeWidth={2} />
         </div>
         <div className="brand-copy">
           <div className="brand-title">Wildlife Intelligence</div>
