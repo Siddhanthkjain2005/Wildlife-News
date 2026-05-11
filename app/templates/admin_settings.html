@@ -82,8 +82,8 @@
         <form method="post" action="/admin/settings/run-backup">
           <button class="btn btn-outline-success btn-sm">Run Backup</button>
         </form>
-        <form method="post" action="/admin/settings/deep-maintenance" onsubmit="return confirm('Deep Maintenance will delete non-India articles and re-scan unknowns. This may take a minute. Proceed?')">
-          <button class="btn btn-danger btn-sm">Run Deep Maintenance</button>
+        <form method="post" action="/admin/settings/deep-maintenance" onsubmit="return confirm('Deep Maintenance will reanalyze all stored articles with the latest AI and delete non-India/non-poaching/non-animal incidents. Proceed?')">
+          <button class="btn btn-danger btn-sm">Run Full AI Reanalysis</button>
         </form>
       </div>
     </div>

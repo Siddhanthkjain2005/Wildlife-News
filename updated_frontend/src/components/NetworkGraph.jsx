@@ -79,6 +79,9 @@ export default function NetworkGraph() {
                   <span className="cluster-stats">
                     <AlertTriangle size={12} /> {net.incident_count} Incidents
                   </span>
+                  <span className="cluster-stats">
+                    Score {Number(net.network_score || 0).toFixed(1)} • Avg risk {Number(net.avg_risk_score || 0).toFixed(1)}
+                  </span>
                 </div>
                 <ChevronRight size={14} className="chevron" />
               </button>
@@ -90,21 +93,21 @@ export default function NetworkGraph() {
           {selectedNetwork ? (
             <div className="network-view animate-fade-in">
               <div className="network-hero">
-                <div className="hero-stats">
-                  <div className="stat-card">
-                    <label>Network Strength</label>
-                    <div className="value">{(selectedNetwork.suspect_count / (data?.person_nodes || 1) * 100).toFixed(1)}%</div>
-                  </div>
-                  <div className="stat-card">
-                    <label>Active States</label>
-                    <div className="value">{selectedNetwork.top_states?.length || 0}</div>
-                  </div>
-                  <div className="stat-card">
-                    <label>Primary Species</label>
-                    <div className="value">{selectedNetwork.top_species?.[0]?.species || 'Multiple'}</div>
+                  <div className="hero-stats">
+                    <div className="stat-card">
+                      <label>Threat Score</label>
+                      <div className="value">{Number(selectedNetwork.network_score || 0).toFixed(1)}</div>
+                    </div>
+                    <div className="stat-card">
+                      <label>Avg Incident Risk</label>
+                      <div className="value">{Number(selectedNetwork.avg_risk_score || 0).toFixed(1)}</div>
+                    </div>
+                    <div className="stat-card">
+                      <label>Link Density</label>
+                      <div className="value">{Number(selectedNetwork.edge_density || 0).toFixed(3)}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
               <div className="network-grid">
                 <section className="actors-section">

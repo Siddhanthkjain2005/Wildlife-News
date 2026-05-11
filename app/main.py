@@ -921,6 +921,9 @@ def _fetch_filtered_news_rows(
     stmt = (
         select(NewsItem)
         .where(NewsItem.is_poaching.is_(True))
+        .where(NewsItem.is_india.is_(True))
+        .where(func.length(func.trim(NewsItem.species)) > 0)
+        .where(func.lower(NewsItem.species).notlike("%unknown%"))
         .where(NewsItem.confidence >= min_confidence)
         .order_by(NewsItem.published_at.desc())
     )
@@ -1797,12 +1800,22 @@ def sync_now():
 
 @app.post("/api/admin/reanalyze")
 def admin_reanalyze(request: Request, _admin=Depends(require_admin_access)):
-    """Clean up existing articles to fix state/person detection."""
-    def _bg_cleanup():
-        result = _cleanup_existing_articles()
-        _audit(actor="admin", action="reanalyze", status="ok", notes=json.dumps(result))
-    Thread(target=_bg_cleanup, daemon=True).start()
-    return {"ok": True, "message": "Cleanup started in background. Check logs for progress."}
+    """Re-analyze all historical records with the current AI pipeline."""
+
+    def _bg_reanalyze():
+        from app.services.maintenance import run_deep_maintenance
+
+        with SessionLocal() as db:
+            result = run_deep_maintenance(db)
+        _audit(
+            actor="admin",
+            action="reanalyze",
+            status="ok" if result.get("ok") else "error",
+            notes=json.dumps(result),
+        )
+
+    Thread(target=_bg_reanalyze, daemon=True).start()
+    return {"ok": True, "message": "Full AI reanalysis started in background. Check logs for progress."}
 
 
 @app.get("/login")

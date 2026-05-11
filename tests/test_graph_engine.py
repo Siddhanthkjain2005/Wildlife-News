@@ -9,6 +9,12 @@ def test_extract_persons_filters_duplicates_and_unnamed() -> None:
     assert persons == ["Ajij Ullah", "Mumtaz Ahmad"]
 
 
+def test_extract_persons_handles_mixed_delimiters_and_noise() -> None:
+    engine = GraphIntelligenceEngine()
+    persons = engine._extract_persons("Ravi Kumar; Ravi K | Thailand, Mumtaz Ahmad / unknown suspect")
+    assert persons == ["Ravi Kumar", "Mumtaz Ahmad"]
+
+
 def test_build_graph_creates_person_and_incident_links() -> None:
     engine = GraphIntelligenceEngine()
     incidents = [

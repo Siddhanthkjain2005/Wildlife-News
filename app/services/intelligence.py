@@ -175,6 +175,49 @@ STOP_COUNTRIES = {
     "europe", "usa", "uk", "russia", "australia", "brazil", "dubai", "uae"
 }
 
+UNKNOWN_TERMS = {
+    "unknown",
+    "unidentified",
+    "unnamed",
+    "yet to be identified",
+    "identity not known",
+    "identity unknown",
+    "not disclosed",
+    "not revealed",
+    "undisclosed",
+    "untraced",
+}
+
+UNKNOWN_SPECIES_PATTERNS = [
+    re.compile(
+        r"\b(?:species|animal|wildlife|carcass|remains|sample)\s+(?:is|was|were|are)?\s*"
+        r"(?:still\s+)?(?:unknown|unidentified|undetermined|not\s+identified)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bunknown\s+(?:species|animal|wildlife)\b", re.IGNORECASE),
+]
+
+UNKNOWN_LOCATION_PATTERNS = [
+    re.compile(
+        r"\b(?:location|area|place|spot|village|district|state|forest)\s+(?:is|was|were|are)?\s*"
+        r"(?:still\s+)?(?:unknown|unidentified|undisclosed|not\s+revealed|not\s+disclosed)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:undisclosed|unknown)\s+location\b", re.IGNORECASE),
+]
+
+UNKNOWN_PERSON_PATTERNS = [
+    re.compile(
+        r"\b(?:suspect|accused|person|persons|individual|offender|poacher|trafficker)s?\s+(?:is|was|were|are)?\s*"
+        r"(?:still\s+)?(?:unknown|unidentified|unnamed|absconding|untraced|not\s+identified)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:unknown|unidentified|unnamed)\s+(?:suspect|accused|person|poacher)s?\b", re.IGNORECASE),
+]
+
+NON_ANIMAL_CRIME_TYPES = {"habitat_destruction", "red_sanders_smuggling"}
+NON_ANIMAL_SPECIES = {"red sanders", "sandalwood"}
+
 # Source credibility — weights intelligence confidence by publisher reliability
 SOURCE_CREDIBILITY: dict[str, float] = {
     "mongabay": 0.97, "mongabay india": 0.97, "down to earth": 0.95,
@@ -1076,12 +1119,55 @@ class HybridIntelligenceEngine:
             return ""
         return " ".join(clean_tokens)
 
+    @staticmethod
+    def _person_name_tokens(value: str) -> list[str]:
+        cleaned = re.sub(
+            r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F\s]",
+            " ",
+            (value or "").lower(),
+        )
+        return [token for token in re.sub(r"\s+", " ", cleaned).strip().split(" ") if token]
+
+    @staticmethod
+    def _person_identity_key(value: str) -> str:
+        tokens = HybridIntelligenceEngine._person_name_tokens(value)
+        if not tokens:
+            return ""
+        meaningful = [token for token in tokens if len(token) > 1]
+        if not meaningful:
+            meaningful = tokens
+        if len(meaningful) == 1:
+            return meaningful[0]
+        return f"{meaningful[0]} {meaningful[-1]}"
+
+    @classmethod
+    def _same_person_name(cls, left: str, right: str) -> bool:
+        left_tokens = cls._person_name_tokens(left)
+        right_tokens = cls._person_name_tokens(right)
+        if not left_tokens or not right_tokens:
+            return False
+        if left_tokens == right_tokens:
+            return True
+        if left_tokens[0] != right_tokens[0]:
+            return False
+        if len(left_tokens) == 1 or len(right_tokens) == 1:
+            return left_tokens[0] == right_tokens[0]
+        left_last = left_tokens[-1]
+        right_last = right_tokens[-1]
+        if left_last == right_last:
+            return True
+        if len(left_last) == 1 and right_last.startswith(left_last):
+            return True
+        if len(right_last) == 1 and left_last.startswith(right_last):
+            return True
+        return False
+
     @classmethod
     def _split_person_candidates(cls, raw_value: str) -> list[str]:
         if not raw_value:
             return []
         chunks = re.split(
-            r"\s*(?:,|;|/| and | & |और|एवं|तथा|और|ও|এবং|و|ਅਤੇ)\s*",
+            r"\s*(?:,|;|/|\\|\|| and | & |और|एवं|तथा|और|ও|এবং|و|ਅਤੇ| तथा | एवं )\s*",
             raw_value.strip(),
             flags=re.IGNORECASE,
         )
@@ -1272,19 +1358,31 @@ class HybridIntelligenceEngine:
                         candidate = self._clean_person_candidate(chunk)
                         if not candidate:
                             continue
-                        key = candidate.lower()
-                        display_names.setdefault(key, candidate)
+                        key = self._person_identity_key(candidate)
+                        if not key:
+                            continue
+                        current = display_names.get(key, "")
+                        if not current or len(candidate) > len(current):
+                            display_names[key] = candidate
                         candidate_scores[key] = candidate_scores.get(key, 0) + (2 + context_bonus)
         for candidate in self._extract_ner_person_candidates(sentences):
-            key = candidate.lower()
-            display_names.setdefault(key, candidate)
+            key = self._person_identity_key(candidate)
+            if not key:
+                continue
+            current = display_names.get(key, "")
+            if not current or len(candidate) > len(current):
+                display_names[key] = candidate
             candidate_scores[key] = candidate_scores.get(key, 0) + 3
         # Also try NER on all sentences (not just context) for broader coverage
         all_sentences = self._person_sentences(text)
         extra_ner = [s for s in all_sentences if s not in sentences][:6]
         for candidate in self._extract_ner_person_candidates(extra_ner):
-            key = candidate.lower()
-            display_names.setdefault(key, candidate)
+            key = self._person_identity_key(candidate)
+            if not key:
+                continue
+            current = display_names.get(key, "")
+            if not current or len(candidate) > len(current):
+                display_names[key] = candidate
             candidate_scores[key] = candidate_scores.get(key, 0) + 1
 
         ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
@@ -1294,6 +1392,8 @@ class HybridIntelligenceEngine:
         involved_persons = []
         for person in raw_persons:
             if self._is_bad_person(person):
+                continue
+            if any(self._same_person_name(person, existing) for existing in involved_persons):
                 continue
             involved_persons.append(person)
             if len(involved_persons) >= 30:
@@ -1347,6 +1447,7 @@ class HybridIntelligenceEngine:
         money_mentions = [match.group(0) for match in MONEY_PATTERN.finditer(source_text)]
         case_refs = [match.group(0) for match in CASE_REF_PATTERN.finditer(source_text)]
         vehicle_refs = [match.group(0) for match in VEHICLE_REF_PATTERN.finditer(source_text)]
+        poaching_material_hits = [signal for signal in POACHING_SPECIFIC_SIGNALS if signal in lower]
         seizure_present = any(token in lower for token in ["seized", "seizure", "confiscated", "recovered"])
         arrest_present = any(token in lower for token in ["arrested", "detained", "held", "nabbed", "booked"])
         cross_border = bool(re.search(r"\bcross[- ]?border\b|\binternational\b|\bnepal\b|\bbhutan\b|\bmyanmar\b|\bbangladesh\b", lower))
@@ -1357,6 +1458,7 @@ class HybridIntelligenceEngine:
             "money_mentions": money_mentions[:3],
             "case_refs": case_refs[:3],
             "vehicle_refs": vehicle_refs[:3],
+            "poaching_material_hits": poaching_material_hits[:5],
             "seizure_present": seizure_present,
             "arrest_present": arrest_present,
             "cross_border": cross_border,
@@ -1389,17 +1491,51 @@ class HybridIntelligenceEngine:
             score += 0.08
         if operational_details.get("weapon_signal"):
             score += 0.06
-        
-        # New: Specific Poaching Material Signals
-        lower_text = str(operational_details.get("text") or "").lower()
-        if any(sig in lower_text for sig in POACHING_SPECIFIC_SIGNALS):
-            score += 0.12
+        poaching_material_hits = operational_details.get("poaching_material_hits") or []
+        if poaching_material_hits:
+            score += min(0.15, len(poaching_material_hits) * 0.05)
 
         if operational_details.get("quantities"):
             score += 0.05
+        if operational_details.get("case_refs"):
+            score += 0.03
         if network_indicator:
             score += 0.05
         return max(0.0, min(1.0, score))
+
+    @staticmethod
+    def _extract_unknown_profile(
+        *,
+        source_text: str,
+        species: list[str],
+        state: str,
+        district: str,
+        involved_persons: list[str],
+    ) -> dict[str, object]:
+        lower = source_text.lower()
+        named_persons = [
+            person
+            for person in involved_persons
+            if "unnamed suspect" not in person.lower() and "unknown" not in person.lower()
+        ]
+        species_unknown = (not species) or any(pattern.search(source_text) for pattern in UNKNOWN_SPECIES_PATTERNS)
+        location_unknown = (not (state or district)) or any(
+            pattern.search(source_text) for pattern in UNKNOWN_LOCATION_PATTERNS
+        )
+        persons_unknown = (not named_persons) or any(pattern.search(source_text) for pattern in UNKNOWN_PERSON_PATTERNS)
+        explicit_unknown_mentions = sum(
+            1 for term in UNKNOWN_TERMS if re.search(rf"(?<![a-z]){re.escape(term)}(?![a-z])", lower)
+        )
+        unknown_count = int(species_unknown) + int(location_unknown) + int(persons_unknown)
+        unknown_ratio = unknown_count / 3.0
+        return {
+            "species_unknown": species_unknown,
+            "location_unknown": location_unknown,
+            "persons_unknown": persons_unknown,
+            "unknown_count": unknown_count,
+            "unknown_ratio": round(unknown_ratio, 3),
+            "explicit_unknown_mentions": explicit_unknown_mentions,
+        }
 
     @staticmethod
     def _compute_confidence(
@@ -1415,6 +1551,7 @@ class HybridIntelligenceEngine:
         has_false_positive: bool,
         evidence_strength: float,
         operational_details: dict[str, object],
+        unknown_profile: dict[str, object],
     ) -> float:
         confidence = (0.55 * poach_prob) + (0.30 * rule_score) + (0.15 * evidence_strength)
         confidence += min(0.06, keyword_hits * 0.01)
@@ -1431,6 +1568,14 @@ class HybridIntelligenceEngine:
         confidence -= min(0.24, not_wildlife_prob * 0.20)
         if has_false_positive:
             confidence -= 0.12
+        unknown_ratio = float(unknown_profile.get("unknown_ratio") or 0.0)
+        explicit_unknown_mentions = int(unknown_profile.get("explicit_unknown_mentions") or 0)
+        if unknown_ratio:
+            confidence -= min(0.25, unknown_ratio * 0.22)
+        if explicit_unknown_mentions:
+            confidence -= min(0.10, explicit_unknown_mentions * 0.02)
+        if unknown_ratio <= 0.2 and (operational_details.get("seizure_present") or operational_details.get("arrest_present")):
+            confidence += 0.02
         if crime_type == "unknown":
             confidence -= 0.06
         return max(0.0, min(1.0, confidence))
@@ -1446,6 +1591,7 @@ class HybridIntelligenceEngine:
         repeat_indicator: bool,
         person_hits: int,
         operational_details: dict[str, object],
+        unknown_profile: dict[str, object],
     ) -> int:
         score = (confidence * 52) + (poach_prob * 20)
         crime_bonus = {
@@ -1487,6 +1633,8 @@ class HybridIntelligenceEngine:
             score += 7
         if operational_details.get("weapon_signal"):
             score += 5
+        if operational_details.get("poaching_material_hits"):
+            score += min(6, len(operational_details["poaching_material_hits"]) * 2)
         if operational_details.get("quantities"):
             score += min(5, len(operational_details["quantities"]) * 2)
         if operational_details.get("money_mentions"):
@@ -1501,9 +1649,111 @@ class HybridIntelligenceEngine:
             score += 3
         elif person_hits >= 1:
             score += 1
+        unknown_ratio = float(unknown_profile.get("unknown_ratio") or 0.0)
+        if unknown_ratio:
+            score -= min(16, unknown_ratio * 14)
+        if unknown_profile.get("species_unknown") and not operational_details.get("seizure_present"):
+            score -= 4
+        if unknown_profile.get("location_unknown") and not network_indicator:
+            score -= 3
+        if unknown_profile.get("persons_unknown") and person_hits == 0:
+            score -= 2
         if not species and person_hits == 0 and not operational_details.get("seizure_present"):
             score -= 6
         return max(0, min(100, int(round(score))))
+
+    @staticmethod
+    def _is_animal_related_incident(
+        *,
+        crime_type: str,
+        species: list[str],
+        operational_details: dict[str, object],
+    ) -> bool:
+        if crime_type in NON_ANIMAL_CRIME_TYPES:
+            return False
+        normalized_species = {str(item).strip().lower() for item in (species or []) if str(item).strip()}
+        animal_species = {item for item in normalized_species if item not in NON_ANIMAL_SPECIES}
+        if animal_species:
+            return True
+        material_hits = {
+            str(item).strip().lower() for item in (operational_details.get("poaching_material_hits") or []) if str(item).strip()
+        }
+        animal_material_hits = {item for item in material_hits if "red sanders" not in item and "sandalwood" not in item}
+        if animal_material_hits:
+            return True
+        animal_crime_types = {
+            "poaching",
+            "smuggling",
+            "illegal_wildlife_trade",
+            "ivory_trade",
+            "tiger_skin_seizure",
+            "rhino_horn_trafficking",
+            "exotic_bird_trafficking",
+            "illegal_fishing",
+            "forest_hunting_gang",
+            "animal_cruelty",
+            "snake_venom_trade",
+        }
+        return (
+            crime_type in animal_crime_types
+            and (operational_details.get("seizure_present") or operational_details.get("arrest_present"))
+        )
+
+    @staticmethod
+    def _accept_poaching(
+        *,
+        confidence: float,
+        crime_type: str,
+        species: list[str],
+        not_wildlife_prob: float,
+        strong_rule_signal: bool,
+        poach_prob: float,
+        evidence_strength: float,
+        keyword_hits: int,
+        strict_mode: bool,
+        operational_details: dict[str, object],
+        network_indicator: bool,
+        unknown_profile: dict[str, object],
+    ) -> bool:
+        if not HybridIntelligenceEngine._is_animal_related_incident(
+            crime_type=crime_type,
+            species=species,
+            operational_details=operational_details,
+        ):
+            return False
+        unknown_ratio = float(unknown_profile.get("unknown_ratio") or 0.0)
+        if strict_mode:
+            effective_ai_threshold = min(0.98, settings.ai_threshold + 0.04)
+            baseline_accept = confidence >= effective_ai_threshold and crime_type != "unknown"
+            fallback_accept = (
+                crime_type != "unknown"
+                and not_wildlife_prob < 0.65
+                and strong_rule_signal
+                and poach_prob >= 0.45
+                and evidence_strength >= 0.55
+                and keyword_hits >= 3
+                and (
+                    unknown_ratio <= 0.80
+                    or operational_details.get("seizure_present")
+                    or operational_details.get("arrest_present")
+                    or network_indicator
+                )
+            )
+        else:
+            baseline_accept = confidence >= settings.ai_threshold and crime_type != "unknown"
+            fallback_accept = (
+                crime_type != "unknown"
+                and not_wildlife_prob < 0.82
+                and strong_rule_signal
+                and poach_prob >= 0.22
+                and (
+                    unknown_ratio <= 0.90
+                    or operational_details.get("seizure_present")
+                    or operational_details.get("arrest_present")
+                    or network_indicator
+                )
+            )
+        return baseline_accept or fallback_accept
 
     @staticmethod
     def _build_summary(title: str, body: str, crime_type: str, species: list[str], location: str) -> str:
@@ -1525,6 +1775,7 @@ class HybridIntelligenceEngine:
         confidence: float,
         risk_score: int,
         operational_details: dict[str, object],
+        unknown_profile: dict[str, object],
     ) -> list[str]:
         points = [
             f"Crime type signal: {crime_type.replace('_', ' ')}",
@@ -1547,6 +1798,18 @@ class HybridIntelligenceEngine:
             points.append("Organized network indicator detected from text patterns.")
         if repeat_indicator:
             points.append("Repeat-indicator triggered from prior district/source pattern.")
+        unknown_fields = []
+        if unknown_profile.get("species_unknown"):
+            unknown_fields.append("species")
+        if unknown_profile.get("location_unknown"):
+            unknown_fields.append("location")
+        if unknown_profile.get("persons_unknown"):
+            unknown_fields.append("involved persons")
+        if unknown_fields:
+            points.append(
+                "Unknown intelligence fields detected: "
+                f"{', '.join(unknown_fields)} (coverage gap ratio={float(unknown_profile.get('unknown_ratio') or 0.0):.2f})."
+            )
         return points
 
     @staticmethod
@@ -1643,13 +1906,16 @@ class HybridIntelligenceEngine:
         operational_details: dict[str, object],
         network_indicator: bool,
         repeat_indicator: bool,
+        unknown_profile: dict[str, object],
     ) -> str:
         return (
             f"Model confidence={confidence:.2f} (poaching signal={poach_prob:.2f}, rule score={rule_score:.2f}, india score={india_score:.2f}); "
             f"evidence_strength={evidence_strength:.2f}, not_wildlife={not_wildlife_prob:.2f}, "
             f"species_hits={species_hits}, person_hits={person_hits}, seizure={int(bool(operational_details.get('seizure_present')))}, "
             f"cross_border={int(bool(operational_details.get('cross_border')))}, "
-            f"network_indicator={int(network_indicator)}, repeat_indicator={int(repeat_indicator)}."
+            f"network_indicator={int(network_indicator)}, repeat_indicator={int(repeat_indicator)}, "
+            f"unknown_ratio={float(unknown_profile.get('unknown_ratio') or 0.0):.2f}, "
+            f"unknown_mentions={int(unknown_profile.get('explicit_unknown_mentions') or 0)}."
         )
 
     def analyze(
@@ -1662,8 +1928,9 @@ class HybridIntelligenceEngine:
         prior_district_hits: int = 0,
         prior_source_hits: int = 0,
     ) -> IntelligenceResult:
-        # Use full content for better context if available, fallback to title + summary
-        source_text = normalize_space(full_content) if len(full_content) > 200 else normalize_space(f"{title}. {summary}")
+        # Always preserve title+summary context and append full article body when available.
+        base_text = normalize_space(f"{title}. {summary}")
+        source_text = normalize_space(f"{base_text}\n{full_content}") if full_content.strip() else base_text
         text = source_text.lower()
         if not source_text:
             return IntelligenceResult(
@@ -1741,6 +2008,13 @@ class HybridIntelligenceEngine:
 
         involved_persons = self._extract_involved_persons(source_text)
         operational_details = self._extract_operational_details(source_text, text)
+        unknown_profile = self._extract_unknown_profile(
+            source_text=source_text,
+            species=species,
+            state=state,
+            district=district,
+            involved_persons=involved_persons,
+        )
         network_indicator = self._network_indicator(text)
         repeat_indicator = prior_district_hits >= 2 or prior_source_hits >= 4
         has_false_positive = self._has_false_positive(text)
@@ -1818,6 +2092,7 @@ class HybridIntelligenceEngine:
             has_false_positive=has_false_positive,
             evidence_strength=evidence_strength,
             operational_details=operational_details,
+            unknown_profile=unknown_profile,
         )
         # Apply source credibility weighting
         if source:
@@ -1828,33 +2103,26 @@ class HybridIntelligenceEngine:
             )
             # Nudge confidence ±5% based on source reliability
             confidence = max(0.0, min(1.0, confidence + (cred - 0.75) * 0.20))
-        if strict_mode:
-            effective_ai_threshold = min(0.98, settings.ai_threshold + 0.04)
-            baseline_accept = confidence >= effective_ai_threshold and crime_type != "unknown"
-            fallback_accept = (
-                crime_type != "unknown"
-                and not_wildlife_prob < 0.65
-                and strong_rule_signal
-                and poach_prob >= 0.45
-                and evidence_strength >= 0.55
-                and keyword_hits >= 3
-            )
-        else:
-            baseline_accept = confidence >= settings.ai_threshold and crime_type != "unknown"
-            fallback_accept = (
-                crime_type != "unknown"
-                and not_wildlife_prob < 0.82
-                and strong_rule_signal
-                and poach_prob >= 0.22
-            )
+        is_poaching = self._accept_poaching(
+            confidence=confidence,
+            crime_type=crime_type,
+            species=species,
+            not_wildlife_prob=not_wildlife_prob,
+            strong_rule_signal=strong_rule_signal,
+            poach_prob=poach_prob,
+            evidence_strength=evidence_strength,
+            keyword_hits=keyword_hits,
+            strict_mode=strict_mode,
+            operational_details=operational_details,
+            network_indicator=network_indicator,
+            unknown_profile=unknown_profile,
+        )
 
         # Strict High-Value Signal Check
         has_operational_signal = any(t in text for t in ["arrested", "seized", "held", "nabbed", "raided", "caught", "booked", "seizure"])
         if not has_operational_signal:
             confidence *= 0.8 # Penalize articles with no clear action verbs
             
-        is_poaching = baseline_accept or fallback_accept
-        
         # Additional strict check for low signal articles
         if is_poaching and not has_operational_signal and keyword_hits < 5:
             is_poaching = False
@@ -1885,6 +2153,7 @@ class HybridIntelligenceEngine:
             repeat_indicator=repeat_indicator,
             person_hits=len(involved_persons),
             operational_details=operational_details,
+            unknown_profile=unknown_profile,
         )
         summary_text = self._build_summary(title, summary, crime_type, species, location)
         intel_points = self._build_intel_points(
@@ -1898,6 +2167,7 @@ class HybridIntelligenceEngine:
             confidence=confidence,
             risk_score=risk_score,
             operational_details=operational_details,
+            unknown_profile=unknown_profile,
         )
         likely_smuggling_route = self._likely_smuggling_route(
             state=state,
@@ -1925,6 +2195,7 @@ class HybridIntelligenceEngine:
             operational_details=operational_details,
             network_indicator=network_indicator,
             repeat_indicator=repeat_indicator,
+            unknown_profile=unknown_profile,
         )
         llm_summary = self._summarizer.generate(
             article_text=source_text,
@@ -1941,8 +2212,12 @@ class HybridIntelligenceEngine:
         )
         summary_text = str(llm_summary.get("summary") or summary_text)
         key_facts = llm_summary.get("key_facts")
-        if isinstance(key_facts, list):
+        llm_key_facts_used = isinstance(key_facts, list)
+        if llm_key_facts_used:
             intel_points = [str(item) for item in key_facts if str(item).strip()]
+        llm_route_override = bool(str(llm_summary.get("smuggling_route") or "").strip())
+        llm_recommendation_override = bool(str(llm_summary.get("recommendation") or "").strip())
+        llm_confidence_override = bool(str(llm_summary.get("confidence_explanation") or "").strip())
         likely_smuggling_route = str(llm_summary.get("smuggling_route") or likely_smuggling_route)
         enforcement_recommendation = str(llm_summary.get("recommendation") or enforcement_recommendation)
         confidence_explanation = str(llm_summary.get("confidence_explanation") or confidence_explanation)
@@ -1963,10 +2238,129 @@ class HybridIntelligenceEngine:
         if isinstance(llm_suspects, list) and not involved_persons:
             involved_persons = [str(p).strip() for p in llm_suspects if str(p).strip()][:8]
 
+        unknown_profile = self._extract_unknown_profile(
+            source_text=source_text,
+            species=species,
+            state=state,
+            district=district,
+            involved_persons=involved_persons,
+        )
+        evidence_strength = self._evidence_strength(
+            keyword_hits=keyword_hits,
+            species_hits=len(species),
+            person_hits=len(involved_persons),
+            state=state,
+            district=district,
+            operational_details=operational_details,
+            network_indicator=network_indicator,
+        )
+        confidence = self._compute_confidence(
+            poach_prob=poach_prob,
+            rule_score=rule_score,
+            keyword_hits=keyword_hits,
+            species_hits=len(species),
+            person_hits=len(involved_persons),
+            network_indicator=network_indicator,
+            not_wildlife_prob=not_wildlife_prob,
+            crime_type=crime_type,
+            has_false_positive=has_false_positive,
+            evidence_strength=evidence_strength,
+            operational_details=operational_details,
+            unknown_profile=unknown_profile,
+        )
+        if source:
+            src_key = source.strip().lower()
+            cred = next(
+                (v for k, v in SOURCE_CREDIBILITY.items() if k in src_key),
+                _SOURCE_DEFAULT,
+            )
+            confidence = max(0.0, min(1.0, confidence + (cred - 0.75) * 0.20))
+        if not has_operational_signal:
+            confidence *= 0.8
+
+        is_poaching = self._accept_poaching(
+            confidence=confidence,
+            crime_type=crime_type,
+            species=species,
+            not_wildlife_prob=not_wildlife_prob,
+            strong_rule_signal=strong_rule_signal,
+            poach_prob=poach_prob,
+            evidence_strength=evidence_strength,
+            keyword_hits=keyword_hits,
+            strict_mode=strict_mode,
+            operational_details=operational_details,
+            network_indicator=network_indicator,
+            unknown_profile=unknown_profile,
+        )
+        if is_poaching and not has_operational_signal and keyword_hits < 5:
+            is_poaching = False
+        if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:
+            is_poaching = False
+        if strict_mode and not_wildlife_prob >= 0.62 and evidence_strength < 0.75 and poach_prob < 0.70:
+            is_poaching = False
+
+        risk_score = self._compute_risk(
+            confidence=confidence,
+            poach_prob=poach_prob,
+            crime_type=crime_type,
+            species=species,
+            network_indicator=network_indicator,
+            repeat_indicator=repeat_indicator,
+            person_hits=len(involved_persons),
+            operational_details=operational_details,
+            unknown_profile=unknown_profile,
+        )
+        if not llm_key_facts_used:
+            intel_points = self._build_intel_points(
+                crime_type=crime_type,
+                species=species,
+                state=state,
+                district=district,
+                involved_persons=involved_persons,
+                network_indicator=network_indicator,
+                repeat_indicator=repeat_indicator,
+                confidence=confidence,
+                risk_score=risk_score,
+                operational_details=operational_details,
+                unknown_profile=unknown_profile,
+            )
+        if not llm_route_override:
+            likely_smuggling_route = self._likely_smuggling_route(
+                state=state,
+                district=district,
+                network_indicator=network_indicator,
+                species=species,
+            )
+        if not llm_recommendation_override:
+            enforcement_recommendation = self._enforcement_recommendation(
+                risk_score=risk_score,
+                species=species,
+                state=state,
+                district=district,
+                network_indicator=network_indicator,
+                repeat_indicator=repeat_indicator,
+            )
+        if not llm_confidence_override:
+            confidence_explanation = self._confidence_explanation(
+                poach_prob=poach_prob,
+                rule_score=rule_score,
+                india_score=india_score,
+                confidence=confidence,
+                evidence_strength=evidence_strength,
+                not_wildlife_prob=not_wildlife_prob,
+                species_hits=len(species),
+                person_hits=len(involved_persons),
+                operational_details=operational_details,
+                network_indicator=network_indicator,
+                repeat_indicator=repeat_indicator,
+                unknown_profile=unknown_profile,
+            )
+
         reason = (
             f"poach_prob={poach_prob:.2f}, rule_score={rule_score:.2f}, keyword_hits={keyword_hits}, "
             f"india_score={india_score:.2f}, confidence={confidence:.2f}, evidence={evidence_strength:.2f}, "
-            f"not_wildlife={not_wildlife_prob:.2f}"
+            f"not_wildlife={not_wildlife_prob:.2f}, unknown_ratio={float(unknown_profile.get('unknown_ratio') or 0.0):.2f}, "
+            f"animal_related={int(self._is_animal_related_incident(crime_type=crime_type, species=species, operational_details=operational_details))}"
         )
         return IntelligenceResult(
             is_poaching=is_poaching,

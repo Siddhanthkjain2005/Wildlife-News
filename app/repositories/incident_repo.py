@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import NewsItem
@@ -18,6 +18,9 @@ class IncidentRepository:
         stmt = (
             select(NewsItem)
             .where(NewsItem.is_poaching.is_(True))
+            .where(NewsItem.is_india.is_(True))
+            .where(func.length(func.trim(NewsItem.species)) > 0)
+            .where(func.lower(NewsItem.species).notlike("%unknown%"))
             .order_by(NewsItem.published_at.desc())
             .limit(safe_limit)
         )

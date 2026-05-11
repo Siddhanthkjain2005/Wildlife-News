@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections import Counter
 from itertools import combinations
+import re
 
 import networkx as nx
 from sqlalchemy.orm import Session
 
 from app.models import NewsItem
 from app.repositories.incident_repo import IncidentRepository
+from app.services.intelligence import HybridIntelligenceEngine, STOP_COUNTRIES
 
 
 class GraphIntelligenceEngine:
@@ -24,19 +26,23 @@ class GraphIntelligenceEngine:
 
     @staticmethod
     def _extract_persons(raw_value: str) -> list[str]:
+        text = str(raw_value or "").strip()
+        if not text:
+            return []
         persons: list[str] = []
-        seen: set[str] = set()
-        for chunk in (raw_value or "").split(","):
-            name = chunk.strip()
-            if not name:
+        chunks = re.split(r"\s*(?:,|;|/|\\|\|| and | & )\s*", text, flags=re.IGNORECASE)
+        for chunk in chunks:
+            cleaned = HybridIntelligenceEngine._clean_person_candidate(chunk)
+            if not cleaned:
                 continue
-            if "unnamed suspect" in name.lower():
+            lowered = cleaned.lower()
+            if "unnamed suspect" in lowered or lowered in STOP_COUNTRIES or lowered in {"unknown", "india", "bharat"}:
                 continue
-            key = name.lower()
-            if key in seen:
+            if HybridIntelligenceEngine._is_bad_person(cleaned):
                 continue
-            seen.add(key)
-            persons.append(name)
+            if any(HybridIntelligenceEngine._same_person_name(cleaned, existing) for existing in persons):
+                continue
+            persons.append(cleaned)
         return persons
 
     def _load_incidents(self, db: Session, limit: int | None = None) -> list[NewsItem]:
@@ -122,6 +128,7 @@ class GraphIntelligenceEngine:
             incident_ids: set[int] = set()
             state_counter: Counter[str] = Counter()
             species_counter: Counter[str] = Counter()
+            incident_risks: list[int] = []
             for person_node in component:
                 for neighbor in graph.neighbors(person_node):
                     neighbor_attrs = graph.nodes[neighbor]
@@ -129,6 +136,8 @@ class GraphIntelligenceEngine:
                         continue
                     incident_id = int(neighbor_attrs.get("incident_id"))
                     incident_ids.add(incident_id)
+                    incident_risk = int(neighbor_attrs.get("risk_score") or 0)
+                    incident_risks.append(incident_risk)
                     state = str(neighbor_attrs.get("state") or "").strip()
                     if state:
                         state_counter[state] += 1
@@ -137,18 +146,44 @@ class GraphIntelligenceEngine:
                         if species_name:
                             species_counter[species_name] += 1
 
+            avg_risk = round(sum(incident_risks) / len(incident_risks), 1) if incident_risks else 0.0
+            max_risk = max(incident_risks) if incident_risks else 0
+            edge_density = round(float(nx.density(component_graph)) if len(component_graph) > 1 else 0.0, 4)
+            network_score = round(
+                min(
+                    100.0,
+                    (avg_risk * 0.55)
+                    + min(20.0, len(component) * 1.8)
+                    + min(15.0, len(incident_ids) * 1.5)
+                    + min(10.0, edge_density * 25.0),
+                ),
+                1,
+            )
             networks.append(
                 {
-                    "network_id": f"net-{len(networks) + 1}",
+                    "network_id": "",
+                    "network_score": network_score,
                     "suspect_count": len(component),
                     "incident_count": len(incident_ids),
+                    "avg_risk_score": avg_risk,
+                    "max_risk_score": max_risk,
+                    "edge_density": edge_density,
                     "top_states": [{"state": state, "count": count} for state, count in state_counter.most_common(5)],
                     "top_species": [{"species": species, "count": count} for species, count in species_counter.most_common(5)],
                     "top_actors": top_actors,
                 }
             )
-            if len(networks) >= safe_limit:
-                break
+        networks.sort(
+            key=lambda row: (
+                float(row.get("network_score") or 0.0),
+                int(row.get("incident_count") or 0),
+                int(row.get("suspect_count") or 0),
+            ),
+            reverse=True,
+        )
+        networks = networks[:safe_limit]
+        for index, network in enumerate(networks, start=1):
+            network["network_id"] = f"net-{index}"
 
         return {
             "incidents_analyzed": len(incidents),

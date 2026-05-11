@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -29,6 +29,9 @@ def get_news(
     stmt = (
         select(NewsItem)
         .where(NewsItem.is_poaching.is_(True))
+        .where(NewsItem.is_india.is_(True))
+        .where(func.length(func.trim(NewsItem.species)) > 0)
+        .where(func.lower(NewsItem.species).notlike("%unknown%"))
         .where(NewsItem.confidence >= min_score)
         .order_by(NewsItem.published_at.desc())
         .limit(safe_limit)
@@ -97,6 +100,9 @@ def live_incidents(
     stmt = (
         select(NewsItem)
         .where(NewsItem.is_poaching.is_(True))
+        .where(NewsItem.is_india.is_(True))
+        .where(func.length(func.trim(NewsItem.species)) > 0)
+        .where(func.lower(NewsItem.species).notlike("%unknown%"))
         .where(NewsItem.confidence >= min_score)
         .where(NewsItem.id > since_id)
         .order_by(NewsItem.id.asc())

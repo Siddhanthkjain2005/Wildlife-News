@@ -43,3 +43,8 @@ def test_extract_ner_person_candidates_prefers_gliner_roles(intelligence_engine)
     intelligence_engine._person_ner = False
     candidates = intelligence_engine._extract_ner_person_candidates(["Ravi Kumar was arrested by officials."])
     assert candidates == ["Ravi Kumar"]
+
+
+def test_same_person_name_matches_initial_variants(intelligence_engine) -> None:
+    assert intelligence_engine._same_person_name("Ravi Kumar", "Ravi K.") is True
+    assert intelligence_engine._same_person_name("Ajij Ullah", "Mumtaz Ahmad") is False

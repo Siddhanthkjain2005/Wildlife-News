@@ -150,7 +150,12 @@ def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_acc
         action="deep_maintenance",
         status=status,
         ip=m._client_ip(request),
-        notes=f"deleted={result.get('deleted', 0)}; updated={result.get('updated', 0)}; error={result.get('error', '')}"
+        notes=(
+            f"scanned={result.get('scanned', 0)}; updated={result.get('updated', 0)}; "
+            f"deleted_non_india={result.get('deleted_non_india', 0)}; "
+            f"deleted_non_poaching={result.get('deleted_non_poaching', 0)}; "
+            f"error={result.get('error', '')}"
+        ),
     )
     return RedirectResponse(url="/admin/settings", status_code=303)
 
