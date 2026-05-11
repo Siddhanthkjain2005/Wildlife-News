@@ -42,6 +42,7 @@ from app.core.security import (
 from app.excel_exporter import append_live_event_to_excel, export_news_to_excel
 from app.i18n import UI_TEXT, get_ui_text
 from app.models import Alert, AuditLog, DistrictStat, Entity, ExternalSignal, NewsItem, Report, SourceStat, SpeciesStat, SyncLog, Watchlist
+from app.repositories.news_filters import apply_strict_incident_filters
 from app.services.alert_engine import AlertEngine
 from app.services.audit import record_audit
 from app.services.collector import NewsCollector
@@ -213,6 +214,10 @@ def _apply_today_news_scope(stmt):
     return stmt.where(NewsItem.published_at >= start_utc)
 
 
+def _strict_incident_scope(stmt):
+    return apply_strict_incident_filters(stmt)
+
+
 def _apply_today_signal_scope(stmt):
     if not _scope_from_start_enabled():
         return stmt
@@ -257,7 +262,7 @@ def _purge_non_today_records(db: Session) -> dict[str, int]:
     db.query(DistrictStat).delete(synchronize_session=False)
 
     today_rows = db.execute(
-        _apply_today_news_scope(select(NewsItem).where(NewsItem.is_poaching.is_(True)))
+        _apply_today_news_scope(_strict_incident_scope(select(NewsItem)))
     ).scalars().all()
 
     species_totals: dict[str, dict[str, object]] = {}
@@ -918,15 +923,8 @@ def _fetch_filtered_news_rows(
     limit: int = 200,
 ) -> list[NewsItem]:
     safe_limit = max(1, min(1000, limit))
-    stmt = (
-        select(NewsItem)
-        .where(NewsItem.is_poaching.is_(True))
-        .where(NewsItem.is_india.is_(True))
-        .where(func.length(func.trim(NewsItem.species)) > 0)
-        .where(func.lower(NewsItem.species).notlike("%unknown%"))
-        .where(NewsItem.confidence >= min_confidence)
-        .order_by(NewsItem.published_at.desc())
-    )
+    stmt = _strict_incident_scope(select(NewsItem)).where(NewsItem.confidence >= min_confidence)
+    stmt = stmt.order_by(NewsItem.published_at.desc())
     stmt = _apply_today_news_scope(stmt)
     if q.strip():
         q_like = f"%{q.strip().lower()}%"
@@ -1007,7 +1005,7 @@ def _seed_reports_snapshot() -> int:
     generated = 0
     with SessionLocal() as db:
         rows = db.execute(
-            _apply_today_news_scope(select(NewsItem).where(NewsItem.is_poaching.is_(True)))
+            _apply_today_news_scope(_strict_incident_scope(select(NewsItem)))
         ).scalars().all()
         for row in rows:
             upsert_report_for_news(db=db, news=row)
@@ -1035,17 +1033,16 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     start_window = _start_from_utc() if _scope_from_start_enabled() else _today_bounds_utc()[0]
     total_incidents = int(
         db.scalar(
-            _apply_today_news_scope(select(func.count()).select_from(NewsItem).where(NewsItem.is_poaching.is_(True)))
+            _apply_today_news_scope(_strict_incident_scope(select(func.count()).select_from(NewsItem)))
         )
         or 0
     )
     high_risk = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.count())
-                .select_from(NewsItem)
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.risk_score > settings.risk_alert_threshold)
+                _strict_incident_scope(select(func.count()).select_from(NewsItem)).where(
+                    NewsItem.risk_score > settings.risk_alert_threshold
+                )
             )
         )
         or 0
@@ -1053,9 +1050,7 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     states_active = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.count(func.distinct(NewsItem.state)))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.state != "")
+                _strict_incident_scope(select(func.count(func.distinct(NewsItem.state)))).where(NewsItem.state != "")
             )
         )
         or 0
@@ -1065,9 +1060,9 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     reports_today = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.coalesce(func.sum(NewsItem.report_count), 0))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.published_at >= start_window)
+                _strict_incident_scope(select(func.coalesce(func.sum(NewsItem.report_count), 0))).where(
+                    NewsItem.published_at >= start_window
+                )
             )
         )
         or 0
@@ -1075,7 +1070,7 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     total_reports = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.coalesce(func.sum(NewsItem.report_count), 0)).where(NewsItem.is_poaching.is_(True))
+                _strict_incident_scope(select(func.coalesce(func.sum(NewsItem.report_count), 0)))
             )
         )
         or 0
@@ -1086,7 +1081,7 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     latest_alert_id = int(db.scalar(select(func.max(Alert.id))) or 0)
     latest_incident_id = int(
         db.scalar(
-            _apply_today_news_scope(select(func.max(NewsItem.id)).where(NewsItem.is_poaching.is_(True)))
+            _apply_today_news_scope(_strict_incident_scope(select(func.max(NewsItem.id))))
         )
         or 0
     )
@@ -1125,10 +1120,9 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     network_incidents = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.count())
-                .select_from(NewsItem)
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.network_indicator.is_(True))
+                _strict_incident_scope(select(func.count()).select_from(NewsItem)).where(
+                    NewsItem.network_indicator.is_(True)
+                )
             )
         ) or 0
     )
@@ -1137,10 +1131,7 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     persons_with_data = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.count())
-                .select_from(NewsItem)
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.involved_persons != "")
+                _strict_incident_scope(select(func.count()).select_from(NewsItem)).where(NewsItem.involved_persons != "")
             )
         ) or 0
     )
@@ -1149,9 +1140,9 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
     crime_types_active = int(
         db.scalar(
             _apply_today_news_scope(
-                select(func.count(func.distinct(NewsItem.crime_type)))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.crime_type != "unknown")
+                _strict_incident_scope(select(func.count(func.distinct(NewsItem.crime_type)))).where(
+                    NewsItem.crime_type != "unknown"
+                )
             )
         ) or 0
     )
@@ -1433,15 +1424,11 @@ def _reschedule_sync_job(interval_minutes: int) -> None:
 
 
 def _officer_metrics(db: Session) -> dict[str, int]:
-    base_stmt = _apply_today_news_scope(
-        select(func.count())
-        .select_from(NewsItem)
-        .where(NewsItem.is_poaching.is_(True))
-    )
+    base_stmt = _apply_today_news_scope(_strict_incident_scope(select(func.count()).select_from(NewsItem)))
     critical_24h = db.scalar(base_stmt.where(NewsItem.risk_score >= 85)) or 0
     high_24h = db.scalar(base_stmt.where(NewsItem.risk_score >= 70).where(NewsItem.risk_score < 85)) or 0
     latest_id = db.scalar(
-        _apply_today_news_scope(select(func.max(NewsItem.id)).where(NewsItem.is_poaching.is_(True)))
+        _apply_today_news_scope(_strict_incident_scope(select(func.max(NewsItem.id))))
     ) or 0
     return {
         "critical_24h": int(critical_24h),
@@ -1740,23 +1727,18 @@ def home(
         }
     )
 
-    stmt = (
-        select(NewsItem)
-        .where(NewsItem.is_poaching.is_(True))
-        .where(NewsItem.confidence >= min_score)
-        .order_by(NewsItem.published_at.desc())
-        .limit(200)
-    )
+    stmt = _strict_incident_scope(select(NewsItem)).where(NewsItem.confidence >= min_score)
+    stmt = stmt.order_by(NewsItem.published_at.desc()).limit(200)
     stmt = _apply_today_news_scope(stmt)
     if news_lang:
         stmt = stmt.where(NewsItem.language == news_lang)
 
     news_items = db.execute(stmt).scalars().all()
     total_saved = db.scalar(
-        _apply_today_news_scope(select(func.count()).select_from(NewsItem).where(NewsItem.is_poaching.is_(True)))
+        _apply_today_news_scope(_strict_incident_scope(select(func.count()).select_from(NewsItem)))
     ) or 0
     total_scanned = db.scalar(
-        _apply_today_news_scope(select(func.coalesce(func.sum(NewsItem.report_count), 0)).where(NewsItem.is_poaching.is_(True)))
+        _apply_today_news_scope(_strict_incident_scope(select(func.coalesce(func.sum(NewsItem.report_count), 0))))
     ) or 0
     summary = _dashboard_summary(db)
 
@@ -2015,14 +1997,12 @@ def get_reports(
     min_risk: int = 0,
 ):
     safe_limit = max(1, min(500, limit))
-    stmt = (
+    stmt = _strict_incident_scope(
         select(Report, NewsItem)
         .join(NewsItem, NewsItem.id == Report.news_id)
-        .where(NewsItem.is_poaching.is_(True))
         .where(NewsItem.risk_score >= max(0, min(100, min_risk)))
-        .order_by(Report.generated_at.desc())
-        .limit(safe_limit)
     )
+    stmt = stmt.order_by(Report.generated_at.desc()).limit(safe_limit)
     if _scope_from_start_enabled():
         stmt = stmt.where(NewsItem.published_at >= _start_from_utc())
     rows = db.execute(stmt).all()
@@ -2087,12 +2067,7 @@ def public_download_csv(
     db: Session = Depends(get_db),
 ):
     """Download ALL poaching news as CSV. No authentication required — serves as data backup."""
-    stmt = (
-        select(NewsItem)
-        .where(NewsItem.is_poaching.is_(True))
-        .order_by(NewsItem.published_at.desc())
-        .limit(50000)
-    )
+    stmt = _strict_incident_scope(select(NewsItem)).order_by(NewsItem.published_at.desc()).limit(50000)
     rows = db.execute(stmt).scalars().all()
     payload = [_to_export_payload(row) for row in rows]
     csv_bytes = build_csv_bytes(payload)
@@ -2200,7 +2175,7 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
         with SessionLocal() as count_db:
             total_rows = int(count_db.scalar(select(func.count()).select_from(NewsItem)) or 0)
             poaching_rows = int(count_db.scalar(
-                select(func.count()).select_from(NewsItem).where(NewsItem.is_poaching.is_(True))
+                _strict_incident_scope(select(func.count()).select_from(NewsItem))
             ) or 0)
     except Exception:
         total_rows = -1

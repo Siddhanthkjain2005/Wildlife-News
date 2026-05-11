@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
 from app.models import NewsItem
+from app.repositories.news_filters import apply_strict_incident_filters
 
 logger = get_logger("app.dedupe")
 
@@ -261,13 +262,8 @@ class DedupeEngine:
             )
 
         since = published_at - timedelta(days=14)
-        stmt = (
-            select(NewsItem)
-            .where(NewsItem.is_poaching.is_(True))
-            .where(NewsItem.published_at >= since)
-            .order_by(NewsItem.published_at.desc())
-            .limit(120)
-        )
+        stmt = apply_strict_incident_filters(select(NewsItem)).where(NewsItem.published_at >= since)
+        stmt = stmt.order_by(NewsItem.published_at.desc()).limit(120)
 
         candidates = db.execute(stmt).scalars().all()
         if state.strip():

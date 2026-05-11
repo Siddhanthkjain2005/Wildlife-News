@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from threading import Thread
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.security import require_admin_access
 from app.models import AuditLog
 
@@ -140,23 +142,30 @@ def admin_test_email(request: Request, _: None = Depends(require_admin_access)):
 
 
 @router.post("/admin/settings/deep-maintenance")
-def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_access), db: Session = Depends(get_db)):
+def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_access)):
     from app.services.maintenance import run_deep_maintenance
-    result = run_deep_maintenance(db)
-    status = "ok" if result.get("ok") else "error"
     m = _main()
-    m._audit(
-        actor="admin",
-        action="deep_maintenance",
-        status=status,
-        ip=m._client_ip(request),
-        notes=(
-            f"scanned={result.get('scanned', 0)}; updated={result.get('updated', 0)}; "
-            f"deleted_non_india={result.get('deleted_non_india', 0)}; "
-            f"deleted_non_poaching={result.get('deleted_non_poaching', 0)}; "
-            f"error={result.get('error', '')}"
-        ),
-    )
+    client_ip = m._client_ip(request)
+
+    def _bg_maintenance() -> None:
+        with SessionLocal() as maintenance_db:
+            result = run_deep_maintenance(maintenance_db)
+        status = "ok" if result.get("ok") else "error"
+        m._audit(
+            actor="admin",
+            action="deep_maintenance",
+            status=status,
+            ip=client_ip,
+            notes=(
+                f"scanned={result.get('scanned', 0)}; updated={result.get('updated', 0)}; "
+                f"deleted_non_india={result.get('deleted_non_india', 0)}; "
+                f"deleted_non_poaching={result.get('deleted_non_poaching', 0)}; "
+                f"error={result.get('error', '')}"
+            ),
+        )
+
+    Thread(target=_bg_maintenance, daemon=True).start()
+    m._audit(actor="admin", action="deep_maintenance_start", status="ok", ip=client_ip, notes="started_in_background")
     return RedirectResponse(url="/admin/settings", status_code=303)
 
 

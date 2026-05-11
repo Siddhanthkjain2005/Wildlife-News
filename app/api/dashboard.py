@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.models import NewsItem
+from app.repositories.news_filters import apply_strict_incident_filters
 from app.utils.india_geo import INDIA_CENTER, centroid_for_state
 
 router = APIRouter(tags=["dashboard"])
@@ -42,13 +43,11 @@ def map_data(db: Session = Depends(get_db), limit: int = 400):
 
     def _compute_map_data():
         safe_limit = max(50, min(1200, limit))
+        strict_stmt = apply_strict_incident_filters(select(NewsItem))
         rows = (
             db.execute(
                 m._apply_today_news_scope(
-                    select(NewsItem)
-                    .where(NewsItem.is_poaching.is_(True))
-                    .order_by(NewsItem.published_at.desc())
-                    .limit(safe_limit)
+                    strict_stmt.order_by(NewsItem.published_at.desc()).limit(safe_limit)
                 )
             )
             .scalars()
@@ -86,10 +85,9 @@ def chart_data(db: Session = Depends(get_db)):
         else:
             recent_30_count = int(
                 db.scalar(
-                    select(func.count())
-                    .select_from(NewsItem)
-                    .where(NewsItem.is_poaching.is_(True))
-                    .where(NewsItem.published_at >= (now_utc - timedelta(days=30)))
+                    apply_strict_incident_filters(select(func.count()).select_from(NewsItem)).where(
+                        NewsItem.published_at >= (now_utc - timedelta(days=30))
+                    )
                 )
                 or 0
             )
@@ -101,12 +99,8 @@ def chart_data(db: Session = Depends(get_db)):
                 window_days = 365
             start_date = now_utc - timedelta(days=window_days - 1)
             aggregate_weekly = window_days > 90
-        rows_stmt = (
-            select(NewsItem)
-            .where(NewsItem.is_poaching.is_(True))
-            .where(NewsItem.published_at >= start_date)
-            .order_by(NewsItem.published_at.asc())
-        )
+        rows_stmt = apply_strict_incident_filters(select(NewsItem)).where(NewsItem.published_at >= start_date)
+        rows_stmt = rows_stmt.order_by(NewsItem.published_at.asc())
         rows = db.execute(rows_stmt).scalars().all()
 
         timeline: dict[str, dict[str, int]] = {}
@@ -156,26 +150,23 @@ def chart_data(db: Session = Depends(get_db)):
 
         all_states = db.execute(
             m._apply_today_news_scope(
-                select(func.distinct(NewsItem.state))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.state != "")
-                .order_by(NewsItem.state.asc())
+                apply_strict_incident_filters(select(func.distinct(NewsItem.state))).where(NewsItem.state != "").order_by(
+                    NewsItem.state.asc()
+                )
             )
         ).scalars().all()
         all_sources = db.execute(
             m._apply_today_news_scope(
-                select(func.distinct(NewsItem.source))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.source != "")
-                .order_by(NewsItem.source.asc())
+                apply_strict_incident_filters(select(func.distinct(NewsItem.source))).where(NewsItem.source != "").order_by(
+                    NewsItem.source.asc()
+                )
             )
         ).scalars().all()
         all_crime_types = db.execute(
             m._apply_today_news_scope(
-                select(func.distinct(NewsItem.crime_type))
-                .where(NewsItem.is_poaching.is_(True))
-                .where(NewsItem.crime_type != "")
-                .order_by(NewsItem.crime_type.asc())
+                apply_strict_incident_filters(select(func.distinct(NewsItem.crime_type))).where(
+                    NewsItem.crime_type != ""
+                ).order_by(NewsItem.crime_type.asc())
             )
         ).scalars().all()
         all_species = sorted(species_totals.keys())

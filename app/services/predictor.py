@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.models.intelligence import DistrictStat, Entity, SpeciesStat
 from app.models.news import NewsItem
+from app.repositories.news_filters import apply_strict_incident_filters, is_strict_incident_record
 
 logger = logging.getLogger("app.predictor")
 
@@ -90,6 +91,8 @@ class WildlifeCrimePredictor:
         otherwise just updates counters and key frequency tables.
         """
         with _model_lock:
+            if not is_strict_incident_record(news_item):
+                return {"action": "incremental", "ok": True, "skipped": True, "reason": "outside_strict_scope"}
             self._incremental_count += 1
             if self._incremental_count >= self._INCREMENTAL_RETRAIN_THRESHOLD:
                 logger.info("Incremental threshold reached (%d), triggering full retrain.", self._incremental_count)
@@ -165,9 +168,7 @@ class WildlifeCrimePredictor:
 
         # Fetch all poaching news
         rows = db.execute(
-            select(NewsItem)
-            .where(NewsItem.is_poaching.is_(True))
-            .order_by(NewsItem.published_at.asc())
+            apply_strict_incident_filters(select(NewsItem)).order_by(NewsItem.published_at.asc())
         ).scalars().all()
 
         if len(rows) < 5:

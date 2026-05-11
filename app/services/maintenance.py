@@ -24,13 +24,16 @@ def run_deep_maintenance(db: Session):
     """Re-analyze all stored incidents with latest AI and keep only strict India wildlife incidents."""
     engine_ai = HybridIntelligenceEngine()
     try:
-        items = db.query(NewsItem).all()
+        item_ids = [int(row[0]) for row in db.query(NewsItem.id).order_by(NewsItem.id.asc()).all()]
         deleted_non_india = 0
         deleted_non_poaching = 0
         updated = 0
         scanned = 0
 
-        for item in items:
+        for index, news_id in enumerate(item_ids, start=1):
+            item = db.query(NewsItem).filter(NewsItem.id == news_id).first()
+            if item is None:
+                continue
             scanned += 1
             base_summary = item.summary or ""
             full_content = "\n".join(
@@ -86,6 +89,10 @@ def run_deep_maintenance(db: Session):
             item.confidence_explanation = str(intel.confidence_explanation or "")[:500]
             upsert_report_for_news(db, item)
             updated += 1
+
+            if index % 100 == 0:
+                db.commit()
+                db.expire_all()
 
         db.commit()
         return {

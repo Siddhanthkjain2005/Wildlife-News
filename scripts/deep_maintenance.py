@@ -22,6 +22,7 @@ def main() -> None:
             )
         else:
             print(f"❌ Failed: {result.get('error', 'unknown error')}")
+            raise SystemExit(1)
     finally:
         db.close()
 

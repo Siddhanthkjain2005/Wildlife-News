@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import NewsItem
+from app.repositories.news_filters import apply_strict_incident_filters
 
 NEWS_SHEET = "news_items"
 LIVE_EVENTS_SHEET = "live_events"
@@ -98,7 +99,7 @@ def _ensure_headers(sheet, headers: list[str]) -> None:
 
 
 def export_news_to_excel(db: Session) -> int:
-    stmt = select(NewsItem).where(NewsItem.is_poaching.is_(True)).order_by(NewsItem.published_at.desc())
+    stmt = apply_strict_incident_filters(select(NewsItem)).order_by(NewsItem.published_at.desc())
     rows = db.execute(stmt).scalars().all()
     path = Path(settings.excel_path)
 
