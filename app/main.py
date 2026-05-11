@@ -1784,11 +1784,9 @@ def sync_now():
 def admin_reanalyze(request: Request, _admin=Depends(require_admin_access)):
     """Re-analyze all historical records with the current AI pipeline."""
 
-    def _bg_reanalyze():
-        from app.services.maintenance import run_deep_maintenance
+    from app.services.maintenance import start_deep_maintenance_job
 
-        with SessionLocal() as db:
-            result = run_deep_maintenance(db)
+    def _on_complete(result: dict[str, object]) -> None:
         _audit(
             actor="admin",
             action="reanalyze",
@@ -1796,8 +1794,10 @@ def admin_reanalyze(request: Request, _admin=Depends(require_admin_access)):
             notes=json.dumps(result),
         )
 
-    Thread(target=_bg_reanalyze, daemon=True).start()
-    return {"ok": True, "message": "Full AI reanalysis started in background. Check logs for progress."}
+    launch = start_deep_maintenance_job(trigger="api_admin_reanalyze", on_complete=_on_complete)
+    if not launch.get("started"):
+        return {"ok": False, "message": "Maintenance is already running. Try again after it completes."}
+    return {"ok": True, "message": "Full AI reanalysis started in background. Check maintenance status for progress."}
 
 
 @app.get("/login")

@@ -20,22 +20,28 @@
     </div>
 
     <div class="row g-3 mb-3">
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="kpi-card">
           <div class="kpi-label">Cache Entries</div>
           <div class="kpi-value">{{ cache_state.entries }}</div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="kpi-card">
           <div class="kpi-label">Cache Hits</div>
           <div class="kpi-value">{{ cache_state.hits }}</div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-md-3">
         <div class="kpi-card">
           <div class="kpi-label">Sync Running</div>
           <div class="kpi-value">{{ "Yes" if sync_state.running else "No" }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Maintenance Running</div>
+          <div class="kpi-value">{{ "Yes" if maintenance_state.running else "No" }}</div>
         </div>
       </div>
     </div>
@@ -85,6 +91,8 @@
         <form method="post" action="/admin/settings/deep-maintenance" onsubmit="return confirm('Full AI reanalysis runs in the background and will delete non-India/non-poaching/non-animal incidents. Proceed?')">
           <button class="btn btn-danger btn-sm">Run Full AI Reanalysis</button>
         </form>
+        <a class="btn btn-outline-light btn-sm" href="/api/admin/maintenance-status" target="_blank" rel="noopener noreferrer">Maintenance Status JSON</a>
+        <a class="btn btn-outline-light btn-sm" href="/api/admin/data-quality" target="_blank" rel="noopener noreferrer">Data Quality JSON</a>
       </div>
     </div>
   </div>

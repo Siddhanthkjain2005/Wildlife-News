@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from threading import Thread
-
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal, get_db
+from app.core.database import get_db
 from app.core.security import require_admin_access
 from app.models import AuditLog
+from app.services.maintenance import compute_data_quality_overview, get_maintenance_status, start_deep_maintenance_job
 
 router = APIRouter(tags=["admin"])
 
@@ -28,6 +27,7 @@ def admin_settings_page(request: Request):
     except HTTPException:
         return RedirectResponse(url="/login", status_code=303)
     cache_state = m.api_cache.snapshot()
+    maintenance_status = get_maintenance_status()
     return m.templates.TemplateResponse(
         "admin_settings.html",
         {
@@ -44,6 +44,7 @@ def admin_settings_page(request: Request):
             },
             "cache_state": cache_state,
             "sync_state": m._sync_snapshot(),
+            "maintenance_state": maintenance_status,
         },
     )
 
@@ -143,13 +144,10 @@ def admin_test_email(request: Request, _: None = Depends(require_admin_access)):
 
 @router.post("/admin/settings/deep-maintenance")
 def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_access)):
-    from app.services.maintenance import run_deep_maintenance
     m = _main()
     client_ip = m._client_ip(request)
 
-    def _bg_maintenance() -> None:
-        with SessionLocal() as maintenance_db:
-            result = run_deep_maintenance(maintenance_db)
+    def _on_complete(result: dict[str, object]) -> None:
         status = "ok" if result.get("ok") else "error"
         m._audit(
             actor="admin",
@@ -164,7 +162,10 @@ def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_acc
             ),
         )
 
-    Thread(target=_bg_maintenance, daemon=True).start()
+    launch = start_deep_maintenance_job(trigger="admin_settings", on_complete=_on_complete)
+    if not launch.get("started"):
+        m._audit(actor="admin", action="deep_maintenance_start", status="error", ip=client_ip, notes="already_running")
+        return RedirectResponse(url="/admin/settings", status_code=303)
     m._audit(actor="admin", action="deep_maintenance_start", status="ok", ip=client_ip, notes="started_in_background")
     return RedirectResponse(url="/admin/settings", status_code=303)
 
@@ -185,3 +186,17 @@ def admin_audit_logs(limit: int = 200, _: None = Depends(require_admin_access), 
         }
         for row in rows
     ]
+
+
+@router.get("/api/admin/maintenance-status")
+def admin_maintenance_status(_: None = Depends(require_admin_access)):
+    return get_maintenance_status()
+
+
+@router.get("/api/admin/data-quality")
+def admin_data_quality(
+    sample_limit: int = 15,
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    return compute_data_quality_overview(db, sample_limit=sample_limit)
