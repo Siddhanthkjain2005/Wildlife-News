@@ -237,7 +237,12 @@ SOURCE_CREDIBILITY: dict[str, float] = {
 _SOURCE_DEFAULT = 0.70
 
 
-PERSON_TOKEN_PATTERN = r"(?:[A-Z][A-Za-z.'\u2019-]*|[A-Z]\.?|[^\W\d_]{2,})"
+PERSON_CONNECTOR_TOKENS = {"bin", "ibn", "binti", "al", "el", "de", "da", "del", "van", "von", "ben"}
+PERSON_TOKEN_PATTERN = (
+    r"(?:[A-Z][A-Za-z.'\u2019-]*|[A-Z]\.?|"
+    r"bin|ibn|binti|al|el|de|da|del|van|von|ben|"
+    r"[\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]{2,})"
+)
 PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,4}}"
 PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,6}}"
 
@@ -1094,10 +1099,17 @@ class HybridIntelligenceEngine:
             value,
             flags=re.IGNORECASE,
         )
+        value = re.sub(
+            r"\b(?:updated on|key points?|similar views?|likely involving(?:\s+near|\s+marine)?|incident occurred(?:\s+in)?|complaint with)\b.*$",
+            "",
+            value,
+            flags=re.IGNORECASE,
+        ).strip()
         value = re.sub(r",?\s*(?:resident(?:s)?|r/o|s/o|d/o|w/o|h/o|f/o)\b.*$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\b(?:son|daughter|wife|husband|father)\s+of\b.*$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\b(?:hailing|belonging|native)\s+(?:from|to)\b.*$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\s+", " ", value).strip()
+        value = re.sub(r"\b(?:and|or|with|from|near|around|at|in|of|on|under|over|to)$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"^(?:mr|mrs|ms|dr|shri|smt|sri|prof)\.?\s+", "", value, flags=re.IGNORECASE)
         if not value:
             return ""
@@ -1161,6 +1173,26 @@ class HybridIntelligenceEngine:
         if len(right_last) == 1 and left_last.startswith(right_last):
             return True
         return False
+
+    @classmethod
+    def _sanitize_involved_persons(cls, raw_values: list[str], *, limit: int = 30) -> list[str]:
+        persons: list[str] = []
+        for raw in raw_values:
+            candidate = cls._clean_person_candidate(str(raw or ""))
+            if not candidate or cls._is_bad_person(candidate):
+                continue
+            duplicate_index = next(
+                (i for i, existing in enumerate(persons) if cls._same_person_name(candidate, existing)),
+                -1,
+            )
+            if duplicate_index >= 0:
+                if len(candidate) > len(persons[duplicate_index]):
+                    persons[duplicate_index] = candidate
+                continue
+            persons.append(candidate)
+            if len(persons) >= limit:
+                break
+        return persons
 
     @classmethod
     def _split_person_candidates(cls, raw_value: str) -> list[str]:
@@ -1248,14 +1280,17 @@ class HybridIntelligenceEngine:
 
     @staticmethod
     def _is_bad_person(person: str) -> bool:
-        if not person or person.endswith("unnamed suspect") or person.endswith("unnamed suspects"):
-            return False
+        if not person:
+            return True
+        lowered_person = person.lower().strip()
+        if "unnamed suspect" in lowered_person or "unknown suspect" in lowered_person:
+            return True
 
         start_block = re.compile(
             r"^(?:in|at|of|for|from|by|with|to|the|a|an|as|on|is|was|were|has|have|had|"
             r"this|that|these|those|and|or|but|not|no|its|their|our|who|which|what|where|"
             r"when|how|why|after|before|during|while|about|against|between|through|under|"
-            r"over|into|upon|until|within|without|some|most|many|several|few|all|any|such|"
+            r"over|into|upon|until|within|without|near|around|some|most|many|several|few|all|any|such|"
             r"also|additionally|meanwhile|however|further|moreover|hence|thus|therefore|"
             r"yet|still|already|just|only|even|much|more|less|very|too|quite|rather|here|"
             r"there|now|then|often|never|always|sometimes|recently|usually|finally|"
@@ -1287,6 +1322,8 @@ class HybridIntelligenceEngine:
             r"delivery|passenger|passengers|owner|store|shop|muslim|rohingya|centres|"
             r"reserves|landscapes|pressed|revealed|investigations|interrogation|"
             r"identified|discussion|discussions|stated|scent|squad|once|cases|"
+            r"updated|point|points|similar|views|occurred|complaint|suspected|project|projects|forests|"
+            r"achievement|sustainability|award|leadership|"
             r"people|persons|suspects|accused|convict|convicts|offender|offenders|"
             r"boy|girl|man|woman|men|women|couple|family|resident|residents|"
             r"encounter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
@@ -1296,7 +1333,12 @@ class HybridIntelligenceEngine:
             r"skin|skins|horn|horns|tusk|tusks|claw|claws|bone|bones|scale|scales|"
             r"sanders|sander|coral|corals|quill|quills|gibbon|gibbons|"
             r"heroin|smack|ganja|drug|drugs|narcotic|narcotics|ndps|"
-            r"escobar|pablo|hippo|hippos|sho|cbi|ncb|stf|ncrb|dfo|acf|rfo|division|force|task)\b",
+            r"escobar|pablo|hippo|hippos|sho|cbi|ncb|stf|ncrb|dfo|acf|rfo|division|force|task|"
+            r"nenow|msn|lankan|ambergris)\b",
+            re.IGNORECASE,
+        )
+        phrase_block = re.compile(
+            r"(?:likely involving|updated on|key points?|similar views?|incident occurred|near\s+[A-Z]|surrounding areas|such as)",
             re.IGNORECASE,
         )
         number_word = re.compile(
@@ -1319,12 +1361,18 @@ class HybridIntelligenceEngine:
             return True
         if contains_block.search(person):
             return True
+        if phrase_block.search(person):
+            return True
         words = person.split()
+        if len(words) > 5:
+            return True
         if all(len(w.strip(".")) <= 1 for w in words):
             return True
         if re.match(r"^\d+", person):
             return True
         if number_word.match(person.strip()):
+            return True
+        if re.search(r"[A-Za-z]+'s\b", person):
             return True
         if len(person) <= 5 and person == person.upper():
             return True
@@ -1337,6 +1385,17 @@ class HybridIntelligenceEngine:
             for w in words
         ):
             return True
+        latin_words = [w for w in words if re.search(r"[A-Za-z]", w)]
+        if latin_words:
+            substantive = [w for w in latin_words if w.lower().strip(".") not in PERSON_CONNECTOR_TOKENS]
+            if not substantive:
+                return True
+            if len(substantive) < 2:
+                return True
+            if any(not re.match(r"^[A-Z][A-Za-z.'\u2019-]*$", w) for w in substantive):
+                return True
+            if sum(1 for w in substantive if len(w.strip(".")) >= 3) == 0:
+                return True
         person_lower = person.lower().strip()
         if person_lower in DISTRICT_TO_STATE or person_lower in INDIA_STATES:
             return True
@@ -1388,20 +1447,10 @@ class HybridIntelligenceEngine:
         ranked = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
         raw_persons = [display_names[name] for name, score in ranked if score >= 2][:40]
 
-        # Post-filter: remove obvious false positives
-        involved_persons = []
-        for person in raw_persons:
-            if self._is_bad_person(person):
-                continue
-            if any(self._same_person_name(person, existing) for existing in involved_persons):
-                continue
-            involved_persons.append(person)
-            if len(involved_persons) >= 30:
-                break
-        if 0 < involved_count_hint <= 20 and involved_count_hint > len(involved_persons) and len(involved_persons) < 6:
-            remaining = involved_count_hint - len(involved_persons)
-            suffix = "other unnamed suspect" if remaining == 1 else "other unnamed suspects"
-            involved_persons.append(f"{remaining} {suffix}")
+        involved_persons = self._sanitize_involved_persons(raw_persons, limit=30)
+        # If extraction yields no reliable named person, prefer empty list over synthetic placeholders.
+        if not involved_persons and involved_count_hint > 0:
+            return []
         return involved_persons[:40]
 
     @staticmethod
@@ -2236,7 +2285,10 @@ class HybridIntelligenceEngine:
         
         llm_suspects = llm_summary.get("extracted_suspects")
         if isinstance(llm_suspects, list) and not involved_persons:
-            involved_persons = [str(p).strip() for p in llm_suspects if str(p).strip()][:8]
+            involved_persons = self._sanitize_involved_persons(
+                [str(p).strip() for p in llm_suspects if str(p).strip()],
+                limit=8,
+            )
 
         unknown_profile = self._extract_unknown_profile(
             source_text=source_text,
