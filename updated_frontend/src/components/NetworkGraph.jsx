@@ -2,13 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Network, Users, MapPin, AlertTriangle, ChevronRight, User, Briefcase, ExternalLink, RefreshCw } from 'lucide-react';
 import { fetchJson, ENDPOINTS } from '../lib/api';
 
-const STOP_COUNTRIES = [
-  "myanmar", "thailand", "singapore", "vietnam", "laos", "cambodia", "china",
-  "nepal", "bhutan", "bangladesh", "sri lanka", "malaysia", "indonesia",
-  "africa", "south africa", "kenya", "tanzania", "nigeria", "congo",
-  "europe", "usa", "uk", "russia", "australia", "brazil", "dubai", "uae"
-];
-
 export default function NetworkGraph() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,11 +11,17 @@ export default function NetworkGraph() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const result = await fetchJson(ENDPOINTS.graphNetworks);
+      const query = new URLSearchParams({ limit: "10000", min_size: "2", incident_limit: "10000" });
+      const result = await fetchJson(`${ENDPOINTS.graphNetworks}?${query.toString()}`);
       setData(result);
-      if (result.networks && result.networks.length > 0) {
-        setSelectedNetwork(result.networks[0]);
-      }
+      setSelectedNetwork((current) => {
+        if (!result.networks || result.networks.length === 0) return null;
+        if (current?.network_id) {
+          const existing = result.networks.find((net) => net.network_id === current.network_id);
+          if (existing) return existing;
+        }
+        return result.networks[0];
+      });
       setError(null);
     } catch (err) {
       setError("Failed to load intelligence networks.");
@@ -52,7 +51,9 @@ export default function NetworkGraph() {
           <Network size={24} className="accent-icon" />
           <div>
             <h1>Intelligence Network Browser</h1>
-            <p className="subtitle">Visualizing {data?.person_nodes || 0} actors across {data?.incidents_analyzed || 0} incidents</p>
+            <p className="subtitle">
+              Visualizing {data?.person_nodes || 0} actors across {data?.incidents_analyzed || 0} incidents and {data?.total_network_count || 0} networks
+            </p>
           </div>
         </div>
         <button className="btn-secondary" onClick={loadData}>
@@ -63,7 +64,9 @@ export default function NetworkGraph() {
 
       <div className="network-layout">
         <aside className="network-sidebar">
-          <div className="sidebar-label">Detected Clusters</div>
+          <div className="sidebar-label">
+            Detected Clusters ({data?.network_count || 0} shown / {data?.total_network_count || data?.network_count || 0} total)
+          </div>
           <div className="cluster-list">
             {data?.networks?.map((net) => (
               <button 
@@ -111,15 +114,9 @@ export default function NetworkGraph() {
 
               <div className="network-grid">
                 <section className="actors-section">
-                  <h3><User size={18} /> High-Centrality Actors</h3>
+                  <h3><User size={18} /> Network Actors ({selectedNetwork.actor_count || selectedNetwork.suspect_count || 0})</h3>
                   <div className="actor-list">
-                    {selectedNetwork.top_actors
-                      ?.filter(actor => {
-                        const name = (actor.name || "").toLowerCase();
-                        const banned = [...STOP_COUNTRIES, "india", "unknown"];
-                        return !banned.includes(name);
-                      })
-                      .map((actor, idx) => (
+                    {(selectedNetwork.actors || selectedNetwork.top_actors || []).map((actor, idx) => (
                       <div key={idx} className="actor-card animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
                         <div className="actor-main">
                           <div className="actor-name">{actor.name}</div>
@@ -134,6 +131,11 @@ export default function NetworkGraph() {
                         </div>
                       </div>
                     ))}
+                    {(!selectedNetwork.actors || selectedNetwork.actors.length === 0) && (!selectedNetwork.top_actors || selectedNetwork.top_actors.length === 0) && (
+                      <div className="empty-state">
+                        <p>No actor nodes found for this network.</p>
+                      </div>
+                    )}
                   </div>
                 </section>
 
@@ -154,6 +156,23 @@ export default function NetworkGraph() {
                         {s.species} <span className="pill-count">{s.count}</span>
                       </span>
                     ))}
+                  </div>
+
+                  <h3 style={{ marginTop: '24px' }}><ExternalLink size={18} /> Linked Incidents</h3>
+                  <div className="incident-list">
+                    {selectedNetwork.linked_incidents?.map((incident) => (
+                      <a key={incident.id} className="incident-item" href={incident.open_url || '#'} target="_blank" rel="noopener noreferrer">
+                        <div className="incident-title">{incident.title}</div>
+                        <div className="incident-meta">
+                          Risk {incident.risk_score} • {incident.state || "Unknown"}{incident.district ? `, ${incident.district}` : ""}
+                        </div>
+                      </a>
+                    ))}
+                    {(!selectedNetwork.linked_incidents || selectedNetwork.linked_incidents.length === 0) && (
+                      <div className="empty-state">
+                        <p>No linked incidents found for this network.</p>
+                      </div>
+                    )}
                   </div>
                 </section>
               </div>
@@ -360,6 +379,34 @@ export default function NetworkGraph() {
           font-size: 10px;
           opacity: 0.5;
           margin-left: 4px;
+        }
+        .incident-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .incident-item {
+          display: block;
+          text-decoration: none;
+          color: inherit;
+          border: 1px solid rgba(26, 25, 23, 0.08);
+          border-radius: 10px;
+          padding: 10px 12px;
+          transition: background 0.2s ease, border-color 0.2s ease;
+        }
+        .incident-item:hover {
+          background: rgba(193, 127, 89, 0.06);
+          border-color: rgba(193, 127, 89, 0.25);
+        }
+        .incident-title {
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.35;
+          margin-bottom: 2px;
+        }
+        .incident-meta {
+          font-size: 11px;
+          color: #6B6966;
         }
         .spin { animation: rotate 2s linear infinite; }
         @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

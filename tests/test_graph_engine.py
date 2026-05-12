@@ -49,3 +49,41 @@ def test_build_graph_creates_person_and_incident_links() -> None:
     assert graph.nodes["person:ajij ullah"]["incident_count"] == 2
     assert graph.nodes["person:mumtaz ahmad"]["incident_count"] == 1
     assert graph["person:ajij ullah"]["person:mumtaz ahmad"]["co_incident_count"] == 1
+
+
+def test_get_networks_exposes_full_actor_and_incident_lists() -> None:
+    engine = GraphIntelligenceEngine()
+    incidents = [
+        SimpleNamespace(
+            id=11,
+            title="Case A",
+            state="Maharashtra",
+            district="Mumbai",
+            species="pangolin",
+            risk_score=91,
+            published_at=SimpleNamespace(isoformat=lambda: "2026-05-10T09:00:00"),
+            involved_persons="Ajij Ullah, Mumtaz Ahmad, ravi kumar",
+        ),
+        SimpleNamespace(
+            id=12,
+            title="Case B",
+            state="Maharashtra",
+            district="Thane",
+            species="pangolin",
+            risk_score=72,
+            published_at=SimpleNamespace(isoformat=lambda: "2026-05-11T09:00:00"),
+            involved_persons="ravi kumar, Suresh Yadav",
+        ),
+    ]
+
+    engine._load_incidents = lambda _db, limit=None: incidents  # type: ignore[assignment]
+    payload = engine.get_networks(db=None, min_size=2, limit=100, incident_limit=10000)
+    assert payload["network_count"] == 1
+    assert payload["total_network_count"] == 1
+
+    network = payload["networks"][0]
+    assert network["network_id"].startswith("net-")
+    assert network["actor_count"] == 4
+    assert len(network["actors"]) == 4
+    assert len(network["linked_incidents"]) == 2
+    assert network["linked_incidents"][0]["risk_score"] >= network["linked_incidents"][1]["risk_score"]

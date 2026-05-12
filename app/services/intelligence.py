@@ -241,10 +241,11 @@ PERSON_CONNECTOR_TOKENS = {"bin", "ibn", "binti", "al", "el", "de", "da", "del",
 PERSON_TOKEN_PATTERN = (
     r"(?:[A-Z][A-Za-z.'\u2019-]*|[A-Z]\.?|"
     r"bin|ibn|binti|al|el|de|da|del|van|von|ben|"
-    r"[\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]{2,})"
+    r"[\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F\u0600-\u06FF\u0750-\u077F]{2,})"
 )
 PERSON_NAME_PATTERN = rf"{PERSON_TOKEN_PATTERN}(?:\s+{PERSON_TOKEN_PATTERN}){{0,4}}"
-PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*(?:,|and|&|और|एवं|तथा)\s*{PERSON_NAME_PATTERN}){{1,6}}"
+PERSON_LIST_SEPARATOR_PATTERN = r"(?:,|;|/|\\|\||and|&|और|एवं|तथा|आणि|ও|এবং|و|ਅਤੇ|અને|మరియు|ಮತ್ತು|மற்றும்|ଏବଂ)"
+PERSON_NAME_LIST_PATTERN = rf"{PERSON_NAME_PATTERN}(?:\s*{PERSON_LIST_SEPARATOR_PATTERN}\s*{PERSON_NAME_PATTERN}){{1,6}}"
 
 PERSON_EXTRACTION_PATTERNS = [
     # English: "arrested/held/detained [person]"
@@ -292,16 +293,19 @@ PERSON_EXTRACTION_PATTERNS = [
         re.IGNORECASE,
     ),
     # Hindi: "गिरफ्तार [name]" or "[name] गिरफ्तार"
-    re.compile(rf"गिरफ़?\s*तार\s+(?:किया\s+)?({PERSON_NAME_PATTERN})", re.IGNORECASE),
-    re.compile(rf"({PERSON_NAME_PATTERN})\s+(?:को\s+)?गिरफ़?\s*तार", re.IGNORECASE),
+    re.compile(rf"गिरफ़?\s*तार\s+(?:किया\s+)?({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+(?:को\s+)?गिरफ़?\s*तार", re.IGNORECASE),
     # Hindi: "आरोपी [name]"
-    re.compile(rf"(?:आरोपी|संदिग्ध|तस्कर|शिकारी)\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:आरोपी|संदिग्ध|तस्कर|शिकारी|अभियुक्त)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # Kannada: "ಬಂಧನ"
-    re.compile(rf"({PERSON_NAME_PATTERN})\s+(?:ಅನ್ನು\s+)?ಬಂಧಿಸ", re.IGNORECASE),
+    re.compile(rf"({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+(?:ಅನ್ನು\s+)?ಬಂಧಿಸ", re.IGNORECASE),
+    re.compile(rf"(?:ಆರೋಪಿ|ಶಂಕಿತ)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # Tamil: "கைது"
-    re.compile(rf"({PERSON_NAME_PATTERN})\s+கைது", re.IGNORECASE),
+    re.compile(rf"({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+கைது", re.IGNORECASE),
+    re.compile(rf"(?:ஆரோபி|சந்தேகநபர்)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # Bengali: "গ্রেপ্তার/গ্রেফতার"
-    re.compile(rf"({PERSON_NAME_PATTERN})\s+(?:কে\s+)?গ্রে(?:প|ফ)তার", re.IGNORECASE),
+    re.compile(rf"({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+(?:কে\s+)?গ্রে(?:প|ফ)তার", re.IGNORECASE),
+    re.compile(rf"(?:অভিযুক্ত|সন্দেহভাজন|আসামি)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # FIR reference: "FIR against [name]"
     re.compile(
         rf"\b(?:FIR|case|complaint)\s+(?:filed|registered|lodged)\s+(?:against\s+)?({PERSON_NAME_PATTERN})\b",
@@ -328,13 +332,20 @@ PERSON_EXTRACTION_PATTERNS = [
         re.IGNORECASE,
     ),
     # Telugu: "అరెస్ట్ [name]"
-    re.compile(rf"అరెస్ట్\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"అరెస్ట్\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:ఆరోపి|అనుమానితుడు|నిందితుడు)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # Malayalam: "അറസ്റ്റ് [name]"
-    re.compile(rf"അറസ്റ്റ്\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"അറസ്റ്റ്\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:പ്രതി|സംശയിതൻ|പ്രതികൾ)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # Marathi: "अटक [name]"
-    re.compile(rf"(?:अटक|ताब्यात)\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:अटक|ताब्यात)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:आरोपी|संशयित)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
     # Gujarati: "ધરપકડ [name]"
-    re.compile(rf"(?:ધરપકડ|પકડાયો)\s+({PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:ધરપકડ|પકડાયો)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:આરોપી|શંકાસ્પદ)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
+    # Urdu: "گرفتار/ملزم [name]"
+    re.compile(rf"({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})\s+گرفتار", re.IGNORECASE),
+    re.compile(rf"(?:ملزم|مشتبہ)\s+({PERSON_NAME_LIST_PATTERN}|{PERSON_NAME_PATTERN})", re.IGNORECASE),
 ]
 
 PERSON_ROLE_PATTERNS = [
@@ -618,6 +629,19 @@ PERSON_NAME_STOPWORDS = {
     "myanmar", "thailand", "singapore", "vietnam", "laos", "cambodia", "china",
     "nepal", "bhutan", "bangladesh", "sri lanka", "malaysia", "indonesia",
     "africa", "kenya", "tanzania", "dubai", "uae", "qatar", "usa", "uk",
+    # Common multilingual non-name tokens seen in historical India wildlife feeds
+    "गिरफ्तार", "गिरफ़्तार", "आरोपी", "अभियुक्त", "संदिग्ध", "तस्कर", "फरार",
+    "को", "के", "की", "का", "में", "से", "तक", "पर", "ने", "और", "है", "हैं", "था", "थे", "गया", "गई", "गए",
+    "किया", "किए", "कर", "लिए", "जब", "इमेज", "स्रोत", "पहचान", "घर", "दबिश", "पुलिस", "वन", "विभाग",
+    "ये", "वह", "जो", "समेत", "मिला", "मिले", "शराब", "कैप्शन",
+    "चींटी", "अमर", "उजाला", "नेटवर्क",
+    "ವಿಭಾಗ", "ವಿಭಾಗೆ", "ಇಲಾಖೆ", "ಅರಣ್ಯ", "ಅಧಿಕಾರಿಗಳು", "ಸಿಬ್ಬಂದಿ", "ಸಿಬ್ಬంది", "ಕಾರ್ಯಾಚರಣೆ", "ಗ್ಯಾಂಗನ್ನು", "ಜನರನ್ನು", "ಆರೋಪಿ", "ಶಂಕಿತ",
+    "ஆரோபி", "சந்தேகநபர்", "கைது",
+    "অভিযুক্ত", "সন্দেহভাজন", "আসামি", "গ্রেফতার",
+    "ఆరోపి", "అనుమానితుడు", "నిందితుడు", "అరెస్ట్",
+    "આરોપી", "શંકાસ્પદ", "પકડાયો", "ધરપકડ",
+    "ملزم", "مشتبہ", "گرفتار",
+    "published", "caption", "attempting", "sell", "by",
 }
 
 PERSON_COUNT_WORDS = {
@@ -661,8 +685,13 @@ PERSON_ACTION_TERMS = {
     "అరెస్ట్",
     "గుర్తించారు",
     "গ্রেফতার",
+    "অভিযুক্ত",
+    "সন্দেহভাজন",
+    "আসামি",
     "আটক",
     "گرفتار",
+    "ملزم",
+    "مشتبہ",
     "حراست",
     "ଗିରଫ",
     "ଚିହ୍ନଟ",
@@ -680,6 +709,21 @@ PERSON_CONTEXT_TERMS = {
     "traffickers",
     "suspect",
     "suspects",
+    "অভিযুক্ত",
+    "সন্দেহভাজন",
+    "আসামি",
+    "ஆரோபி",
+    "சந்தேகநபர்",
+    "ఆరోపి",
+    "అనుమానితుడు",
+    "ಆರೋಪಿ",
+    "ಶಂಕಿತ",
+    "आरोपी",
+    "अभियुक्त",
+    "શંકાસ્પદ",
+    "આરોપી",
+    "ملزم",
+    "مشتبہ",
     "wildlife crime",
     "smuggling",
     "seizure",
@@ -704,6 +748,14 @@ SPECIES_STOP_TERMS = {
     alias.lower()
     for aliases in SPECIES_KEYWORDS.values()
     for alias in aliases
+}
+
+PERSON_EXACT_NOISE_PHRASES = {
+    "अमर उजाला",
+    "रानी चींटी",
+    "इलाखे कर्मचारी",
+    "इಲಾಖೆ ಸಿಬ್ಬಂದಿ",
+    "ವಿಭಾಗ ಸಿಬ್ಬಂದಿ",
 }
 
 AGENCY_TERMS = [
@@ -1087,6 +1139,8 @@ class HybridIntelligenceEngine:
     @staticmethod
     def _clean_person_candidate(raw_value: str) -> str:
         value = re.sub(r"^[\"'`\u201c\u201d\u2018\u2019\s-]+|[\"'`\u201c\u201d\u2018\u2019,.;:\s-]+$", "", raw_value or "")
+        if re.search(r"[।!?]", value):
+            return ""
         value = re.sub(r"\([^)]{1,30}\)", "", value).strip()
         value = re.sub(r"\baged?\s+\d{1,3}\s*(?:years?|yrs?)?\b", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"\b\d{1,3}\s*(?:years?|yrs?)\s*(?:old)?\b", "", value, flags=re.IGNORECASE).strip()
@@ -1111,10 +1165,16 @@ class HybridIntelligenceEngine:
         value = re.sub(r"\s+", " ", value).strip()
         value = re.sub(r"\b(?:and|or|with|from|near|around|at|in|of|on|under|over|to)$", "", value, flags=re.IGNORECASE).strip()
         value = re.sub(r"^(?:mr|mrs|ms|dr|shri|smt|sri|prof)\.?\s+", "", value, flags=re.IGNORECASE)
+        value = re.sub(r"^(?:श्री|श्रीमती|कुमारी|जनाब|جناب|மிஸ்டர்|திரு|திருமதி|శ్రీ|శ్రీమతి|ಶ್ರೀ|श्रीमान)\s+", "", value).strip()
         if not value:
             return ""
         tokens = [token.strip() for token in value.split(" ") if token.strip()]
-        if not tokens or len(tokens) > 5:
+        has_latin = any(re.search(r"[A-Za-z]", token) for token in tokens)
+        has_non_latin = any(re.search(r"[^\x00-\x7F]", token) for token in tokens)
+        if has_latin and has_non_latin:
+            return ""
+        max_tokens = 6 if has_latin else 4
+        if not tokens or len(tokens) > max_tokens:
             return ""
         lowered_tokens = [token.lower().strip(".") for token in tokens]
         # Filter out stopword tokens but keep non-stopword ones
@@ -1125,16 +1185,44 @@ class HybridIntelligenceEngine:
         normalized = " ".join(lowered_clean)
         if normalized in GEO_STOP_TERMS or normalized in SPECIES_STOP_TERMS:
             return ""
-        if len(clean_tokens) == 1 and len(clean_tokens[0].strip(".")) < 3:
+        if normalized in PERSON_EXACT_NOISE_PHRASES:
             return ""
+        if len(clean_tokens) == 1:
+            token = clean_tokens[0].strip(".")
+            if len(token) < 3:
+                return ""
+            if not re.match(r"^[A-Z][A-Za-z.'\u2019-]*$", token):
+                return ""
+        if not has_latin:
+            long_tokens = [token for token in clean_tokens if len(token.strip(".")) >= 3]
+            short_tokens = [token for token in clean_tokens if len(token.strip(".")) < 3]
+            if len(clean_tokens) < 2:
+                return ""
+            if short_tokens:
+                return ""
+            if len(long_tokens) < 2:
+                return ""
+        else:
+            latin_tokens = [token for token in clean_tokens if re.search(r"[A-Za-z]", token)]
+            ambiguous_short = [
+                token
+                for token in latin_tokens
+                if len(token.strip(".")) <= 2
+                and not re.match(r"^[A-Z]\.?$", token)
+                and token.lower().strip(".") not in {"md", "mohd", "sk"}
+            ]
+            if ambiguous_short:
+                return ""
         if not re.search(r"[A-Z]", " ".join(clean_tokens)) and not re.search(r"[^\x00-\x7F]", " ".join(clean_tokens)):
-            return ""
+            latin_like = all(re.match(r"^[a-z][a-z.'\u2019-]*$", t.lower()) for t in clean_tokens)
+            if not (latin_like and len(clean_tokens) >= 2 and sum(1 for token in clean_tokens if len(token) >= 3) >= 2):
+                return ""
         return " ".join(clean_tokens)
 
     @staticmethod
     def _person_name_tokens(value: str) -> list[str]:
         cleaned = re.sub(
-            r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F\s]",
+            r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F\u0600-\u06FF\u0750-\u077F\s]",
             " ",
             (value or "").lower(),
         )
@@ -1199,7 +1287,7 @@ class HybridIntelligenceEngine:
         if not raw_value:
             return []
         chunks = re.split(
-            r"\s*(?:,|;|/|\\|\|| and | & |और|एवं|तथा|और|ও|এবং|و|ਅਤੇ| तथा | एवं )\s*",
+            rf"\s*{PERSON_LIST_SEPARATOR_PATTERN}\s*",
             raw_value.strip(),
             flags=re.IGNORECASE,
         )
@@ -1364,7 +1452,7 @@ class HybridIntelligenceEngine:
         if phrase_block.search(person):
             return True
         words = person.split()
-        if len(words) > 5:
+        if len(words) > 6:
             return True
         if all(len(w.strip(".")) <= 1 for w in words):
             return True
@@ -1381,7 +1469,7 @@ class HybridIntelligenceEngine:
         if verb_frag.search(person):
             return True
         if not any(
-            len(re.sub(r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F]", "", w)) >= 2
+            len(re.sub(r"[^a-zA-Z\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0A00-\u0A7F\u0980-\u09FF\u0D00-\u0D7F\u0A80-\u0AFF\u0B00-\u0B7F\u0600-\u06FF\u0750-\u077F]", "", w)) >= 2
             for w in words
         ):
             return True
@@ -1392,8 +1480,11 @@ class HybridIntelligenceEngine:
                 return True
             if len(substantive) < 2:
                 return True
-            if any(not re.match(r"^[A-Z][A-Za-z.'\u2019-]*$", w) for w in substantive):
+            if any(not re.match(r"^[A-Za-z][A-Za-z.'\u2019-]*$", w) for w in substantive):
                 return True
+            if all(w and w[0].islower() for w in substantive):
+                if sum(1 for w in substantive if len(w.strip(".")) >= 3) < 2:
+                    return True
             if sum(1 for w in substantive if len(w.strip(".")) >= 3) == 0:
                 return True
         person_lower = person.lower().strip()

@@ -13,9 +13,9 @@ graph_engine = GraphIntelligenceEngine()
 @router.get("/api/graph/networks")
 def graph_networks(
     db: Session = Depends(get_db),
-    min_size: int = Query(default=3, ge=2, le=20),
-    limit: int = Query(default=10, ge=1, le=100),
-    incident_limit: int = Query(default=2000, ge=1, le=10000),
+    min_size: int = Query(default=2, ge=2, le=20),
+    limit: int = Query(default=10000, ge=1, le=10000),
+    incident_limit: int = Query(default=10000, ge=1, le=10000),
 ):
     return graph_engine.get_networks(db, min_size=min_size, limit=limit, incident_limit=incident_limit)
 

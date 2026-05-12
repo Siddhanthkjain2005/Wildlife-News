@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 from itertools import combinations
-import re
 
 import networkx as nx
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from app.services.intelligence import HybridIntelligenceEngine, STOP_COUNTRIES
 
 
 class GraphIntelligenceEngine:
-    def __init__(self, default_incident_limit: int = 2000) -> None:
+    def __init__(self, default_incident_limit: int = 10000) -> None:
         self.default_incident_limit = default_incident_limit
 
     @staticmethod
@@ -25,12 +25,18 @@ class GraphIntelligenceEngine:
         return f"incident:{news_id}"
 
     @staticmethod
+    def _stable_network_id(component: set[str]) -> str:
+        encoded = "|".join(sorted(component)).encode("utf-8")
+        digest = hashlib.sha1(encoded).hexdigest()[:12]
+        return f"net-{digest}"
+
+    @staticmethod
     def _extract_persons(raw_value: str) -> list[str]:
         text = str(raw_value or "").strip()
         if not text:
             return []
         persons: list[str] = []
-        chunks = re.split(r"\s*(?:,|;|/|\\|\|| and | & )\s*", text, flags=re.IGNORECASE)
+        chunks = HybridIntelligenceEngine._split_person_candidates(text)
         for chunk in chunks:
             cleaned = HybridIntelligenceEngine._clean_person_candidate(chunk)
             if not cleaned:
@@ -96,9 +102,9 @@ class GraphIntelligenceEngine:
 
         return graph
 
-    def get_networks(self, db: Session, *, min_size: int = 3, limit: int = 10, incident_limit: int | None = None) -> dict[str, object]:
+    def get_networks(self, db: Session, *, min_size: int = 2, limit: int = 10000, incident_limit: int | None = None) -> dict[str, object]:
         safe_min_size = max(2, min(20, min_size))
-        safe_limit = max(1, min(100, limit))
+        safe_limit = max(1, min(10000, limit))
         incidents = self._load_incidents(db, limit=incident_limit)
         graph = self._build_graph(incidents)
 
@@ -112,7 +118,7 @@ class GraphIntelligenceEngine:
                 continue
             component_graph = person_graph.subgraph(component).copy()
             centrality = nx.betweenness_centrality(component_graph)
-            top_actors = sorted(
+            actors = sorted(
                 [
                     {
                         "name": component_graph.nodes[node].get("name", node),
@@ -123,12 +129,14 @@ class GraphIntelligenceEngine:
                 ],
                 key=lambda item: (item["centrality"], item["incident_count"]),
                 reverse=True,
-            )[:40]
+            )
+            top_actors = actors[:60]
 
             incident_ids: set[int] = set()
             state_counter: Counter[str] = Counter()
             species_counter: Counter[str] = Counter()
             incident_risks: list[int] = []
+            linked_incidents: dict[int, dict[str, object]] = {}
             for person_node in component:
                 for neighbor in graph.neighbors(person_node):
                     neighbor_attrs = graph.nodes[neighbor]
@@ -145,6 +153,25 @@ class GraphIntelligenceEngine:
                         species_name = species.strip().lower()
                         if species_name:
                             species_counter[species_name] += 1
+                    linked_incidents[incident_id] = {
+                        "id": incident_id,
+                        "title": str(neighbor_attrs.get("title") or ""),
+                        "state": str(neighbor_attrs.get("state") or ""),
+                        "district": str(neighbor_attrs.get("district") or ""),
+                        "species": str(neighbor_attrs.get("species") or ""),
+                        "risk_score": incident_risk,
+                        "published_at": str(neighbor_attrs.get("published_at") or ""),
+                        "open_url": f"/open/{incident_id}",
+                    }
+
+            linked_incident_rows = sorted(
+                linked_incidents.values(),
+                key=lambda item: (
+                    int(item.get("risk_score") or 0),
+                    str(item.get("published_at") or ""),
+                ),
+                reverse=True,
+            )
 
             avg_risk = round(sum(incident_risks) / len(incident_risks), 1) if incident_risks else 0.0
             max_risk = max(incident_risks) if incident_risks else 0
@@ -161,16 +188,19 @@ class GraphIntelligenceEngine:
             )
             networks.append(
                 {
-                    "network_id": "",
+                    "network_id": self._stable_network_id(component),
                     "network_score": network_score,
                     "suspect_count": len(component),
+                    "actor_count": len(actors),
                     "incident_count": len(incident_ids),
                     "avg_risk_score": avg_risk,
                     "max_risk_score": max_risk,
                     "edge_density": edge_density,
-                    "top_states": [{"state": state, "count": count} for state, count in state_counter.most_common(5)],
-                    "top_species": [{"species": species, "count": count} for species, count in species_counter.most_common(5)],
+                    "top_states": [{"state": state, "count": count} for state, count in state_counter.most_common(10)],
+                    "top_species": [{"species": species, "count": count} for species, count in species_counter.most_common(10)],
+                    "actors": actors[:200],
                     "top_actors": top_actors,
+                    "linked_incidents": linked_incident_rows[:120],
                 }
             )
         networks.sort(
@@ -181,14 +211,14 @@ class GraphIntelligenceEngine:
             ),
             reverse=True,
         )
+        total_network_count = len(networks)
         networks = networks[:safe_limit]
-        for index, network in enumerate(networks, start=1):
-            network["network_id"] = f"net-{index}"
 
         return {
             "incidents_analyzed": len(incidents),
             "person_nodes": len(person_nodes),
             "network_count": len(networks),
+            "total_network_count": total_network_count,
             "networks": networks,
         }
 

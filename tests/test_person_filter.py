@@ -71,3 +71,23 @@ def test_sanitize_involved_persons_keeps_only_reliable_names(intelligence_engine
         limit=8,
     )
     assert cleaned == ["Ajij Ullah", "Mumtaz Ahmad"]
+
+
+def test_clean_person_candidate_allows_lowercase_multitoken_names(intelligence_engine) -> None:
+    candidate = intelligence_engine._clean_person_candidate("ravi kumar")
+    assert candidate == "ravi kumar"
+    assert intelligence_engine._is_bad_person(candidate) is False
+
+
+def test_extract_involved_persons_hindi_name_list(intelligence_engine) -> None:
+    text = "आरोपी रमेश कुमार और सुरेश यादव को गिरफ्तार किया गया।"
+    persons = intelligence_engine._extract_involved_persons(text)
+    assert "रमेश कुमार" in persons
+    assert "सुरेश यादव" in persons
+
+
+def test_extract_involved_persons_urdu_name_list(intelligence_engine) -> None:
+    text = "ملزم احمد خان و سلیم خان گرفتار ہوئے۔"
+    persons = intelligence_engine._extract_involved_persons(text)
+    assert "احمد خان" in persons
+    assert "سلیم خان" in persons
