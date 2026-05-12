@@ -1495,10 +1495,10 @@ class NewsCollector:
         state: str,
         network_indicator: bool,
         repeat_indicator: bool,
-    ) -> None:
+    ) -> bool:
         source_type = self._provider_source_type(provider)
         if source_type == "news":
-            return
+            return False
         signal_strength = min(
             1.0,
             (confidence * 0.55)
@@ -1517,7 +1517,7 @@ class NewsCollector:
             existing.species = joined_species or existing.species
             existing.state = state[:120] or existing.state
             existing.signal_strength = max(existing.signal_strength, round(signal_strength, 4))
-            return
+            return True
 
         db.add(
             ExternalSignal(
@@ -1532,6 +1532,7 @@ class NewsCollector:
                 signal_strength=round(signal_strength, 4),
             )
         )
+        return True
 
     @staticmethod
     def _upsert_species_stats(db: Session, species: list[str], risk_score: int, published_at: datetime) -> None:
@@ -1783,12 +1784,21 @@ class NewsCollector:
         updated = 0
         dropped_non_india = 0
         pending_writes = 0
+        commit_batch_size = max(1, int(settings.sync_commit_batch_size))
         seen_urls: set[tuple[str, str]] = set()
         provider_stats: dict[str, dict[str, int]] = {}
         district_spike_cache: dict[tuple[str, str], bool] = {}
         self._provider_failures = {}
         self._provider_next_allowed_at = {}
         start_from_utc = self._start_from_utc() if (settings.today_only or str(settings.start_from_date or "").strip()) else None
+
+        def _commit_pending_if_needed(*, force: bool = False) -> None:
+            nonlocal pending_writes
+            if pending_writes <= 0:
+                return
+            if force or pending_writes >= commit_batch_size:
+                db.commit()
+                pending_writes = 0
 
         for provider in self._enabled_providers():
             source_type = self._provider_source_type(provider)
@@ -1893,7 +1903,7 @@ class NewsCollector:
                             species=intel.species,
                             involved_persons=intel.involved_persons,
                         )
-                        self._upsert_external_signal(
+                        external_signal_written = self._upsert_external_signal(
                             db=db,
                             provider=provider,
                             source_name=source,
@@ -1907,6 +1917,9 @@ class NewsCollector:
                             network_indicator=intel.network_indicator,
                             repeat_indicator=intel.repeat_indicator,
                         )
+                        if external_signal_written:
+                            pending_writes += 1
+                            _commit_pending_if_needed()
 
                         if not intel.is_poaching:
                             provider_stats[provider]["rejected"] += 1
@@ -2078,16 +2091,13 @@ class NewsCollector:
                             )
 
                         pending_writes += 1
-                        if pending_writes >= 10:
-                            db.commit()
-                            pending_writes = 0
+                        _commit_pending_if_needed()
 
         for provider, fail_count in self._provider_failures.items():
             provider_stats.setdefault(provider, {"provider": provider, "scanned": 0, "kept": 0, "failed": 0})
             provider_stats[provider]["failed"] += fail_count
 
-        if pending_writes > 0:
-            db.commit()
+        _commit_pending_if_needed(force=True)
         if progress_callback:
             progress_callback(
                 {

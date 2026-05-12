@@ -17,7 +17,7 @@ class Base(DeclarativeBase):
 
 is_sqlite = settings.database_url.startswith("sqlite")
 is_postgres = settings.database_url.startswith("postgresql") or settings.database_url.startswith("postgres")
-sqlite_connect_args = {"check_same_thread": False, "timeout": 30} if is_sqlite else {}
+sqlite_connect_args = {"check_same_thread": False, "timeout": 60} if is_sqlite else {}
 engine = create_engine(
     settings.database_url,
     connect_args=sqlite_connect_args,
@@ -30,10 +30,11 @@ if is_sqlite:
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:  # noqa: ANN001
         cursor = dbapi_connection.cursor()
+        # Set busy timeout immediately to ensure subsequent PRAGMAs don't fail under load.
+        cursor.execute("PRAGMA busy_timeout=60000")
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
 
 

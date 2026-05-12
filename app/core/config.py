@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     start_from_date: str = ""
     max_articles_per_query: int = 60
     max_queries_per_language: int = 8
+    sync_commit_batch_size: int = 1
     request_timeout_seconds: int = 25
     article_fetch_timeout_seconds: int = 12
     provider_parallel_workers: int = 8

@@ -112,10 +112,12 @@ def run_deep_maintenance(db: Session):
             if not intel.is_india:
                 _delete_incident_with_dependents(db, item.id)
                 deleted_non_india += 1
+                db.commit()
                 continue
             if not intel.is_poaching:
                 _delete_incident_with_dependents(db, item.id)
                 deleted_non_poaching += 1
+                db.commit()
                 continue
 
             species_text = ", ".join(intel.species) if isinstance(intel.species, list) else str(intel.species or "")
@@ -127,6 +129,7 @@ def run_deep_maintenance(db: Session):
             if not species_text.strip() or "unknown" in species_text.lower():
                 _delete_incident_with_dependents(db, item.id)
                 deleted_non_poaching += 1
+                db.commit()
                 continue
 
             item.ai_score = float(intel.confidence)
@@ -151,9 +154,9 @@ def run_deep_maintenance(db: Session):
             upsert_report_for_news(db, item)
             updated += 1
 
-            if index % 100 == 0:
-                db.commit()
-                db.expire_all()
+            # Commit frequently (every item) to keep SQLite lock duration minimal and avoid blocking users.
+            db.commit()
+            db.expire_all()
 
         db.commit()
         return {
