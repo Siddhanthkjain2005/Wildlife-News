@@ -1,18 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Network, Users, MapPin, AlertTriangle, ChevronRight, User, Briefcase, ExternalLink, RefreshCw } from 'lucide-react';
-import { fetchJson, ENDPOINTS } from '../lib/api';
+import { fetchJson, ENDPOINTS, resolveExternalUrl } from '../lib/api';
 
 export default function NetworkGraph() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedNetwork, setSelectedNetwork] = useState(null);
+  const abortControllerRef = useRef(null);
+  const requestIdRef = useRef(0);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     try {
       const query = new URLSearchParams({ limit: "10000", min_size: "2", incident_limit: "10000" });
-      const result = await fetchJson(`${ENDPOINTS.graphNetworks}?${query.toString()}`);
+      const result = await fetchJson(`${ENDPOINTS.graphNetworks}?${query.toString()}`, { signal: controller.signal });
+      if (requestId !== requestIdRef.current) return;
       setData(result);
       setSelectedNetwork((current) => {
         if (!result.networks || result.networks.length === 0) return null;
@@ -24,16 +32,22 @@ export default function NetworkGraph() {
       });
       setError(null);
     } catch (err) {
+      if (err?.name === "AbortError") return;
+      if (requestId !== requestIdRef.current) return;
       setError("Failed to load intelligence networks.");
-      console.error(err);
+      console.error("Failed to load intelligence networks:", err);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+    return () => {
+      requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
+    };
+  }, [loadData]);
 
   if (loading && !data) {
     return (
@@ -45,7 +59,7 @@ export default function NetworkGraph() {
   }
 
   return (
-    <div className="network-container" id="section-networks">
+    <div className="network-container">
       <div className="network-header">
         <div className="header-info">
           <Network size={24} className="accent-icon" />
@@ -56,11 +70,16 @@ export default function NetworkGraph() {
             </p>
           </div>
         </div>
-        <button className="btn-secondary" onClick={loadData}>
+        <button className="btn-secondary" onClick={loadData} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'spin' : ''} />
           Refresh Analysis
         </button>
       </div>
+      {error ? (
+        <div className="network-error" role="alert">
+          {error}
+        </div>
+      ) : null}
 
       <div className="network-layout">
         <aside className="network-sidebar">
@@ -117,7 +136,7 @@ export default function NetworkGraph() {
                   <h3><User size={18} /> Network Actors ({selectedNetwork.actor_count || selectedNetwork.suspect_count || 0})</h3>
                   <div className="actor-list">
                     {(selectedNetwork.actors || selectedNetwork.top_actors || []).map((actor, idx) => (
-                      <div key={idx} className="actor-card animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
+                      <div key={`${actor.name || 'actor'}-${actor.incident_count || 0}-${idx}`} className="actor-card animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
                         <div className="actor-main">
                           <div className="actor-name">{actor.name}</div>
                           <div className="actor-meta">
@@ -143,7 +162,7 @@ export default function NetworkGraph() {
                   <h3><MapPin size={18} /> Operation Areas</h3>
                   <div className="pill-cloud">
                     {selectedNetwork.top_states?.map((s, idx) => (
-                      <span key={idx} className="location-pill">
+                      <span key={`${s.state || "state"}-${idx}`} className="location-pill">
                         {s.state} <span className="pill-count">{s.count}</span>
                       </span>
                     ))}
@@ -152,7 +171,7 @@ export default function NetworkGraph() {
                   <h3 style={{ marginTop: '24px' }}><Briefcase size={18} /> Species Targeted</h3>
                   <div className="pill-cloud">
                     {selectedNetwork.top_species?.map((s, idx) => (
-                      <span key={idx} className="species-pill">
+                      <span key={`${s.species || "species"}-${idx}`} className="species-pill">
                         {s.species} <span className="pill-count">{s.count}</span>
                       </span>
                     ))}
@@ -160,14 +179,30 @@ export default function NetworkGraph() {
 
                   <h3 style={{ marginTop: '24px' }}><ExternalLink size={18} /> Linked Incidents</h3>
                   <div className="incident-list">
-                    {selectedNetwork.linked_incidents?.map((incident) => (
-                      <a key={incident.id} className="incident-item" href={incident.open_url || '#'} target="_blank" rel="noopener noreferrer">
-                        <div className="incident-title">{incident.title}</div>
-                        <div className="incident-meta">
-                          Risk {incident.risk_score} • {incident.state || "Unknown"}{incident.district ? `, ${incident.district}` : ""}
-                        </div>
-                      </a>
-                    ))}
+                    {selectedNetwork.linked_incidents?.map((incident, idx) => {
+                      const incidentUrl = resolveExternalUrl(incident.url, incident.open_url);
+                      const itemContent = (
+                        <>
+                          <div className="incident-title">{incident.title}</div>
+                          <div className="incident-meta">
+                            Risk {incident.risk_score} • {incident.state || "Unknown"}{incident.district ? `, ${incident.district}` : ""}
+                          </div>
+                        </>
+                      );
+                      const key = incident.id || `${incident.title || "incident"}-${idx}`;
+                      if (incidentUrl === "#") {
+                        return (
+                          <div key={key} className="incident-item incident-item-disabled">
+                            {itemContent}
+                          </div>
+                        );
+                      }
+                      return (
+                        <a key={key} className="incident-item" href={incidentUrl} target="_blank" rel="noopener noreferrer">
+                          {itemContent}
+                        </a>
+                      );
+                    })}
                     {(!selectedNetwork.linked_incidents || selectedNetwork.linked_incidents.length === 0) && (
                       <div className="empty-state">
                         <p>No linked incidents found for this network.</p>
@@ -194,23 +229,32 @@ export default function NetworkGraph() {
         .network-header {
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 12px;
           margin-bottom: 24px;
         }
         .header-info {
           display: flex;
           gap: 16px;
           align-items: center;
+          min-width: 0;
+          flex: 1;
+        }
+        .header-info > div {
+          min-width: 0;
         }
         .header-info h1 {
           font-size: 20px;
           font-weight: 700;
           margin: 0;
+          overflow-wrap: anywhere;
         }
         .subtitle {
           color: #6B6966;
           font-size: 13px;
           margin: 4px 0 0;
+          overflow-wrap: anywhere;
         }
         .network-layout {
           display: grid;
@@ -244,7 +288,8 @@ export default function NetworkGraph() {
         }
         .cluster-item {
           display: grid;
-          grid-template-columns: 40px 1fr 20px;
+          grid-template-columns: 56px minmax(0, 1fr) 20px;
+          column-gap: 8px;
           align-items: center;
           padding: 12px;
           border-radius: 12px;
@@ -267,11 +312,15 @@ export default function NetworkGraph() {
           font-family: 'JetBrains Mono', monospace;
           font-size: 12px;
           font-weight: 700;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .cluster-info {
           display: flex;
           flex-direction: column;
           gap: 4px;
+          min-width: 0;
         }
         .cluster-stats {
           font-size: 11px;
@@ -279,6 +328,10 @@ export default function NetworkGraph() {
           align-items: center;
           gap: 4px;
           opacity: 0.8;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .network-details {
           background: #FFFFFF;
@@ -287,6 +340,7 @@ export default function NetworkGraph() {
           padding: 32px;
           box-shadow: 0 8px 32px rgba(26, 25, 23, 0.04);
           overflow-y: auto;
+          min-width: 0;
         }
         .network-hero {
           background: linear-gradient(135deg, #1A1917 0%, #3D3B38 100%);
@@ -343,12 +397,15 @@ export default function NetworkGraph() {
           font-weight: 600;
           font-size: 14px;
           margin-bottom: 2px;
+          overflow-wrap: anywhere;
         }
         .actor-meta {
           font-size: 11px;
           color: #6B6966;
           display: flex;
           gap: 6px;
+          flex-wrap: wrap;
+          overflow-wrap: anywhere;
         }
         .actor-risk-bar {
           position: absolute;
@@ -403,10 +460,54 @@ export default function NetworkGraph() {
           font-weight: 600;
           line-height: 1.35;
           margin-bottom: 2px;
+          overflow-wrap: anywhere;
         }
         .incident-meta {
           font-size: 11px;
           color: #6B6966;
+          overflow-wrap: anywhere;
+        }
+        .incident-item-disabled {
+          opacity: 0.7;
+          cursor: default;
+        }
+        .incident-item-disabled:hover {
+          background: #FFFFFF;
+          border-color: rgba(26, 25, 23, 0.08);
+        }
+        .network-error {
+          margin: 0 0 16px;
+          padding: 10px 12px;
+          border: 1px solid rgba(199, 80, 80, 0.2);
+          border-radius: 10px;
+          background: rgba(199, 80, 80, 0.06);
+          color: #A03434;
+          font-size: 13px;
+        }
+        @media (max-width: 1280px) {
+          .network-layout {
+            grid-template-columns: 1fr;
+            height: auto;
+          }
+          .network-sidebar {
+            max-height: 260px;
+          }
+          .network-grid {
+            grid-template-columns: 1fr;
+            gap: 24px;
+          }
+        }
+        @media (max-width: 900px) {
+          .network-container {
+            padding: 20px;
+          }
+          .network-details {
+            padding: 20px;
+          }
+          .hero-stats {
+            grid-template-columns: 1fr;
+            gap: 16px;
+          }
         }
         .spin { animation: rotate 2s linear infinite; }
         @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

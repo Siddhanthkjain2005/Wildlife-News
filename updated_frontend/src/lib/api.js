@@ -3,6 +3,7 @@ const withBase = (path) => (API_BASE ? `${API_BASE}${path}` : path);
 const AUTH_TOKEN_KEY = "wildlife_admin_token";
 const WS_BASE = API_BASE.replace(/^http/, "ws");
 const withWs = (path) => (WS_BASE ? `${WS_BASE}${path}` : `ws://${window.location.host}${path}`);
+const REQUEST_TIMEOUT_MS = 20000;
 
 export const ENDPOINTS = {
   adminLogin: withBase("/api/admin/login"),
@@ -46,14 +47,37 @@ export function resolveExternalUrl(primaryUrl, fallbackUrl = "") {
   return "#";
 }
 
-export async function fetchJson(url, { retry = true } = {}) {
+async function fetchWithTimeout(url, init = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const timeoutController = new AbortController();
+  const combinedController = new AbortController();
+  const signals = [timeoutController.signal, init.signal].filter(Boolean);
+  const abortCombined = () => combinedController.abort();
+  const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+  signals.forEach((signal) => {
+    if (signal.aborted) {
+      abortCombined();
+      return;
+    }
+    signal.addEventListener("abort", abortCombined, { once: true });
+  });
+
+  try {
+    return await fetch(url, { ...init, signal: combinedController.signal });
+  } finally {
+    clearTimeout(timeoutId);
+    signals.forEach((signal) => signal.removeEventListener("abort", abortCombined));
+  }
+}
+
+export async function fetchJson(url, { retry = true, signal } = {}) {
   const token = getStoredToken();
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await fetch(url, { cache: "no-store", headers });
+  const res = await fetchWithTimeout(url, { cache: "no-store", headers, signal });
   
   if (res.status === 401 && retry && token) {
     const refreshed = await refreshAccessToken();
-    if (refreshed) return fetchJson(url, { retry: false });
+    if (refreshed) return fetchJson(url, { retry: false, signal });
   }
 
   if (!res.ok) {
@@ -71,20 +95,21 @@ export async function fetchJson(url, { retry = true } = {}) {
   return res.json();
 }
 
-export async function postJson(url, payload, { includeAuth = true, retry = true } = {}) {
+export async function postJson(url, payload, { includeAuth = true, retry = true, signal } = {}) {
   const token = includeAuth ? getStoredToken() : "";
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers,
-    body: JSON.stringify(payload || {})
+    body: JSON.stringify(payload || {}),
+    signal
   });
 
   if (res.status === 401 && retry && token && includeAuth) {
     const refreshed = await refreshAccessToken();
-    if (refreshed) return postJson(url, payload, { includeAuth, retry: false });
+    if (refreshed) return postJson(url, payload, { includeAuth, retry: false, signal });
   }
 
   if (!res.ok) {

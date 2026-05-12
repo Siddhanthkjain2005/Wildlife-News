@@ -230,6 +230,9 @@ export default function App() {
     } catch (err) {
       if (Number(err?.status) === 401) {
         handleUnauthorized("Session expired. Please sign in again.");
+      } else {
+        console.error("Failed to refresh filtered incidents:", err);
+        setError((current) => current || "Incident feed is temporarily unavailable.");
       }
     }
   }, [authToken, filters, handleUnauthorized]);
@@ -274,10 +277,10 @@ export default function App() {
 
     setLoading(true);
     loadDashboard();
-    loadFilteredNews().catch(() => {});
+    loadFilteredNews();
     const timer = window.setInterval(() => {
       loadDashboard();
-      loadFilteredNews().catch(() => {});
+      loadFilteredNews();
     }, AUTO_REFRESH_MS);
 
     return () => {

@@ -66,6 +66,7 @@ class GraphIntelligenceEngine:
                 type="incident",
                 incident_id=incident.id,
                 title=incident.title,
+                url=str(getattr(incident, "url", "") or ""),
                 state=incident.state,
                 district=incident.district,
                 species=incident.species,
@@ -156,12 +157,13 @@ class GraphIntelligenceEngine:
                     linked_incidents[incident_id] = {
                         "id": incident_id,
                         "title": str(neighbor_attrs.get("title") or ""),
+                        "url": str(neighbor_attrs.get("url") or ""),
                         "state": str(neighbor_attrs.get("state") or ""),
                         "district": str(neighbor_attrs.get("district") or ""),
                         "species": str(neighbor_attrs.get("species") or ""),
                         "risk_score": incident_risk,
                         "published_at": str(neighbor_attrs.get("published_at") or ""),
-                        "open_url": f"/open/{incident_id}",
+                        "open_url": str(neighbor_attrs.get("url") or f"/open/{incident_id}"),
                     }
 
             linked_incident_rows = sorted(

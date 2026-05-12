@@ -32,7 +32,16 @@ export default defineConfig(() => {
         }
       : {
           outDir: "dist",
-          emptyOutDir: true
+          emptyOutDir: true,
+          rollupOptions: {
+            output: {
+              manualChunks: {
+                react: ["react", "react-dom"],
+                charts: ["chart.js", "react-chartjs-2"],
+                map: ["leaflet"]
+              }
+            }
+          }
         }
   };
 });

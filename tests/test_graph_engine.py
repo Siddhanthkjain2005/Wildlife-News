@@ -57,6 +57,7 @@ def test_get_networks_exposes_full_actor_and_incident_lists() -> None:
         SimpleNamespace(
             id=11,
             title="Case A",
+            url="https://example.org/a",
             state="Maharashtra",
             district="Mumbai",
             species="pangolin",
@@ -67,6 +68,7 @@ def test_get_networks_exposes_full_actor_and_incident_lists() -> None:
         SimpleNamespace(
             id=12,
             title="Case B",
+            url="https://example.org/b",
             state="Maharashtra",
             district="Thane",
             species="pangolin",
@@ -87,3 +89,5 @@ def test_get_networks_exposes_full_actor_and_incident_lists() -> None:
     assert len(network["actors"]) == 4
     assert len(network["linked_incidents"]) == 2
     assert network["linked_incidents"][0]["risk_score"] >= network["linked_incidents"][1]["risk_score"]
+    assert network["linked_incidents"][0]["url"].startswith("https://")
+    assert network["linked_incidents"][0]["open_url"] == network["linked_incidents"][0]["url"]
