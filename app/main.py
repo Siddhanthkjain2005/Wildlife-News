@@ -962,7 +962,11 @@ def _fetch_filtered_news_rows(
     elif severity_value == "low":
         stmt = stmt.where(NewsItem.risk_score < 50)
 
-    return db.execute(stmt.limit(safe_limit)).scalars().all()
+    try:
+        return db.execute(stmt.limit(safe_limit)).scalars().all()
+    except Exception as err:
+        app_logger.error("Failed to fetch filtered news items (DB issue): %s", err)
+        return []
 
 
 def _to_export_payload(row: NewsItem) -> dict[str, object]:
@@ -2005,7 +2009,11 @@ def get_reports(
     stmt = stmt.order_by(Report.generated_at.desc()).limit(safe_limit)
     if _scope_from_start_enabled():
         stmt = stmt.where(NewsItem.published_at >= _start_from_utc())
-    rows = db.execute(stmt).all()
+    try:
+        rows = db.execute(stmt).all()
+    except Exception as err:
+        app_logger.error("Failed to fetch incident reports (DB issue): %s", err)
+        return []
     return [
         {
             "id": report.id,
@@ -2130,6 +2138,15 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
     if not content[:16].startswith(b"SQLite format 3"):
         raise HTTPException(status_code=400, detail="Invalid file: not a valid SQLite database. Download the DB using the 'Download DB' button first.")
 
+    # CRITICAL 1: Dispose engine BEFORE writing the new database.
+    # This closes all active file descriptors and connection handles held by SQLAlchemy,
+    # preventing lock corruption or partial writes.
+    try:
+        engine.dispose()
+        app_logger.info("Disposed existing database engine before hot-swap")
+    except Exception as err:
+        app_logger.warning("Failed to dispose engine before swap (continuing): %s", err)
+
     # Backup current DB if it exists
     backup_path = None
     if db_path.exists():
@@ -2140,6 +2157,19 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
             app_logger.info("Current DB backed up to %s", backup_path)
         except Exception as err:
             app_logger.warning("Failed to backup current DB: %s", err)
+
+    # CRITICAL 2: Remove stale SQLite sidecar files (-wal, -shm)
+    # If SQLite is in WAL mode, leftover sidecar files from the old database will instantly
+    # corrupt the new database file when SQLite attempts to reconcile them.
+    wal_path = db_path.with_name(f"{db_path.name}-wal")
+    shm_path = db_path.with_name(f"{db_path.name}-shm")
+    for sidecar in [wal_path, shm_path]:
+        try:
+            if sidecar.exists():
+                sidecar.unlink()
+                app_logger.info("Removed stale sidecar file: %s", sidecar.name)
+        except Exception as err:
+            app_logger.warning("Failed to remove stale sidecar %s: %s", sidecar.name, err)
 
     # Write the uploaded DB
     try:
@@ -2153,11 +2183,11 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
             shutil.copy2(backup_path, db_path)
         raise HTTPException(status_code=500, detail=f"Failed to write database: {err}")
 
-    # CRITICAL: Force SQLAlchemy to drop all cached connections and reconnect
-    # to the new database file. Without this, the app keeps using stale
-    # connections pointing to the old (pre-upload) data.
-    engine.dispose()
-    app_logger.info("SQLAlchemy connection pool disposed — reconnecting to restored database")
+    # CRITICAL 3: Re-dispose to clean any descriptors implicitly re-opened
+    try:
+        engine.dispose()
+    except Exception:
+        pass
 
     # Integrity check: verify the uploaded DB is not corrupt
     try:
@@ -2399,11 +2429,15 @@ def get_alerts(db: Session = Depends(get_db), limit: int = 100):
     stmt = select(Alert)
     if _scope_from_start_enabled():
         stmt = stmt.where(Alert.created_at >= _start_from_utc())
-    rows = (
-        db.execute(stmt.order_by(Alert.created_at.desc()).limit(safe_limit))
-        .scalars()
-        .all()
-    )
+    try:
+        rows = (
+            db.execute(stmt.order_by(Alert.created_at.desc()).limit(safe_limit))
+            .scalars()
+            .all()
+        )
+    except Exception as err:
+        app_logger.error("Failed to fetch alerts feed (DB issue): %s", err)
+        return []
     related_news = {}
     news_ids = [row.news_id for row in rows]
     if news_ids:
