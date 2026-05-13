@@ -1631,8 +1631,44 @@ def _cleanup_existing_articles() -> dict:
 def startup_event() -> None:
     runtime_diagnostics["startup_time"] = datetime.now(tz=timezone.utc).isoformat()
     app_logger.info("Starting %s", settings.app_name)
-    init_database()
+
     db_file = _database_file_path()
+
+    # CRITICAL SELF-HEALING: 
+    # Check if the database stored in the persistent volume is unrecoverably corrupted 
+    # BEFORE we attempt to initialize schema migrations or connect SQLAlchemy.
+    # If corrupted, quarantine the bad file so we boot clean and let the user restore.
+    if db_file and db_file.exists():
+        try:
+            integrity = sqlite_integrity_check(db_file)
+            if not integrity.get("ok"):
+                app_logger.error("CRITICAL: Found unrecoverable disk-image corruption on boot! Output: %s", integrity.get("result"))
+                app_logger.info("Self-healing: Quarantining corrupted database file to secure application boot.")
+                
+                import shutil
+                stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                quarantine_path = db_file.with_suffix(f".corrupted_{stamp}.db")
+                
+                # Move bad database aside
+                shutil.move(db_file, quarantine_path)
+                app_logger.warning("Corrupted DB isolated at: %s", quarantine_path.name)
+                
+                # Clean up companion sidecars
+                wal_path = db_file.with_name(f"{db_file.name}-wal")
+                shm_path = db_file.with_name(f"{db_file.name}-shm")
+                for sidecar in [wal_path, shm_path]:
+                    if sidecar.exists():
+                        try:
+                            sidecar.unlink()
+                            app_logger.info("Removed companion file during self-healing: %s", sidecar.name)
+                        except Exception:
+                            pass
+            else:
+                app_logger.info("Database physical integrity check: OK")
+        except Exception as err:
+            app_logger.warning("Database self-healing early scan bypassed/failed: %s", err)
+
+    init_database()
     if db_file:
         db_diag = diagnose_database()
         app_logger.info("Database diagnostic on startup: db_file=%s, diag=%s", db_file, db_diag)
@@ -1640,12 +1676,6 @@ def startup_event() -> None:
     def _background_startup_tasks():
         app_logger.info("Starting background DB tasks and AI model warmup...")
         try:
-            if db_file:
-                integrity = sqlite_integrity_check(db_file)
-                if not integrity.get("ok"):
-                    app_logger.error("Database integrity check failed: %s", integrity)
-                else:
-                    app_logger.info("Database integrity check: %s", integrity)
             normalized = _repair_stored_urls()
             if normalized > 0:
                 app_logger.info("Normalized %d stored URLs at startup.", normalized)
