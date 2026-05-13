@@ -131,6 +131,62 @@ FALSE_POSITIVE_PATTERNS = [
     r"\brestaurant\b",
 ]
 
+# Patterns that indicate the article is about wildlife conservation, tourism, zoo,
+# education, or other NON-CRIME topics.  These suppress confidence when no real
+# crime indicator (arrest, seizure, etc.) is present.
+NON_CRIME_CONTENT_PATTERNS = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"\bwildlife tourism\b",
+        r"\bsafari tour\b",
+        r"\bzoo\s+(?:visit|open|ticket|entry|exhibit|park)\b",
+        r"\bnational park\s+(?:visit|tour|open|entry)\b",
+        r"\bconservation success\b",
+        r"\bwildlife photography\b",
+        r"\bbird\s*watching\b",
+        r"\bwildlife census\b",
+        r"\bpopulation\s+(?:increase|surge|rise|growth|recover)\b",
+        r"\bconservation effort\b",
+        r"\bconservation award\b",
+        r"\bwildlife documentary\b",
+        r"\brescued?\s+and\s+released\b",
+        r"\breleased into the wild\b",
+        r"\brehabilitat(?:ion|ed)\b",
+        r"\bwildlife festival\b",
+        r"\bworld wildlife day\b",
+        r"\bworld environment day\b",
+        r"\bwildlife week\b",
+        r"\bbiodiversity day\b",
+        r"\becosystem restoration\b",
+        r"\bwildlife awareness\b",
+        r"\bwildlife education\b",
+        r"\bwildlife film\b",
+        r"\bwildlife sanctuary\s+(?:inaugurat|celebrat|open|tourism)\b",
+        r"\btiger reserve\s+(?:celebrat|open|tourism)\b",
+        r"\bman.?animal conflict\b",
+        r"\bhuman.?wildlife conflict\b",
+        r"\b(?:elephant|leopard|tiger)\s+(?:spotted|sighted|seen|enters?\s+(?:village|city|town))\b",
+        r"\bwildlife\s+(?:policy|bill|act|regulation|law|scheme|project|programme|program)\b",
+        r"\bforest\s+(?:policy|bill|regulation|management|restoration)\b",
+        r"\banimal\s+(?:rescue|shelter|welfare|hospital)\b",
+        r"\bcaptive breeding\b",
+        r"\breintroduction\s+program\b",
+        r"\bwildlife\s+(?:survey|count|monitoring|track)\b",
+    ]
+]
+
+# Title keywords that strongly suggest non-crime content
+NON_CRIME_TITLE_KEYWORDS = {
+    "conservation", "rescued", "rehabilitation", "released into wild",
+    "census", "population rise", "tourism", "safari", "documentary",
+    "photography", "bird watching", "zoo", "festival", "awareness",
+    "world wildlife day", "celebrated", "inaugurated", "wildlife week",
+    "sighted", "spotted in", "enters village", "enters city",
+    "man animal conflict", "human wildlife conflict",
+    "captive breeding", "reintroduction", "wildlife survey",
+    "wildlife policy", "forest policy", "animal rescue", "animal shelter",
+}
+
 NETWORK_PATTERNS = [
     r"\bgang\b",
     r"\bracket\b",
@@ -903,6 +959,20 @@ class HybridIntelligenceEngine:
                         return self._person_ner
         return self._person_ner
 
+    @staticmethod
+    def _content_relevance_penalty(text: str, title: str = "") -> float:
+        """Return a penalty (0.0 = no penalty, up to ~0.5) for non-crime wildlife content."""
+        penalty = 0.0
+        hit_count = sum(1 for pattern in NON_CRIME_CONTENT_PATTERNS if pattern.search(text))
+        if hit_count:
+            penalty += min(0.35, hit_count * 0.10)
+        title_lower = title.lower() if title else ""
+        if title_lower:
+            title_noncrime_hits = sum(1 for kw in NON_CRIME_TITLE_KEYWORDS if kw in title_lower)
+            if title_noncrime_hits:
+                penalty += min(0.25, title_noncrime_hits * 0.10)
+        return min(0.50, penalty)
+
     @classmethod
     def _fallback_score_map(cls, text: str) -> dict[str, float]:
         labels = list(CLASSIFIER_LABELS)
@@ -913,7 +983,21 @@ class HybridIntelligenceEngine:
         species = cls._extract_species(text)
         state, district, _ = cls._extract_location(text)
 
-        poach_signal = min(1.0, rule_score + min(0.35, keyword_hits * 0.08) + (0.08 if species else 0.0))
+        # Require stronger keyword evidence: single keyword hit gives minimal signal
+        if keyword_hits <= 1 and rule_score < 0.25:
+            poach_signal = min(0.30, rule_score + min(0.10, keyword_hits * 0.04))
+        else:
+            poach_signal = min(1.0, rule_score + min(0.30, keyword_hits * 0.06) + (0.06 if species else 0.0))
+
+        # Apply content-relevance penalty to suppress non-crime wildlife articles
+        noncrime_penalty = cls._content_relevance_penalty(text)
+        if noncrime_penalty > 0:
+            # Only apply penalty if there are no strong operational signals
+            has_operational = any(term in text for term in ["arrested", "seized", "seizure", "nabbed", "detained", "raided", "fir"])
+            if not has_operational:
+                poach_signal = max(0.0, poach_signal - noncrime_penalty)
+                score_map["not wildlife crime"] = min(1.0, 0.50 + noncrime_penalty)
+
         india_signal = 0.0
         if any(term in text for term in INDIA_HINT_TERMS):
             india_signal += 0.55
@@ -941,7 +1025,8 @@ class HybridIntelligenceEngine:
         score_map["wildlife poaching"] = max(score_map["wildlife poaching"], poach_signal)
         score_map["incident in India"] = india_signal
         score_map["incident outside India"] = max(0.0, min(1.0, 1.0 - india_signal))
-        score_map["not wildlife crime"] = max(0.0, min(1.0, 0.85 - poach_signal))
+        if score_map.get("not wildlife crime", 0.0) < 0.01:
+            score_map["not wildlife crime"] = max(0.0, min(1.0, 0.85 - poach_signal))
         return score_map
 
     @staticmethod
@@ -1718,6 +1803,17 @@ class HybridIntelligenceEngine:
             confidence += 0.02
         if crime_type == "unknown":
             confidence -= 0.06
+
+        # Hard penalty: articles with NO operational signals (no arrest, seizure, raid)
+        # AND few crime keywords are very likely not real incident reports
+        has_any_operational = (
+            operational_details.get("seizure_present")
+            or operational_details.get("arrest_present")
+            or operational_details.get("weapon_signal")
+        )
+        if not has_any_operational and keyword_hits < 4:
+            confidence *= 0.65  # Significant penalty for articles with no concrete crime action
+
         return max(0.0, min(1.0, confidence))
 
     @staticmethod
@@ -1883,11 +1979,18 @@ class HybridIntelligenceEngine:
             baseline_accept = confidence >= settings.ai_threshold and crime_type != "unknown"
             fallback_accept = (
                 crime_type != "unknown"
-                and not_wildlife_prob < 0.82
+                and not_wildlife_prob < 0.70
                 and strong_rule_signal
-                and poach_prob >= 0.22
+                and poach_prob >= 0.40
+                and keyword_hits >= 2
                 and (
-                    unknown_ratio <= 0.90
+                    operational_details.get("seizure_present")
+                    or operational_details.get("arrest_present")
+                    or network_indicator
+                    or (species and keyword_hits >= 4)
+                )
+                and (
+                    unknown_ratio <= 0.85
                     or operational_details.get("seizure_present")
                     or operational_details.get("arrest_present")
                     or network_indicator
@@ -2272,6 +2375,32 @@ class HybridIntelligenceEngine:
         if strict_mode and not_wildlife_prob >= 0.62 and evidence_strength < 0.75 and poach_prob < 0.70:
             is_poaching = False
 
+        # ---------- Content-Understanding Gate ----------
+        # Reject articles that are about non-crime wildlife topics (tourism,
+        # conservation success, zoo news, etc.) unless strong operational evidence.
+        noncrime_penalty = self._content_relevance_penalty(text, title=title)
+        if noncrime_penalty >= 0.15 and not has_operational_signal:
+            is_poaching = False
+            confidence = max(0.0, confidence - noncrime_penalty)
+
+        # ---------- Crime-Indicator Gate ----------
+        # An article must contain at least ONE strong crime indicator to be accepted.
+        # Without arrest/seizure/crime-keyword evidence, it's likely generic wildlife news.
+        has_crime_indicator = (
+            has_operational_signal
+            or any(term in text for term in POACHING_SPECIFIC_SIGNALS)
+            or rule_score >= 0.25
+            or keyword_hits >= 3
+        )
+        if is_poaching and not has_crime_indicator:
+            is_poaching = False
+
+        # ---------- India-Only Enforcement ----------
+        # When india_only is enabled (default), hard-reject articles that are not India.
+        if settings.india_only and not is_india:
+            is_poaching = False
+            confidence = max(0.0, confidence * 0.5)
+
         # Deep Recovery: If critical values are missing, do a second, more exhaustive scan of the source_text
         if is_poaching and not species:
             species = self._extract_species(source_text) # Re-scan with full casing/spacing
@@ -2441,6 +2570,23 @@ class HybridIntelligenceEngine:
             is_poaching = False
         if strict_mode and not_wildlife_prob >= 0.62 and evidence_strength < 0.75 and poach_prob < 0.70:
             is_poaching = False
+
+        # Re-apply content-understanding and crime-indicator gates after LLM enrichment pass
+        noncrime_penalty = self._content_relevance_penalty(text, title=title)
+        if noncrime_penalty >= 0.15 and not has_operational_signal:
+            is_poaching = False
+            confidence = max(0.0, confidence - noncrime_penalty)
+        has_crime_indicator = (
+            has_operational_signal
+            or any(term in text for term in POACHING_SPECIFIC_SIGNALS)
+            or rule_score >= 0.25
+            or keyword_hits >= 3
+        )
+        if is_poaching and not has_crime_indicator:
+            is_poaching = False
+        if settings.india_only and not is_india:
+            is_poaching = False
+            confidence = max(0.0, confidence * 0.5)
 
         risk_score = self._compute_risk(
             confidence=confidence,
