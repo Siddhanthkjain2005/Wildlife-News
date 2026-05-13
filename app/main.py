@@ -2159,7 +2159,20 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
     engine.dispose()
     app_logger.info("SQLAlchemy connection pool disposed — reconnecting to restored database")
 
-    # Run schema migrations on the restored DB
+    # Integrity check: verify the uploaded DB is not corrupt
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA integrity_check")).scalar()
+            if result != "ok":
+                app_logger.warning("Uploaded DB integrity check returned: %s — attempting VACUUM repair", result)
+                conn.execute(text("VACUUM"))
+                conn.commit()
+            else:
+                app_logger.info("Uploaded DB integrity check passed")
+    except Exception as err:
+        app_logger.warning("Integrity check on uploaded DB failed: %s", err)
+
+    # Run schema migrations on the restored DB (creates any missing tables)
     try:
         init_database()
         app_logger.info("Schema migrations applied to restored database")
@@ -2241,16 +2254,20 @@ def get_external_signals(
 @app.get("/api/osint-feed")
 def get_osint_feed(db: Session = Depends(get_db), limit: int = 80):
     safe_limit = max(1, min(300, limit))
-    stmt = _apply_today_signal_scope(select(ExternalSignal))
-    rows = (
-        db.execute(
-            stmt
-            .order_by(ExternalSignal.signal_strength.desc(), ExternalSignal.published_at.desc())
-            .limit(safe_limit)
+    try:
+        stmt = _apply_today_signal_scope(select(ExternalSignal))
+        rows = (
+            db.execute(
+                stmt
+                .order_by(ExternalSignal.signal_strength.desc(), ExternalSignal.published_at.desc())
+                .limit(safe_limit)
+            )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
+    except Exception as err:
+        app_logger.warning("OSINT feed query failed (table may be missing/corrupt): %s", err)
+        return []
     return [
         {
             "id": row.id,
@@ -2266,6 +2283,7 @@ def get_osint_feed(db: Session = Depends(get_db), limit: int = 80):
         }
         for row in rows
     ]
+
 
 
 @app.get("/api/trending-keywords")
