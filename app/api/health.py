@@ -22,7 +22,13 @@ def _main():
 def health(db: Session = Depends(get_db)):
     m = _main()
     db_diag = diagnose_database()
-    total_rows = db.scalar(m._apply_today_news_scope(select(func.count()).select_from(NewsItem))) or 0
+    try:
+        total_rows = db.scalar(m._apply_today_news_scope(select(func.count()).select_from(NewsItem))) or 0
+    except Exception:
+        total_rows = 0
+        db_diag["ok"] = False
+        db_diag["error"] = "db_malformed_on_news_count"
+
     snapshot = m._sync_snapshot()
     started_at = m.runtime_diagnostics.get("startup_time")
     uptime_seconds = 0.0
@@ -31,14 +37,19 @@ def health(db: Session = Depends(get_db)):
             uptime_seconds = max(0.0, (datetime.now(tz=timezone.utc) - datetime.fromisoformat(started_at)).total_seconds())
         except ValueError:
             uptime_seconds = 0.0
-    pending_alerts = int(
-        db.scalar(
-            select(func.count())
-            .select_from(Alert)
-            .where((Alert.sent_popup.is_(False)) | (Alert.sent_email.is_(False)) | (Alert.sent_telegram.is_(False)))
+
+    try:
+        pending_alerts = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Alert)
+                .where((Alert.sent_popup.is_(False)) | (Alert.sent_email.is_(False)) | (Alert.sent_telegram.is_(False)))
+            )
+            or 0
         )
-        or 0
-    )
+    except Exception:
+        pending_alerts = 0
+        db_diag["ok"] = False
     return {
         "status": "ok" if db_diag.get("ok") else "degraded",
         "db": db_diag,
