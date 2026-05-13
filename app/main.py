@@ -25,7 +25,7 @@ from app.api import admin, dashboard, exports, graph, health, incidents, predict
 from app.core.config import settings
 from app.core.backup import create_snapshot_export, create_sqlite_backup, sqlite_integrity_check, sqlite_path_from_url
 from app.core.cache import build_cache
-from app.core.database import SessionLocal, diagnose_database, engine, get_db, init_database
+from app.core.database import SessionLocal, diagnose_database, get_db, init_database
 from app.core.logger import get_logger, init_logging
 from app.core.realtime import build_event_bus
 from app.core.retry import retry_call
@@ -962,11 +962,7 @@ def _fetch_filtered_news_rows(
     elif severity_value == "low":
         stmt = stmt.where(NewsItem.risk_score < 50)
 
-    try:
-        return db.execute(stmt.limit(safe_limit)).scalars().all()
-    except Exception as err:
-        app_logger.error("Failed to fetch filtered news items (DB issue): %s", err)
-        return []
+    return db.execute(stmt.limit(safe_limit)).scalars().all()
 
 
 def _to_export_payload(row: NewsItem) -> dict[str, object]:
@@ -1631,44 +1627,8 @@ def _cleanup_existing_articles() -> dict:
 def startup_event() -> None:
     runtime_diagnostics["startup_time"] = datetime.now(tz=timezone.utc).isoformat()
     app_logger.info("Starting %s", settings.app_name)
-
-    db_file = _database_file_path()
-
-    # CRITICAL SELF-HEALING: 
-    # Check if the database stored in the persistent volume is unrecoverably corrupted 
-    # BEFORE we attempt to initialize schema migrations or connect SQLAlchemy.
-    # If corrupted, quarantine the bad file so we boot clean and let the user restore.
-    if db_file and db_file.exists():
-        try:
-            integrity = sqlite_integrity_check(db_file)
-            if not integrity.get("ok"):
-                app_logger.error("CRITICAL: Found unrecoverable disk-image corruption on boot! Output: %s", integrity.get("result"))
-                app_logger.info("Self-healing: Quarantining corrupted database file to secure application boot.")
-                
-                import shutil
-                stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-                quarantine_path = db_file.with_suffix(f".corrupted_{stamp}.db")
-                
-                # Move bad database aside
-                shutil.move(db_file, quarantine_path)
-                app_logger.warning("Corrupted DB isolated at: %s", quarantine_path.name)
-                
-                # Clean up companion sidecars
-                wal_path = db_file.with_name(f"{db_file.name}-wal")
-                shm_path = db_file.with_name(f"{db_file.name}-shm")
-                for sidecar in [wal_path, shm_path]:
-                    if sidecar.exists():
-                        try:
-                            sidecar.unlink()
-                            app_logger.info("Removed companion file during self-healing: %s", sidecar.name)
-                        except Exception:
-                            pass
-            else:
-                app_logger.info("Database physical integrity check: OK")
-        except Exception as err:
-            app_logger.warning("Database self-healing early scan bypassed/failed: %s", err)
-
     init_database()
+    db_file = _database_file_path()
     if db_file:
         db_diag = diagnose_database()
         app_logger.info("Database diagnostic on startup: db_file=%s, diag=%s", db_file, db_diag)
@@ -1676,6 +1636,12 @@ def startup_event() -> None:
     def _background_startup_tasks():
         app_logger.info("Starting background DB tasks and AI model warmup...")
         try:
+            if db_file:
+                integrity = sqlite_integrity_check(db_file)
+                if not integrity.get("ok"):
+                    app_logger.error("Database integrity check failed: %s", integrity)
+                else:
+                    app_logger.info("Database integrity check: %s", integrity)
             normalized = _repair_stored_urls()
             if normalized > 0:
                 app_logger.info("Normalized %d stored URLs at startup.", normalized)
@@ -2039,11 +2005,7 @@ def get_reports(
     stmt = stmt.order_by(Report.generated_at.desc()).limit(safe_limit)
     if _scope_from_start_enabled():
         stmt = stmt.where(NewsItem.published_at >= _start_from_utc())
-    try:
-        rows = db.execute(stmt).all()
-    except Exception as err:
-        app_logger.error("Failed to fetch incident reports (DB issue): %s", err)
-        return []
+    rows = db.execute(stmt).all()
     return [
         {
             "id": report.id,
@@ -2168,15 +2130,6 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
     if not content[:16].startswith(b"SQLite format 3"):
         raise HTTPException(status_code=400, detail="Invalid file: not a valid SQLite database. Download the DB using the 'Download DB' button first.")
 
-    # CRITICAL 1: Dispose engine BEFORE writing the new database.
-    # This closes all active file descriptors and connection handles held by SQLAlchemy,
-    # preventing lock corruption or partial writes.
-    try:
-        engine.dispose()
-        app_logger.info("Disposed existing database engine before hot-swap")
-    except Exception as err:
-        app_logger.warning("Failed to dispose engine before swap (continuing): %s", err)
-
     # Backup current DB if it exists
     backup_path = None
     if db_path.exists():
@@ -2187,19 +2140,6 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
             app_logger.info("Current DB backed up to %s", backup_path)
         except Exception as err:
             app_logger.warning("Failed to backup current DB: %s", err)
-
-    # CRITICAL 2: Remove stale SQLite sidecar files (-wal, -shm)
-    # If SQLite is in WAL mode, leftover sidecar files from the old database will instantly
-    # corrupt the new database file when SQLite attempts to reconcile them.
-    wal_path = db_path.with_name(f"{db_path.name}-wal")
-    shm_path = db_path.with_name(f"{db_path.name}-shm")
-    for sidecar in [wal_path, shm_path]:
-        try:
-            if sidecar.exists():
-                sidecar.unlink()
-                app_logger.info("Removed stale sidecar file: %s", sidecar.name)
-        except Exception as err:
-            app_logger.warning("Failed to remove stale sidecar %s: %s", sidecar.name, err)
 
     # Write the uploaded DB
     try:
@@ -2213,26 +2153,7 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
             shutil.copy2(backup_path, db_path)
         raise HTTPException(status_code=500, detail=f"Failed to write database: {err}")
 
-    # CRITICAL 3: Re-dispose to clean any descriptors implicitly re-opened
-    try:
-        engine.dispose()
-    except Exception:
-        pass
-
-    # Integrity check: verify the uploaded DB is not corrupt
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text("PRAGMA integrity_check")).scalar()
-            if result != "ok":
-                app_logger.warning("Uploaded DB integrity check returned: %s — attempting VACUUM repair", result)
-                conn.execute(text("VACUUM"))
-                conn.commit()
-            else:
-                app_logger.info("Uploaded DB integrity check passed")
-    except Exception as err:
-        app_logger.warning("Integrity check on uploaded DB failed: %s", err)
-
-    # Run schema migrations on the restored DB (creates any missing tables)
+    # Run schema migrations on the restored DB
     try:
         init_database()
         app_logger.info("Schema migrations applied to restored database")
@@ -2314,20 +2235,16 @@ def get_external_signals(
 @app.get("/api/osint-feed")
 def get_osint_feed(db: Session = Depends(get_db), limit: int = 80):
     safe_limit = max(1, min(300, limit))
-    try:
-        stmt = _apply_today_signal_scope(select(ExternalSignal))
-        rows = (
-            db.execute(
-                stmt
-                .order_by(ExternalSignal.signal_strength.desc(), ExternalSignal.published_at.desc())
-                .limit(safe_limit)
-            )
-            .scalars()
-            .all()
+    stmt = _apply_today_signal_scope(select(ExternalSignal))
+    rows = (
+        db.execute(
+            stmt
+            .order_by(ExternalSignal.signal_strength.desc(), ExternalSignal.published_at.desc())
+            .limit(safe_limit)
         )
-    except Exception as err:
-        app_logger.warning("OSINT feed query failed (table may be missing/corrupt): %s", err)
-        return []
+        .scalars()
+        .all()
+    )
     return [
         {
             "id": row.id,
@@ -2345,7 +2262,6 @@ def get_osint_feed(db: Session = Depends(get_db), limit: int = 80):
     ]
 
 
-
 @app.get("/api/trending-keywords")
 def get_trending_keywords(db: Session = Depends(get_db), days: int = 7, limit: int = 15):
     safe_days = max(1, min(30, days))
@@ -2354,22 +2270,16 @@ def get_trending_keywords(db: Session = Depends(get_db), days: int = 7, limit: i
         since = _start_from_utc()
     else:
         since = datetime.utcnow() - timedelta(days=safe_days)
-    try:
-        signals = (
-            db.execute(_apply_today_signal_scope(select(ExternalSignal).where(ExternalSignal.published_at >= since)))
-            .scalars()
-            .all()
-        )
-        watch_keywords = [
-            str(row).strip().lower()
-            for row in db.execute(select(Watchlist.keyword).where(Watchlist.enabled.is_(True))).scalars().all()
-            if str(row).strip()
-        ]
-    except Exception as err:
-        app_logger.error("Failed to fetch signals/watchlist for trending stats (DB issue): %s", err)
-        signals = []
-        watch_keywords = []
-
+    signals = (
+        db.execute(_apply_today_signal_scope(select(ExternalSignal).where(ExternalSignal.published_at >= since)))
+        .scalars()
+        .all()
+    )
+    watch_keywords = [
+        str(row).strip().lower()
+        for row in db.execute(select(Watchlist.keyword).where(Watchlist.enabled.is_(True))).scalars().all()
+        if str(row).strip()
+    ]
     keyword_counts: dict[str, dict[str, float]] = {}
     reddit_mentions = 0
     govt_signals = 0
@@ -2465,15 +2375,11 @@ def get_alerts(db: Session = Depends(get_db), limit: int = 100):
     stmt = select(Alert)
     if _scope_from_start_enabled():
         stmt = stmt.where(Alert.created_at >= _start_from_utc())
-    try:
-        rows = (
-            db.execute(stmt.order_by(Alert.created_at.desc()).limit(safe_limit))
-            .scalars()
-            .all()
-        )
-    except Exception as err:
-        app_logger.error("Failed to fetch alerts feed (DB issue): %s", err)
-        return []
+    rows = (
+        db.execute(stmt.order_by(Alert.created_at.desc()).limit(safe_limit))
+        .scalars()
+        .all()
+    )
     related_news = {}
     news_ids = [row.news_id for row in rows]
     if news_ids:

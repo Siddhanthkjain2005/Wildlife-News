@@ -32,11 +32,6 @@ CRIME_TYPES: dict[str, set[str]] = {
         "shikar",
         "illegal hunting",
         "snaring",
-        "killed wildlife",
-        "wildlife killed",
-        "animal killed",
-        "poacher arrested",
-        "poachers arrested",
         "वन्यजीव शिकार",
         "वन्यजीव शिकारी",
         "ಕಳ್ಳಬೇಟೆ",
@@ -48,30 +43,16 @@ CRIME_TYPES: dict[str, set[str]] = {
         "ବନ୍ୟଜୀବ ଶିକାର",
         "વન્યજીવ શિકાર",
         "ਜੰਗਲੀ ਜੀਵ ਸ਼ਿਕਾਰ",
-        "शिकार",
-        "शिकारी",
     },
     "smuggling": {
         "smuggling",
-        "smuggler",
-        "smugglers",
         "trafficking",
-        "trafficker",
         "interstate transport",
         "cross-border",
-        "illegal sale",
-        "illegal selling",
-        "selling prohibited",
-        "prohibited sale",
-        "busted",
-        "racket busted",
-        "gang busted",
-        "contraband",
         "वन्यजीव तस्करी",
         "तस्करी",
-        "तस्कर",
         "ಕಳ್ಳಸಾಗಣೆ",
-        "విలంగ கடத்தல்",
+        "விலங்கு கடத்தல்",
         "అక్రమ వన్యప్రాణి రవాణా",
         "বন্যপ্রাণী পাচার",
         "বন্যপ্ৰাণী সৰবৰাহ",
@@ -79,19 +60,12 @@ CRIME_TYPES: dict[str, set[str]] = {
         "ବନ୍ୟଜୀବ ତସକରି",
         "વન્યજીવ તસ્કરી",
         "ਜੰਗਲੀ ਜੀਵ ਤਸਕਰੀ",
-        "ਸਮੱਗਲਿੰਗ",
     },
     "illegal_wildlife_trade": {
         "wildlife trade",
         "illegal wildlife trade",
         "trade network",
         "online sale",
-        "wildlife trafficking",
-        "selling wildlife",
-        "selling animal",
-        "selling animal parts",
-        "prohibited wildlife",
-        "illegal possession",
         "वन्यजीव व्यापार",
         "अवैध वन्यजीव व्यापार",
         "वन्यजीव अपराध",
@@ -234,7 +208,6 @@ ARTICLE_SIGNAL_TERMS = {
     "booked",
     "recovered",
     "raid",
-    "raided",
     "detained",
     "convicted",
     "suspect",
@@ -244,21 +217,6 @@ ARTICLE_SIGNAL_TERMS = {
     "smuggling",
     "trafficking",
     "wildlife crime",
-    "busted",
-    "crackdown",
-    "confiscated",
-    "apprehended",
-    "illegal possession",
-    "prohibited",
-    "banned",
-    "fir registered",
-    "fir lodged",
-    "दबोचे",
-    "दबोचा",
-    "पकड़ा",
-    "जब्त",
-    "बरामद",
-    "गिरफ्तार",
 }
 
 POACHING_SPECIFIC_SIGNALS = {
@@ -1821,9 +1779,9 @@ class HybridIntelligenceEngine:
         unknown_profile: dict[str, object],
     ) -> float:
         confidence = (0.55 * poach_prob) + (0.30 * rule_score) + (0.15 * evidence_strength)
-        confidence += min(0.10, keyword_hits * 0.015)
+        confidence += min(0.06, keyword_hits * 0.01)
         if species_hits:
-            confidence += 0.04
+            confidence += 0.03
         if person_hits:
             confidence += 0.03
         if network_indicator:
@@ -1846,16 +1804,15 @@ class HybridIntelligenceEngine:
         if crime_type == "unknown":
             confidence -= 0.06
 
-        # Moderate penalty: articles with NO operational signals (no arrest, seizure, raid)
-        # AND few crime keywords are likely not real incident reports.
-        # But don't over-penalize short title-only articles — they may just lack detail.
+        # Hard penalty: articles with NO operational signals (no arrest, seizure, raid)
+        # AND few crime keywords are very likely not real incident reports
         has_any_operational = (
             operational_details.get("seizure_present")
             or operational_details.get("arrest_present")
             or operational_details.get("weapon_signal")
         )
-        if not has_any_operational and keyword_hits < 3:
-            confidence *= 0.78  # Moderate penalty (was 0.65 — too aggressive)
+        if not has_any_operational and keyword_hits < 4:
+            confidence *= 0.65  # Significant penalty for articles with no concrete crime action
 
         return max(0.0, min(1.0, confidence))
 

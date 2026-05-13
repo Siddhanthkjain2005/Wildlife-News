@@ -43,32 +43,25 @@ def map_data(db: Session = Depends(get_db), limit: int = 400):
 
     def _compute_map_data():
         safe_limit = max(50, min(1200, limit))
-        try:
-            strict_stmt = apply_strict_incident_filters(select(NewsItem))
-            rows = (
-                db.execute(
-                    m._apply_today_news_scope(
-                        strict_stmt.order_by(NewsItem.published_at.desc()).limit(safe_limit)
-                    )
+        strict_stmt = apply_strict_incident_filters(select(NewsItem))
+        rows = (
+            db.execute(
+                m._apply_today_news_scope(
+                    strict_stmt.order_by(NewsItem.published_at.desc()).limit(safe_limit)
                 )
-                .scalars()
-                .all()
             )
-            markers = [m._marker_from_news(row) for row in rows]
-            state_counts: dict[str, int] = {}
-            for row in rows:
-                state = (row.state or "").strip().title() or "Unknown"
-                state_counts[state] = state_counts.get(state, 0) + max(1, row.report_count)
-            heatmap = []
-            for state, count in sorted(state_counts.items(), key=lambda item: item[1], reverse=True):
-                lat, lng = centroid_for_state(state)
-                heatmap.append({"state": state, "count": count, "lat": lat, "lng": lng})
-        except Exception as err:
-            from app.core.logger import get_logger
-            get_logger().error("Failed to compute dashboard map data (DB issue): %s", err)
-            markers = []
-            heatmap = []
-
+            .scalars()
+            .all()
+        )
+        markers = [m._marker_from_news(row) for row in rows]
+        state_counts: dict[str, int] = {}
+        for row in rows:
+            state = (row.state or "").strip().title() or "Unknown"
+            state_counts[state] = state_counts.get(state, 0) + max(1, row.report_count)
+        heatmap = []
+        for state, count in sorted(state_counts.items(), key=lambda item: item[1], reverse=True):
+            lat, lng = centroid_for_state(state)
+            heatmap.append({"state": state, "count": count, "lat": lat, "lng": lng})
         return {
             "center": {"lat": INDIA_CENTER[0], "lng": INDIA_CENTER[1]},
             "markers": markers,
@@ -85,90 +78,57 @@ def chart_data(db: Session = Depends(get_db)):
 
     def _compute_chart_data():
         now_utc = datetime.utcnow()
+        if m._scope_from_start_enabled():
+            start_date = m._start_from_utc()
+            window_days = max(1, (now_utc.date() - start_date.date()).days + 1)
+            aggregate_weekly = window_days > 90
+        else:
+            recent_30_count = int(
+                db.scalar(
+                    apply_strict_incident_filters(select(func.count()).select_from(NewsItem)).where(
+                        NewsItem.published_at >= (now_utc - timedelta(days=30))
+                    )
+                )
+                or 0
+            )
+            if recent_30_count >= 20:
+                window_days = 30
+            elif recent_30_count >= 8:
+                window_days = 120
+            else:
+                window_days = 365
+            start_date = now_utc - timedelta(days=window_days - 1)
+            aggregate_weekly = window_days > 90
+        rows_stmt = apply_strict_incident_filters(select(NewsItem)).where(NewsItem.published_at >= start_date)
+        rows_stmt = rows_stmt.order_by(NewsItem.published_at.asc())
+        rows = db.execute(rows_stmt).scalars().all()
+
         timeline: dict[str, dict[str, int]] = {}
         state_totals: dict[str, int] = {}
         species_totals: dict[str, int] = {}
         source_totals: dict[str, dict[str, float]] = {}
         crime_types: set[str] = set()
-        all_states: list[str] = []
-        all_sources: list[str] = []
-        all_crime_types: list[str] = []
-        window_days = 30
-        aggregate_weekly = False
-
-        try:
-            if m._scope_from_start_enabled():
-                start_date = m._start_from_utc()
-                window_days = max(1, (now_utc.date() - start_date.date()).days + 1)
-                aggregate_weekly = window_days > 90
+        for row in rows:
+            if aggregate_weekly:
+                week_start = (row.published_at - timedelta(days=row.published_at.weekday())).date()
+                day = week_start.isoformat()
             else:
-                recent_30_count = int(
-                    db.scalar(
-                        apply_strict_incident_filters(select(func.count()).select_from(NewsItem)).where(
-                            NewsItem.published_at >= (now_utc - timedelta(days=30))
-                        )
-                    )
-                    or 0
-                )
-                if recent_30_count >= 20:
-                    window_days = 30
-                elif recent_30_count >= 8:
-                    window_days = 120
-                else:
-                    window_days = 365
-                start_date = now_utc - timedelta(days=window_days - 1)
-                aggregate_weekly = window_days > 90
-
-            rows_stmt = apply_strict_incident_filters(select(NewsItem)).where(NewsItem.published_at >= start_date)
-            rows_stmt = rows_stmt.order_by(NewsItem.published_at.asc())
-            rows = db.execute(rows_stmt).scalars().all()
-
-            for row in rows:
-                if aggregate_weekly:
-                    week_start = (row.published_at - timedelta(days=row.published_at.weekday())).date()
-                    day = week_start.isoformat()
-                else:
-                    day = row.published_at.date().isoformat()
-                bucket = timeline.setdefault(day, {"incidents": 0, "high_risk": 0})
-                bucket["incidents"] += 1
-                if row.risk_score > settings.risk_alert_threshold:
-                    bucket["high_risk"] += 1
-                state_key = (row.state or "Unknown").strip().title() or "Unknown"
-                state_totals[state_key] = state_totals.get(state_key, 0) + 1
-                source_name = (row.source or "Unknown").strip() or "Unknown"
-                source_bucket = source_totals.setdefault(source_name, {"count": 0.0, "confidence_sum": 0.0})
-                source_bucket["count"] += 1.0
-                source_bucket["confidence_sum"] += float(row.confidence or 0.0)
-                incident_species = {item.strip().lower() for item in str(row.species or "").split(",") if item.strip()}
-                for species_name in incident_species:
-                    species_totals[species_name] = species_totals.get(species_name, 0) + 1
-                if row.crime_type:
-                    crime_types.add(row.crime_type)
-
-            all_states = db.execute(
-                m._apply_today_news_scope(
-                    apply_strict_incident_filters(select(func.distinct(NewsItem.state))).where(NewsItem.state != "").order_by(
-                        NewsItem.state.asc()
-                    )
-                )
-            ).scalars().all()
-            all_sources = db.execute(
-                m._apply_today_news_scope(
-                    apply_strict_incident_filters(select(func.distinct(NewsItem.source))).where(NewsItem.source != "").order_by(
-                        NewsItem.source.asc()
-                    )
-                )
-            ).scalars().all()
-            all_crime_types = db.execute(
-                m._apply_today_news_scope(
-                    apply_strict_incident_filters(select(func.distinct(NewsItem.crime_type))).where(
-                        NewsItem.crime_type != ""
-                    ).order_by(NewsItem.crime_type.asc())
-                )
-            ).scalars().all()
-        except Exception as err:
-            from app.core.logger import get_logger
-            get_logger().error("Failed to compute dashboard chart data (DB issue): %s", err)
+                day = row.published_at.date().isoformat()
+            bucket = timeline.setdefault(day, {"incidents": 0, "high_risk": 0})
+            bucket["incidents"] += 1
+            if row.risk_score > settings.risk_alert_threshold:
+                bucket["high_risk"] += 1
+            state_key = (row.state or "Unknown").strip().title() or "Unknown"
+            state_totals[state_key] = state_totals.get(state_key, 0) + 1
+            source_name = (row.source or "Unknown").strip() or "Unknown"
+            source_bucket = source_totals.setdefault(source_name, {"count": 0.0, "confidence_sum": 0.0})
+            source_bucket["count"] += 1.0
+            source_bucket["confidence_sum"] += float(row.confidence or 0.0)
+            incident_species = {item.strip().lower() for item in str(row.species or "").split(",") if item.strip()}
+            for species_name in incident_species:
+                species_totals[species_name] = species_totals.get(species_name, 0) + 1
+            if row.crime_type:
+                crime_types.add(row.crime_type)
 
         species_rows = sorted(
             [{"species": species, "count": count} for species, count in species_totals.items()],
@@ -188,9 +148,30 @@ def chart_data(db: Session = Depends(get_db)):
             reverse=True,
         )[:12]
 
+        all_states = db.execute(
+            m._apply_today_news_scope(
+                apply_strict_incident_filters(select(func.distinct(NewsItem.state))).where(NewsItem.state != "").order_by(
+                    NewsItem.state.asc()
+                )
+            )
+        ).scalars().all()
+        all_sources = db.execute(
+            m._apply_today_news_scope(
+                apply_strict_incident_filters(select(func.distinct(NewsItem.source))).where(NewsItem.source != "").order_by(
+                    NewsItem.source.asc()
+                )
+            )
+        ).scalars().all()
+        all_crime_types = db.execute(
+            m._apply_today_news_scope(
+                apply_strict_incident_filters(select(func.distinct(NewsItem.crime_type))).where(
+                    NewsItem.crime_type != ""
+                ).order_by(NewsItem.crime_type.asc())
+            )
+        ).scalars().all()
         all_species = sorted(species_totals.keys())
-        timeline_labels = sorted(timeline.keys())
 
+        timeline_labels = sorted(timeline.keys())
         return {
             "timeline": {
                 "labels": timeline_labels,
