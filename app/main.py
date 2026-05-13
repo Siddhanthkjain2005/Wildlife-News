@@ -2324,16 +2324,22 @@ def get_trending_keywords(db: Session = Depends(get_db), days: int = 7, limit: i
         since = _start_from_utc()
     else:
         since = datetime.utcnow() - timedelta(days=safe_days)
-    signals = (
-        db.execute(_apply_today_signal_scope(select(ExternalSignal).where(ExternalSignal.published_at >= since)))
-        .scalars()
-        .all()
-    )
-    watch_keywords = [
-        str(row).strip().lower()
-        for row in db.execute(select(Watchlist.keyword).where(Watchlist.enabled.is_(True))).scalars().all()
-        if str(row).strip()
-    ]
+    try:
+        signals = (
+            db.execute(_apply_today_signal_scope(select(ExternalSignal).where(ExternalSignal.published_at >= since)))
+            .scalars()
+            .all()
+        )
+        watch_keywords = [
+            str(row).strip().lower()
+            for row in db.execute(select(Watchlist.keyword).where(Watchlist.enabled.is_(True))).scalars().all()
+            if str(row).strip()
+        ]
+    except Exception as err:
+        app_logger.error("Failed to fetch signals/watchlist for trending stats (DB issue): %s", err)
+        signals = []
+        watch_keywords = []
+
     keyword_counts: dict[str, dict[str, float]] = {}
     reddit_mentions = 0
     govt_signals = 0
