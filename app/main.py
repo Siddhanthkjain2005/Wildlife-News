@@ -25,7 +25,7 @@ from app.api import admin, dashboard, exports, graph, health, incidents, predict
 from app.core.config import settings
 from app.core.backup import create_snapshot_export, create_sqlite_backup, sqlite_integrity_check, sqlite_path_from_url
 from app.core.cache import build_cache
-from app.core.database import SessionLocal, diagnose_database, get_db, init_database
+from app.core.database import SessionLocal, diagnose_database, engine, get_db, init_database
 from app.core.logger import get_logger, init_logging
 from app.core.realtime import build_event_bus
 from app.core.retry import retry_call
@@ -2152,6 +2152,12 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
             import shutil
             shutil.copy2(backup_path, db_path)
         raise HTTPException(status_code=500, detail=f"Failed to write database: {err}")
+
+    # CRITICAL: Force SQLAlchemy to drop all cached connections and reconnect
+    # to the new database file. Without this, the app keeps using stale
+    # connections pointing to the old (pre-upload) data.
+    engine.dispose()
+    app_logger.info("SQLAlchemy connection pool disposed — reconnecting to restored database")
 
     # Run schema migrations on the restored DB
     try:
