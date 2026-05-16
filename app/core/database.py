@@ -281,6 +281,29 @@ def _ensure_audit_logs_schema() -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_audit_logs_action ON audit_logs (action)"))
 
 
+def _ensure_alerts_schema() -> None:
+    required_sqlite_columns: dict[str, str] = {
+        "sent_whatsapp": "ALTER TABLE alerts ADD COLUMN sent_whatsapp BOOLEAN NOT NULL DEFAULT 0",
+    }
+    required_postgres_columns: dict[str, str] = {
+        "sent_whatsapp": "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS sent_whatsapp BOOLEAN NOT NULL DEFAULT FALSE",
+    }
+    existing = _existing_columns("alerts")
+    required_columns = set(required_sqlite_columns.keys()) if engine.dialect.name == "sqlite" else set(required_postgres_columns.keys())
+    if existing and required_columns.issubset(existing):
+        return
+    with engine.begin() as conn:
+        if not existing:
+            # Table doesn't exist, Base.metadata.create_all will handle it
+            return
+        
+        column_ddl = required_sqlite_columns if engine.dialect.name == "sqlite" else required_postgres_columns
+        for column_name, ddl in column_ddl.items():
+            if engine.dialect.name == "sqlite" and column_name in existing:
+                continue
+            conn.execute(text(ddl))
+
+
 def _ensure_postgres_extensions() -> None:
     if not is_postgres:
         return
@@ -309,6 +332,7 @@ def init_database() -> None:
         _ensure_news_items_schema()
         _ensure_reports_schema()
         _ensure_audit_logs_schema()
+        _ensure_alerts_schema()
     except SQLAlchemyError as err:
         if engine.dialect.name == "sqlite" and "database is locked" in str(err).lower():
             logger.warning("Schema compatibility checks skipped due to database lock; continuing startup.")
