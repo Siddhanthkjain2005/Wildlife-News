@@ -31,7 +31,11 @@ def create_sqlite_backup(db_path: Path, backups_dir: Path) -> Path:
     backups_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     backup_path = backups_dir / f"news-backup-{stamp}.db"
-    copy2(db_path, backup_path)
+    
+    # Use native sqlite3 backup API for atomic safety on live DB
+    with sqlite3.connect(str(db_path)) as source:
+        with sqlite3.connect(str(backup_path)) as dest:
+            source.backup(dest)
     return backup_path
 
 

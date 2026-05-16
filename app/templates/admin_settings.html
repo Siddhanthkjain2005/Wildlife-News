@@ -19,29 +19,42 @@
       </div>
     </div>
 
+    {% set msg = request.query_params.get("msg") %}
+    {% if msg %}
+    <div class="alert alert-info alert-dismissible fade show mb-3 ops-card" role="alert" style="border-left: 4px solid #0dcaf0;">
+      {{ msg }}
+      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
     <div class="row g-3 mb-3">
       <div class="col-md-3">
         <div class="kpi-card">
-          <div class="kpi-label">Cache Entries</div>
-          <div class="kpi-value">{{ cache_state.entries }}</div>
+          <div class="kpi-label">System Health</div>
+          <div class="kpi-value text-capitalize {{ 'text-success' if system_health.status == 'healthy' else 'text-warning' }}">
+            {{ system_health.status }}
+          </div>
         </div>
       </div>
       <div class="col-md-3">
         <div class="kpi-card">
-          <div class="kpi-label">Cache Hits</div>
-          <div class="kpi-value">{{ cache_state.hits }}</div>
+          <div class="kpi-label">Incidents / Database</div>
+          <div class="kpi-value">{{ system_health.database.total_incidents }} <span style="font-size:0.8rem;opacity:0.6;">({{ system_health.database.size_mb }}MB)</span></div>
         </div>
       </div>
       <div class="col-md-3">
         <div class="kpi-card">
-          <div class="kpi-label">Sync Running</div>
-          <div class="kpi-value">{{ "Yes" if sync_state.running else "No" }}</div>
+          <div class="kpi-label">Disk Storage</div>
+          <div class="kpi-value">{{ system_health.storage.usage_percent }}% <span style="font-size:0.8rem;opacity:0.6;">used</span></div>
+          <div class="progress mt-2" style="height: 4px; background: rgba(255,255,255,0.1);">
+            <div class="progress-bar bg-info" role="progressbar" style="width: {{ system_health.storage.usage_percent }}%"></div>
+          </div>
         </div>
       </div>
       <div class="col-md-3">
         <div class="kpi-card">
-          <div class="kpi-label">Maintenance Running</div>
-          <div class="kpi-value">{{ "Yes" if maintenance_state.running else "No" }}</div>
+          <div class="kpi-label">Maintenance / Sync</div>
+          <div class="kpi-value">{{ "Active" if maintenance_state.running else "Idle" }} / {{ "Active" if sync_state.running else "Idle" }}</div>
           {% if maintenance_state.progress %}
           <div class="kpi-label mt-1" style="font-size:0.7rem;color:#8cf;">{{ maintenance_state.progress }}</div>
           {% endif %}
@@ -49,10 +62,37 @@
       </div>
     </div>
 
-    <div class="ops-card mb-3">
-      <div class="ops-card-header">Runtime Configuration</div>
-      <div class="ops-card-body">
-        <form method="post" action="/admin/settings/update" class="row g-3">
+    <div class="row g-3 mb-3">
+      <div class="col-md-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">System Diagnostics</div>
+          <div class="ops-card-body">
+            <ul class="list-unstyled mb-0">
+              <li class="d-flex justify-content-between mb-2">
+                <span>AI Model Readiness:</span>
+                <span class="{{ 'text-success' if system_health.ai_model.available else 'text-danger' }} fw-bold">{{ 'Available' if system_health.ai_model.available else 'Unavailable' }}</span>
+              </li>
+              <li class="d-flex justify-content-between mb-2">
+                <span>Errors Today (Audit Log):</span>
+                <span class="{{ 'text-success' if system_health.errors_today == 0 else 'text-warning' }} fw-bold">{{ system_health.errors_today }}</span>
+              </li>
+              <li class="d-flex justify-content-between mb-2">
+                <span>Last Sync Activity:</span>
+                <span class="text-info">{{ system_health.last_sync.time.split('T')[0] }} ({{ system_health.last_sync.status }})</span>
+              </li>
+              <li class="d-flex justify-content-between">
+                <span>Active Cache Entries:</span>
+                <span class="text-white">{{ cache_state.entries }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="ops-card h-100">
+          <div class="ops-card-header">Runtime Configuration</div>
+          <div class="ops-card-body">
+            <form method="post" action="/admin/settings/update" class="row g-2">
           <div class="col-12">
             <label class="form-label">Enabled Providers</label>
             <input class="form-control ops-input" name="enabled_providers" value="{{ settings_view.enabled_providers }}" required>
@@ -75,6 +115,8 @@
         </form>
       </div>
     </div>
+  </div>
+</div>
 
     <div class="ops-card">
       <div class="ops-card-header">Operations</div>

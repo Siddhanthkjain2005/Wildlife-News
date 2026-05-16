@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.security import require_admin_access
 from app.models import AuditLog
 from app.services.maintenance import compute_data_quality_overview, force_reset_maintenance_state, get_maintenance_status, start_deep_maintenance_job
+from app.services.health_service import get_system_health
 
 router = APIRouter(tags=["admin"])
 
@@ -45,6 +46,7 @@ def admin_settings_page(request: Request):
             "cache_state": cache_state,
             "sync_state": m._sync_snapshot(),
             "maintenance_state": maintenance_status,
+            "system_health": get_system_health(m.SessionLocal()),
         },
     )
 
@@ -85,7 +87,7 @@ def admin_settings_update(
             f"cache_ttl={m.settings.cache_ttl_seconds}; backup_interval={m.settings.backup_interval_minutes}"
         ),
     )
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    return RedirectResponse(url="/admin/settings?msg=Settings+updated+successfully", status_code=303)
 
 
 @router.post("/admin/settings/cache-clear")
@@ -93,7 +95,7 @@ def admin_cache_clear(request: Request, _: None = Depends(require_admin_access))
     m = _main()
     m._clear_runtime_cache()
     m._audit(actor="admin", action="cache_clear", status="ok", ip=m._client_ip(request), notes="")
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    return RedirectResponse(url="/admin/settings?msg=Cache+cleared", status_code=303)
 
 
 @router.post("/admin/settings/run-backup")
@@ -108,7 +110,8 @@ def admin_run_backup(request: Request, _: None = Depends(require_admin_access)):
         ip=m._client_ip(request),
         notes=str(result.get("error") or f"backup={result.get('backup')}"),
     )
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    msg = "Backup+successful" if status == "ok" else f"Backup+failed: {result.get('error')}"
+    return RedirectResponse(url=f"/admin/settings?msg={msg}", status_code=303)
 
 
 @router.post("/admin/settings/test-telegram")
@@ -122,7 +125,8 @@ def admin_test_telegram(request: Request, _: None = Depends(require_admin_access
         ip=m._client_ip(request),
         notes="",
     )
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    msg = "Telegram+test+message+sent" if ok else "Telegram+test+failed.+Check+logs/config."
+    return RedirectResponse(url=f"/admin/settings?msg={msg}", status_code=303)
 
 
 @router.post("/admin/settings/test-email")
@@ -139,7 +143,8 @@ def admin_test_email(request: Request, _: None = Depends(require_admin_access)):
         ip=m._client_ip(request),
         notes="",
     )
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    msg = "Email+test+sent" if ok else "Email+test+failed.+Check+logs/config."
+    return RedirectResponse(url=f"/admin/settings?msg={msg}", status_code=303)
 
 
 @router.post("/admin/settings/deep-maintenance")
@@ -167,7 +172,7 @@ def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_acc
         m._audit(actor="admin", action="deep_maintenance_start", status="error", ip=client_ip, notes="already_running")
         return RedirectResponse(url="/admin/settings", status_code=303)
     m._audit(actor="admin", action="deep_maintenance_start", status="ok", ip=client_ip, notes="started_in_background")
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    return RedirectResponse(url="/admin/settings?msg=Full+AI+reanalysis+started+in+background", status_code=303)
 
 
 @router.post("/admin/settings/reset-maintenance")
@@ -181,7 +186,7 @@ def admin_reset_maintenance(request: Request, _: None = Depends(require_admin_ac
         ip=m._client_ip(request),
         notes="admin_manual_reset",
     )
-    return RedirectResponse(url="/admin/settings", status_code=303)
+    return RedirectResponse(url="/admin/settings?msg=Maintenance+lock+forcefully+reset", status_code=303)
 
 
 @router.get("/api/admin/audit-logs")
@@ -214,3 +219,8 @@ def admin_data_quality(
     db: Session = Depends(get_db),
 ):
     return compute_data_quality_overview(db, sample_limit=sample_limit)
+
+
+@router.get("/api/admin/system-health")
+def admin_system_health(_: None = Depends(require_admin_access), db: Session = Depends(get_db)):
+    return get_system_health(db)
