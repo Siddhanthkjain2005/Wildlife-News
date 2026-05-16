@@ -26,10 +26,10 @@ class Settings(BaseSettings):
     sync_scheduler_jitter_seconds: int = 20
 
     # Intelligence thresholds
-    ai_threshold: float = 0.62
-    india_threshold: float = 0.70
+    ai_threshold: float = 0.65
+    india_threshold: float = 0.75
     india_only: bool = True
-    strict_ai_mode: bool = False
+    strict_ai_mode: bool = True
     risk_alert_threshold: int = 80
     dedupe_title_similarity_threshold: float = 0.92
     dedupe_semantic_similarity_threshold: float = 0.86

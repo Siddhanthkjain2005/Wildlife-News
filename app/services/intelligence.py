@@ -165,7 +165,10 @@ NON_CRIME_CONTENT_PATTERNS = [
         r"\btiger reserve\s+(?:celebrat|open|tourism)\b",
         r"\bman.?animal conflict\b",
         r"\bhuman.?wildlife conflict\b",
-        r"\b(?:elephant|leopard|tiger)\s+(?:spotted|sighted|seen|enters?\s+(?:village|city|town))\b",
+        r"\b(?:elephant|leopard|tiger|bear|bison)\s+(?:spotted|sighted|seen|enters?\s+(?:village|city|town|human habit))\b",
+        r"\bstraying into\b",
+        r"\bpanics? in\s+(?:village|city|area)\b",
+        r"\battacked?\s+by\s+(?:leopard|tiger|elephant)\b",
         r"\bwildlife\s+(?:policy|bill|act|regulation|law|scheme|project|programme|program)\b",
         r"\bforest\s+(?:policy|bill|regulation|management|restoration)\b",
         r"\banimal\s+(?:rescue|shelter|welfare|hospital)\b",
@@ -271,8 +274,8 @@ UNKNOWN_PERSON_PATTERNS = [
     re.compile(r"\b(?:unknown|unidentified|unnamed)\s+(?:suspect|accused|person|poacher)s?\b", re.IGNORECASE),
 ]
 
-NON_ANIMAL_CRIME_TYPES = {"habitat_destruction", "red_sanders_smuggling"}
-NON_ANIMAL_SPECIES = {"red sanders", "sandalwood"}
+NON_ANIMAL_CRIME_TYPES = {"habitat_destruction", "red_sanders_smuggling", "animal_cruelty"}
+NON_ANIMAL_SPECIES = {"red sanders", "sandalwood", "timber", "teak"}
 
 # Source credibility — weights intelligence confidence by publisher reliability
 SOURCE_CREDIBILITY: dict[str, float] = {
@@ -825,6 +828,14 @@ AGENCY_TERMS = [
     "stf",
     "crime branch",
     "railway protection force",
+    "rpf",
+    "cbi",
+    "ncb",
+    "enforcement directorate",
+    "cbt",
+    "wildlife wing",
+    "anti-poaching unit",
+    "special task force",
 ]
 
 QUANTITY_PATTERN = re.compile(
@@ -2264,9 +2275,9 @@ class HybridIntelligenceEngine:
         strict_mode = settings.strict_ai_mode
         if strict_mode:
             strong_rule_signal = (
-                rule_score >= 0.6
-                or keyword_hits >= 4
-                or (len(species) > 0 and poach_prob >= 0.55)
+                rule_score >= 0.65
+                or keyword_hits >= 5
+                or (len(species) > 0 and poach_prob >= 0.60)
             )
         else:
             strong_rule_signal = (
@@ -2385,12 +2396,12 @@ class HybridIntelligenceEngine:
 
         # ---------- Crime-Indicator Gate ----------
         # An article must contain at least ONE strong crime indicator to be accepted.
-        # Without arrest/seizure/crime-keyword evidence, it's likely generic wildlife news.
+        # For 'Strict Poaching', we require explicit poaching/arrest/seizure context.
         has_crime_indicator = (
             has_operational_signal
             or any(term in text for term in POACHING_SPECIFIC_SIGNALS)
-            or rule_score >= 0.25
-            or keyword_hits >= 3
+            or rule_score >= 0.35
+            or keyword_hits >= 4
         )
         if is_poaching and not has_crime_indicator:
             is_poaching = False
