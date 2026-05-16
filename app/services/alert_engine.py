@@ -44,19 +44,43 @@ class AlertEngine:
     def _email_send(self, subject: str, body: str) -> bool:
         if not self.email_enabled:
             return False
+        
+        import socket
         message = EmailMessage()
         message["Subject"] = subject
         message["From"] = settings.smtp_username
         message["To"] = settings.alert_email_to
         message.set_content(body)
+        
+        host = str(settings.smtp_host)
+        port = int(settings.smtp_port)
+        
         try:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=12) as smtp:
-                smtp.starttls()
-                smtp.login(settings.smtp_username, settings.smtp_password)
-                smtp.send_message(message)
+            # Force IPv4 to resolve 'Network is unreachable' issues on some cloud hosts
+            # We resolve the host manually to get an IPv4 address
+            try:
+                addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+                target_ip = addr_info[0][4][0]
+                logger.debug("Resolved %s to IPv4: %s", host, target_ip)
+            except Exception as dns_err:
+                logger.warning("DNS resolution failed for %s, falling back to hostname: %s", host, dns_err)
+                target_ip = host
+
+            if port == 465:
+                # Use SMTP_SSL for port 465
+                with smtplib.SMTP_SSL(target_ip, port, timeout=15) as smtp:
+                    smtp.login(settings.smtp_username, settings.smtp_password)
+                    smtp.send_message(message)
+            else:
+                # Use standard SMTP + STARTTLS for 587 or other ports
+                with smtplib.SMTP(target_ip, port, timeout=15) as smtp:
+                    if port == 587:
+                        smtp.starttls()
+                    smtp.login(settings.smtp_username, settings.smtp_password)
+                    smtp.send_message(message)
             return True
-        except (smtplib.SMTPException, OSError) as err:
-            logger.warning("Email alert failed: %s", err)
+        except (smtplib.SMTPException, OSError, socket.error) as err:
+            logger.warning("Email alert failed (host=%s, port=%d): %s", host, port, err)
             return False
 
     @staticmethod
