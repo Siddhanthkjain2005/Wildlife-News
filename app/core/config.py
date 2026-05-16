@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     whatsapp_alerts_enabled: bool = False
     whatsapp_phone: str | None = None
     whatsapp_api_key: str | None = None
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_whatsapp_from: str = "whatsapp:+14155238886"
     alert_dispatch_interval_seconds: int = 60
 
     # Logging

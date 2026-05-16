@@ -100,24 +100,58 @@ class AlertEngine:
             logger.warning("SendGrid alert failed: %s", err)
             return False
 
-    def _whatsapp_send(self, text: str) -> bool:
-        if not self.whatsapp_enabled:
+    def _twilio_whatsapp_send(self, text: str) -> bool:
+        if not settings.twilio_account_sid or not settings.twilio_auth_token:
             return False
-        url = "https://api.callmebot.com/whatsapp.php"
-        params = {
-            "phone": settings.whatsapp_phone,
-            "text": text,
-            "apikey": settings.whatsapp_api_key,
+        
+        url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
+        to_phone = settings.whatsapp_phone or ""
+        if not to_phone.startswith("whatsapp:"):
+            to_phone = f"whatsapp:{to_phone}"
+            
+        payload = {
+            "From": settings.twilio_whatsapp_from,
+            "To": to_phone,
+            "Body": text,
         }
         try:
-            response = requests.get(url, params=params, timeout=12)
-            if response.status_code != 200:
-                logger.warning("WhatsApp API error (%d): %s", response.status_code, response.text)
+            response = requests.post(
+                url,
+                data=payload,
+                auth=(settings.twilio_account_sid, settings.twilio_auth_token),
+                timeout=12
+            )
+            if response.status_code not in {200, 201}:
+                logger.warning("Twilio API error (%d): %s", response.status_code, response.text)
                 return False
             return True
         except requests.RequestException as err:
-            logger.warning("WhatsApp alert failed: %s", err)
+            logger.warning("Twilio WhatsApp alert failed: %s", err)
             return False
+
+    def _whatsapp_send(self, text: str) -> bool:
+        if not self.whatsapp_enabled:
+            return False
+            
+        # Priority 1: Twilio (More professional/reliable)
+        if settings.twilio_account_sid and settings.twilio_auth_token:
+            return self._twilio_whatsapp_send(text)
+            
+        # Priority 2: CallMeBot (Free/Personal fallback)
+        if settings.whatsapp_api_key:
+            url = "https://api.callmebot.com/whatsapp.php"
+            params = {
+                "phone": settings.whatsapp_phone,
+                "text": text,
+                "apikey": settings.whatsapp_api_key,
+            }
+            try:
+                response = requests.get(url, params=params, timeout=12)
+                return response.status_code == 200
+            except requests.RequestException:
+                return False
+        
+        return False
 
     def _email_send(self, subject: str, body: str) -> bool:
         if not self.email_enabled:
