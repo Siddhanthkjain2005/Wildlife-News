@@ -28,7 +28,8 @@ class AlertEngine:
         self.resend_enabled = bool(settings.resend_api_key)
         self.sendgrid_enabled = bool(settings.sendgrid_api_key)
         self.whatsapp_enabled = bool(
-            settings.whatsapp_alerts_enabled and settings.whatsapp_phone and settings.whatsapp_api_key
+            settings.whatsapp_alerts_enabled and settings.whatsapp_phone and 
+            (settings.whatsapp_api_key or settings.twilio_account_sid)
         )
 
     def _telegram_send(self, text: str) -> bool:
