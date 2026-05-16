@@ -82,6 +82,7 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     alert_email_to: str | None = None
+    alert_email_from: str = "Wildlife Intelligence <onboarding@resend.dev>"
     resend_api_key: str | None = None
     alert_dispatch_interval_seconds: int = 60
 

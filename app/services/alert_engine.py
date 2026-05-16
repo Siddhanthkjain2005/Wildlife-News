@@ -49,7 +49,7 @@ class AlertEngine:
         }
         # Use onboarding@resend.dev for testing if they haven't verified a domain
         payload = {
-            "from": "Wildlife Intelligence <onboarding@resend.dev>",
+            "from": settings.alert_email_from,
             "to": [settings.alert_email_to or ""],
             "subject": subject,
             "text": body,
@@ -75,7 +75,7 @@ class AlertEngine:
         import socket
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = settings.smtp_username
+        message["From"] = settings.alert_email_from
         message["To"] = settings.alert_email_to
         message.set_content(body)
         
