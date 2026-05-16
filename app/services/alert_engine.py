@@ -110,8 +110,12 @@ class AlertEngine:
         if not target.startswith("whatsapp:"):
             target = f"whatsapp:{target}"
             
+        from_num = settings.twilio_whatsapp_from.strip()
+        if not from_num.startswith("whatsapp:"):
+            from_num = f"whatsapp:{from_num}"
+            
         payload = {
-            "From": settings.twilio_whatsapp_from,
+            "From": from_num,
             "To": target,
             "Body": text,
         }
