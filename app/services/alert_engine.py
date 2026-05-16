@@ -23,8 +23,10 @@ class AlertEngine:
         self.email_enabled = bool(
             (settings.email_alerts_enabled and settings.smtp_host and settings.smtp_username and settings.smtp_password)
             or settings.resend_api_key
+            or settings.sendgrid_api_key
         )
         self.resend_enabled = bool(settings.resend_api_key)
+        self.sendgrid_enabled = bool(settings.sendgrid_api_key)
 
     def _telegram_send(self, text: str) -> bool:
         if not self.telegram_enabled:
@@ -64,11 +66,46 @@ class AlertEngine:
             logger.warning("Resend alert failed: %s", err)
             return False
 
+    def _sendgrid_send(self, subject: str, body: str) -> bool:
+        if not self.sendgrid_enabled or not settings.sendgrid_api_key:
+            return False
+        url = "https://api.sendgrid.com/v3/mail/send"
+        headers = {
+            "Authorization": f"Bearer {settings.sendgrid_api_key}",
+            "Content-Type": "application/json",
+        }
+        # Extract name from ALERT_EMAIL_FROM if present (e.g., "Name <email@site.com>")
+        from_email = settings.alert_email_from
+        from_name = "Wildlife Intelligence"
+        if "<" in from_email and ">" in from_email:
+            from_name = from_email.split("<")[0].strip()
+            from_email = from_email.split("<")[1].split(">")[0].strip()
+
+        payload = {
+            "personalizations": [{"to": [{"email": settings.alert_email_to or ""}]}],
+            "from": {"email": from_email, "name": from_name},
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        }
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code not in {200, 201, 202}:
+                logger.warning("SendGrid API error (%d): %s", response.status_code, response.text)
+                return False
+            return True
+        except requests.RequestException as err:
+            logger.warning("SendGrid alert failed: %s", err)
+            return False
+
     def _email_send(self, subject: str, body: str) -> bool:
         if not self.email_enabled:
             return False
         
-        # Fallback to Resend if API key is provided, as it bypasses SMTP blocks
+        # Priority 1: SendGrid (Best for free users without domains)
+        if self.sendgrid_enabled:
+            return self._sendgrid_send(subject, body)
+
+        # Priority 2: Resend (Best for users WITH domains)
         if self.resend_enabled:
             return self._resend_send(subject, body)
         
