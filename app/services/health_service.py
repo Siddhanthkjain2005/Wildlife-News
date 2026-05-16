@@ -69,5 +69,10 @@ def get_system_health(db: Session) -> dict[str, object]:
         },
         "ai_model": {
             "available": model_exists,
+        },
+        "channels": {
+            "telegram": bool(settings.telegram_alerts_enabled and settings.telegram_bot_token),
+            "whatsapp": bool(settings.whatsapp_alerts_enabled and (settings.whatsapp_api_key or settings.twilio_account_sid)),
+            "email": bool(settings.email_alerts_enabled and (settings.smtp_host or settings.sendgrid_api_key or settings.resend_api_key)),
         }
     }

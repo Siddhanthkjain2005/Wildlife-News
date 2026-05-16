@@ -80,6 +80,14 @@
                 <span>Last Sync Activity:</span>
                 <span class="text-info">{{ system_health.last_sync.time.split('T')[0] }} ({{ system_health.last_sync.status }})</span>
               </li>
+              <li class="d-flex justify-content-between mb-2">
+                <span>Active Channels:</span>
+                <span>
+                  <span class="badge {{ 'bg-success' if system_health.channels.email else 'bg-secondary' }}" title="Email">Email</span>
+                  <span class="badge {{ 'bg-success' if system_health.channels.telegram else 'bg-secondary' }}" title="Telegram">TG</span>
+                  <span class="badge {{ 'bg-success' if system_health.channels.whatsapp else 'bg-secondary' }}" title="WhatsApp">WA</span>
+                </span>
+              </li>
               <li class="d-flex justify-content-between">
                 <span>Active Cache Entries:</span>
                 <span class="text-white">{{ cache_state.entries }}</span>
