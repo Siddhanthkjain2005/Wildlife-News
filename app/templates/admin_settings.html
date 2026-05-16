@@ -42,6 +42,9 @@
         <div class="kpi-card">
           <div class="kpi-label">Maintenance Running</div>
           <div class="kpi-value">{{ "Yes" if maintenance_state.running else "No" }}</div>
+          {% if maintenance_state.progress %}
+          <div class="kpi-label mt-1" style="font-size:0.7rem;color:#8cf;">{{ maintenance_state.progress }}</div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -90,6 +93,9 @@
         </form>
         <form method="post" action="/admin/settings/deep-maintenance" onsubmit="return confirm('Full AI reanalysis runs in the background and will delete non-India/non-poaching/non-animal incidents. Proceed?')">
           <button class="btn btn-danger btn-sm">Run Full AI Reanalysis</button>
+        </form>
+        <form method="post" action="/admin/settings/reset-maintenance" onsubmit="return confirm('Force-reset the maintenance lock? Only use if maintenance is stuck.')">
+          <button class="btn btn-outline-danger btn-sm">Force Reset Maintenance Lock</button>
         </form>
         <a class="btn btn-outline-light btn-sm" href="/api/admin/maintenance-status" target="_blank" rel="noopener noreferrer">Maintenance Status JSON</a>
         <a class="btn btn-outline-light btn-sm" href="/api/admin/data-quality" target="_blank" rel="noopener noreferrer">Data Quality JSON</a>

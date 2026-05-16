@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import require_admin_access
 from app.models import AuditLog
-from app.services.maintenance import compute_data_quality_overview, get_maintenance_status, start_deep_maintenance_job
+from app.services.maintenance import compute_data_quality_overview, force_reset_maintenance_state, get_maintenance_status, start_deep_maintenance_job
 
 router = APIRouter(tags=["admin"])
 
@@ -167,6 +167,20 @@ def admin_deep_maintenance(request: Request, _: None = Depends(require_admin_acc
         m._audit(actor="admin", action="deep_maintenance_start", status="error", ip=client_ip, notes="already_running")
         return RedirectResponse(url="/admin/settings", status_code=303)
     m._audit(actor="admin", action="deep_maintenance_start", status="ok", ip=client_ip, notes="started_in_background")
+    return RedirectResponse(url="/admin/settings", status_code=303)
+
+
+@router.post("/admin/settings/reset-maintenance")
+def admin_reset_maintenance(request: Request, _: None = Depends(require_admin_access)):
+    m = _main()
+    force_reset_maintenance_state()
+    m._audit(
+        actor="admin",
+        action="maintenance_force_reset",
+        status="ok",
+        ip=m._client_ip(request),
+        notes="admin_manual_reset",
+    )
     return RedirectResponse(url="/admin/settings", status_code=303)
 
 
