@@ -20,6 +20,7 @@ class Alert(Base):
     trigger_reason: Mapped[str] = mapped_column(String(300), nullable=False)
     sent_telegram: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sent_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sent_whatsapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sent_popup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 

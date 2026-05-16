@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     alert_email_from: str = "Wildlife Intelligence <onboarding@resend.dev>"
     resend_api_key: str | None = None
     sendgrid_api_key: str | None = None
+    whatsapp_alerts_enabled: bool = False
+    whatsapp_phone: str | None = None
+    whatsapp_api_key: str | None = None
     alert_dispatch_interval_seconds: int = 60
 
     # Logging

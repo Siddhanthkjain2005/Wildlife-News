@@ -128,6 +128,21 @@ def admin_test_telegram(request: Request, _: None = Depends(require_admin_access
     msg = "Telegram+test+message+sent" if ok else "Telegram+test+failed.+Check+logs/config."
     return RedirectResponse(url=f"/admin/settings?msg={msg}", status_code=303)
 
+@router.post("/admin/settings/test-whatsapp")
+def admin_test_whatsapp(request: Request, _: None = Depends(require_admin_access)):
+    m = _main()
+    ok = m.alert_engine._whatsapp_send("Wildlife Intelligence test alert from admin settings panel.")
+    m._audit(
+        actor="admin",
+        action="alert_test_whatsapp",
+        status="ok" if ok else "error",
+        ip=m._client_ip(request),
+        notes="",
+    )
+    msg = "WhatsApp+test+message+sent" if ok else "WhatsApp+test+failed.+Check+logs/config."
+    return RedirectResponse(url=f"/admin/settings?msg={msg}", status_code=303)
+
+
 
 @router.post("/admin/settings/test-email")
 def admin_test_email(request: Request, _: None = Depends(require_admin_access)):

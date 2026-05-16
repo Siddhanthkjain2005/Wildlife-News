@@ -27,6 +27,9 @@ class AlertEngine:
         )
         self.resend_enabled = bool(settings.resend_api_key)
         self.sendgrid_enabled = bool(settings.sendgrid_api_key)
+        self.whatsapp_enabled = bool(
+            settings.whatsapp_alerts_enabled and settings.whatsapp_phone and settings.whatsapp_api_key
+        )
 
     def _telegram_send(self, text: str) -> bool:
         if not self.telegram_enabled:
@@ -97,6 +100,25 @@ class AlertEngine:
             logger.warning("SendGrid alert failed: %s", err)
             return False
 
+    def _whatsapp_send(self, text: str) -> bool:
+        if not self.whatsapp_enabled:
+            return False
+        url = "https://api.callmebot.com/whatsapp.php"
+        params = {
+            "phone": settings.whatsapp_phone,
+            "text": text,
+            "apikey": settings.whatsapp_api_key,
+        }
+        try:
+            response = requests.get(url, params=params, timeout=12)
+            if response.status_code != 200:
+                logger.warning("WhatsApp API error (%d): %s", response.status_code, response.text)
+                return False
+            return True
+        except requests.RequestException as err:
+            logger.warning("WhatsApp alert failed: %s", err)
+            return False
+
     def _email_send(self, subject: str, body: str) -> bool:
         if not self.email_enabled:
             return False
@@ -156,6 +178,8 @@ class AlertEngine:
             pending_filter = pending_filter | Alert.sent_telegram.is_(False)
         if self.email_enabled:
             pending_filter = pending_filter | Alert.sent_email.is_(False)
+        if self.whatsapp_enabled:
+            pending_filter = pending_filter | Alert.sent_whatsapp.is_(False)
 
         pending = (
             db.execute(
@@ -168,7 +192,7 @@ class AlertEngine:
             .all()
         )
         if not pending:
-            return {"processed": 0, "telegram_sent": 0, "email_sent": 0, "popup_marked": 0}
+            return {"processed": 0, "telegram_sent": 0, "email_sent": 0, "whatsapp_sent": 0, "popup_marked": 0}
 
         news_map = {
             row.id: row
@@ -178,6 +202,7 @@ class AlertEngine:
         }
         telegram_sent = 0
         email_sent = 0
+        whatsapp_sent = 0
         popup_marked = 0
 
         for alert in pending:
@@ -219,11 +244,27 @@ class AlertEngine:
                         )
                 else:
                     alert.sent_email = True
+            if not alert.sent_whatsapp:
+                if self.whatsapp_enabled:
+                    if self._whatsapp_send(message):
+                        alert.sent_whatsapp = True
+                        whatsapp_sent += 1
+                    else:
+                        record_audit(
+                            db,
+                            actor="system",
+                            action="failed_alert",
+                            status="error",
+                            notes=f"whatsapp failed for alert_id={alert.id} news_id={alert.news_id}",
+                        )
+                else:
+                    alert.sent_whatsapp = True
 
         db.commit()
         return {
             "processed": len(pending),
             "telegram_sent": telegram_sent,
             "email_sent": email_sent,
+            "whatsapp_sent": whatsapp_sent,
             "popup_marked": popup_marked,
         }
