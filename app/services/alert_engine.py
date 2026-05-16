@@ -21,12 +21,10 @@ class AlertEngine:
             settings.telegram_alerts_enabled and settings.telegram_bot_token and settings.telegram_chat_id
         )
         self.email_enabled = bool(
-            settings.email_alerts_enabled
-            and settings.smtp_host
-            and settings.smtp_username
-            and settings.smtp_password
-            and settings.alert_email_to
+            (settings.email_alerts_enabled and settings.smtp_host and settings.smtp_username and settings.smtp_password)
+            or settings.resend_api_key
         )
+        self.resend_enabled = bool(settings.resend_api_key)
 
     def _telegram_send(self, text: str) -> bool:
         if not self.telegram_enabled:
@@ -41,9 +39,38 @@ class AlertEngine:
             logger.warning("Telegram alert failed: %s", err)
             return False
 
+    def _resend_send(self, subject: str, body: str) -> bool:
+        if not self.resend_enabled or not settings.resend_api_key:
+            return False
+        url = "https://api.resend.com/emails"
+        headers = {
+            "Authorization": f"Bearer {settings.resend_api_key}",
+            "Content-Type": "application/json",
+        }
+        # Use onboarding@resend.dev for testing if they haven't verified a domain
+        payload = {
+            "from": "Wildlife Intelligence <onboarding@resend.dev>",
+            "to": [settings.alert_email_to or ""],
+            "subject": subject,
+            "text": body,
+        }
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code != 201:
+                logger.warning("Resend API error (%d): %s", response.status_code, response.text)
+                return False
+            return True
+        except requests.RequestException as err:
+            logger.warning("Resend alert failed: %s", err)
+            return False
+
     def _email_send(self, subject: str, body: str) -> bool:
         if not self.email_enabled:
             return False
+        
+        # Fallback to Resend if API key is provided, as it bypasses SMTP blocks
+        if self.resend_enabled:
+            return self._resend_send(subject, body)
         
         import socket
         message = EmailMessage()
