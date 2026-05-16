@@ -56,24 +56,14 @@ class AlertEngine:
         port = int(settings.smtp_port)
         
         try:
-            # Force IPv4 to resolve 'Network is unreachable' issues on some cloud hosts
-            # We resolve the host manually to get an IPv4 address
-            try:
-                addr_info = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
-                target_ip = addr_info[0][4][0]
-                logger.debug("Resolved %s to IPv4: %s", host, target_ip)
-            except Exception as dns_err:
-                logger.warning("DNS resolution failed for %s, falling back to hostname: %s", host, dns_err)
-                target_ip = host
-
             if port == 465:
-                # Use SMTP_SSL for port 465
-                with smtplib.SMTP_SSL(target_ip, port, timeout=15) as smtp:
+                # Use SMTP_SSL for port 465 (Standard for SSL)
+                with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
                     smtp.login(settings.smtp_username, settings.smtp_password)
                     smtp.send_message(message)
             else:
-                # Use standard SMTP + STARTTLS for 587 or other ports
-                with smtplib.SMTP(target_ip, port, timeout=15) as smtp:
+                # Use standard SMTP (Standard for 587/TLS)
+                with smtplib.SMTP(host, port, timeout=30) as smtp:
                     if port == 587:
                         smtp.starttls()
                     smtp.login(settings.smtp_username, settings.smtp_password)
