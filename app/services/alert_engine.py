@@ -100,9 +100,9 @@ class AlertEngine:
             logger.warning("SendGrid alert failed: %s", err)
             return False
 
-    def _twilio_whatsapp_send(self, to_phone: str, text: str) -> bool:
+    def _twilio_whatsapp_send(self, to_phone: str, text: str) -> tuple[bool, str]:
         if not settings.twilio_account_sid or not settings.twilio_auth_token:
-            return False
+            return False, "Missing Twilio Credentials"
         
         url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
         target = to_phone.strip()
@@ -122,35 +122,45 @@ class AlertEngine:
                 timeout=12
             )
             if response.status_code not in {200, 201}:
-                logger.warning("Twilio error for %s (%d): %s", target, response.status_code, response.text)
-                return False
+                err_msg = f"Twilio error {response.status_code}: {response.text[:200]}"
+                logger.warning("Twilio error for %s: %s", target, err_msg)
+                return False, err_msg
             logger.info("WhatsApp alert sent via Twilio to %s", target)
-            return True
+            return True, "OK"
         except requests.RequestException as err:
             logger.warning("Twilio connection failed for %s: %s", target, err)
-            return False
+            return False, str(err)
 
-    def _whatsapp_send(self, text: str) -> bool:
+    def _whatsapp_send(self, text: str) -> tuple[bool, str]:
         if not self.whatsapp_enabled or not settings.whatsapp_phone:
-            return False
+            return False, "WhatsApp disabled or no phone number configured"
             
         phones = [p.strip() for p in settings.whatsapp_phone.split(",") if p.strip()]
         success_count = 0
+        last_error = "Unknown error"
         
         for phone in phones:
             if settings.twilio_account_sid and settings.twilio_auth_token:
-                if self._twilio_whatsapp_send(phone, text):
+                ok, err = self._twilio_whatsapp_send(phone, text)
+                if ok:
                     success_count += 1
+                else:
+                    last_error = err
             elif settings.whatsapp_api_key:
                 url = "https://api.callmebot.com/whatsapp.php"
                 params = {"phone": phone, "text": text, "apikey": settings.whatsapp_api_key}
                 try:
-                    if requests.get(url, params=params, timeout=12).status_code == 200:
+                    resp = requests.get(url, params=params, timeout=12)
+                    if resp.status_code == 200:
                         success_count += 1
-                except requests.RequestException:
-                    pass
+                    else:
+                        last_error = f"CallMeBot error {resp.status_code}"
+                except requests.RequestException as e:
+                    last_error = str(e)
         
-        return success_count > 0
+        if success_count > 0:
+            return True, f"Sent to {success_count} recipients"
+        return False, last_error
 
     def _email_send(self, subject: str, body: str) -> bool:
         if not self.email_enabled:
@@ -279,7 +289,8 @@ class AlertEngine:
                     alert.sent_email = True
             if not alert.sent_whatsapp:
                 if self.whatsapp_enabled:
-                    if self._whatsapp_send(message):
+                    ok, err = self._whatsapp_send(message)
+                    if ok:
                         alert.sent_whatsapp = True
                         whatsapp_sent += 1
                     else:
@@ -288,7 +299,7 @@ class AlertEngine:
                             actor="system",
                             action="failed_alert",
                             status="error",
-                            notes=f"whatsapp failed for alert_id={alert.id} news_id={alert.news_id}",
+                            notes=f"whatsapp failed for alert_id={alert.id} news_id={alert.news_id}: {err}",
                         )
                 else:
                     alert.sent_whatsapp = True

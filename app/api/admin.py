@@ -131,15 +131,19 @@ def admin_test_telegram(request: Request, _: None = Depends(require_admin_access
 @router.post("/admin/settings/test-whatsapp")
 def admin_test_whatsapp(request: Request, _: None = Depends(require_admin_access)):
     m = _main()
-    ok = m.alert_engine._whatsapp_send("Wildlife Intelligence test alert from admin settings panel.")
+    ok, err = m.alert_engine._whatsapp_send("Wildlife Intelligence test alert from admin settings panel.")
     m._audit(
         actor="admin",
         action="alert_test_whatsapp",
         status="ok" if ok else "error",
         ip=m._client_ip(request),
-        notes="",
+        notes=err if not ok else "",
     )
-    msg = "WhatsApp+test+message+sent" if ok else "WhatsApp+test+failed.+Check+logs/config."
+    if ok:
+        msg = "WhatsApp+test+message+sent"
+    else:
+        import urllib.parse
+        msg = f"WhatsApp+test+failed:+{urllib.parse.quote(err)}"
     return RedirectResponse(url=f"/admin/settings?msg={msg}", status_code=303)
 
 
