@@ -234,6 +234,58 @@ STOP_COUNTRIES = {
     "europe", "usa", "uk", "russia", "australia", "brazil", "dubai", "uae"
 }
 
+STRICT_CAPITALIZATION_DISTRICTS = {
+    "along", "sagar", "panna", "dhar", "durg", "puri", "una", "gir", "gaya", "solan", 
+    "chamba", "goa", "tonk", "pali", "patan", "saran", "latur", "leh", "moga", "tura", 
+    "ziro", "chatur"
+}
+
+HARD_VETO_PATTERNS = [
+    # Black magic / scam / non-poaching crime
+    r"\bblack magic\b",
+    r"\bguptadhan\b",
+    r"\bmagic ritual\b",
+    r"\bjob scam\b",
+    r"\bjob fraud\b",
+    r"\bjob opportunity\b",
+    r"\bcyber\s*crime\b",
+    r"\bonline scam\b",
+    r"\bhuman trafficking\b",
+    r"\bchild labor\b",
+    r"\bdomestic violence\b",
+    # General non-poaching animal things
+    r"\bstray dog\b",
+    r"\bstray cat\b",
+    r"\bpet adoption\b",
+    r"\bvet\s+clinic\b",
+    r"\bveterinary\s+hospital\b",
+    # Celebrity / Entertainment / Gossip
+    r"\bcelebrity\b",
+    r"\bgossip\b",
+    r"\bactor\b",
+    r"\bactress\b",
+    r"\bmovie\b",
+    r"\bfilm\b",
+    r"\bshowbiz\b",
+    r"\btelevision\b",
+    # Sports / Leisure / Recreation
+    r"\bhiking\b",
+    r"\bhiker\b",
+    r"\btrail\b",
+    r"\bclimbing\b",
+    r"\bcamping\b",
+    r"\bmarathon\b",
+    # general non-crime wildlife activities
+    r"\bphoto\s+contest\b",
+    r"\bwildlife\s+photography\b",
+    r"\bbirdwatching\b",
+    r"\bbird\s+watching\b",
+    r"\bzoo\s+visit\b",
+    r"\bsafari\s+booking\b",
+    r"\beco\s*tourism\b",
+]
+
+
 UNKNOWN_TERMS = {
     "unknown",
     "unidentified",
@@ -1071,15 +1123,35 @@ class HybridIntelligenceEngine:
     @staticmethod
     def _extract_species(text: str) -> list[str]:
         species_hits = []
+        lower_text = text.lower()
         for species, keywords in SPECIES_KEYWORDS.items():
-            if any(keyword in text for keyword in keywords):
+            matched = False
+            for keyword in keywords:
+                # Use strict ASCII letter/number boundaries to avoid false substring matches like 'owl' in 'lawful'
+                pattern = rf"(?<![a-zA-Z0-9]){re.escape(keyword.lower())}(?![a-zA-Z0-9])"
+                if re.search(pattern, lower_text):
+                    matched = True
+                    break
+            if matched:
                 species_hits.append(species)
         return species_hits
 
     @staticmethod
     def _find_term_position(text: str, term: str) -> int | None:
-        match = re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text)
-        return match.start() if match else None
+        # Search case-insensitively to support all variations in original casing
+        match = re.search(rf"(?<![a-zA-Z0-9]){re.escape(term)}(?![a-zA-Z0-9])", text, re.IGNORECASE)
+        if not match:
+            return None
+        pos = match.start()
+        # If the term requires strict capitalization, enforce that it starts with an uppercase letter
+        if term.lower() in STRICT_CAPITALIZATION_DISTRICTS:
+            matched_substring = text[pos:pos+len(term)]
+            first_letter_match = re.search(r"[a-zA-Z]", matched_substring)
+            if first_letter_match:
+                if not first_letter_match.group(0).isupper():
+                    return None
+        return pos
+
 
     @classmethod
     def _extract_location(cls, text: str) -> tuple[str, str, str]:
@@ -1502,6 +1574,13 @@ class HybridIntelligenceEngine:
             r"saamana|loksatta|prajavani|vijaya|udayavani|sandesh|akila|dinamalar|dt\s+next|"
             r"dinamani|dinakaran|standard|journal|latestly|statesman|observer|mirror|"
             r"chronicle|sentinel|pioneer|quint|firstpost|theprint|scroll|"
+            r"wion|etv|itv|ani|pti|rti|rnr|dailyhunt|unmanned|aerial|biological|sparks|debate|evm|"
+            r"allegation|allegations|scam|fraud|cyber|gossip|celebrity|advertisement|absconding|"
+            r"accused|suspect|victim|arrest|seizure|ranger|inspector|commissioner|superintendent|"
+            r"ngo|activist|scientist|expert|professor|doctor|justice|minister|secretary|director|"
+            r"president|chairman|member|team|unit|force|squad|group|alert|"
+            r"similipal|corbett|kaziranga|bandipur|nagarhole|sundarbans|ranthambore|periyar|"
+            r"tadoba|mudumalai|sariska|pench|kanha|gir|"
             r"cruelty|credit|image|photo|video|streamer|twitch|whatsapp|telegram|"
             r"delivery|passenger|passengers|owner|store|shop|muslim|rohingya|centres|"
             r"reserves|landscapes|pressed|revealed|investigations|interrogation|"
@@ -1522,7 +1601,7 @@ class HybridIntelligenceEngine:
             re.IGNORECASE,
         )
         phrase_block = re.compile(
-            r"(?:likely involving|updated on|key points?|similar views?|incident occurred|near\s+[A-Z]|surrounding areas|such as)",
+            r"(?:likely involving|updated on|key points?|similar views?|incident occurred|near\s+[A-Z]|surrounding areas|such as|was arrested|were arrested|has been arrested|have been arrested)",
             re.IGNORECASE,
         )
         number_word = re.compile(
@@ -1578,9 +1657,16 @@ class HybridIntelligenceEngine:
                 return True
             if any(not re.match(r"^[A-Za-z][A-Za-z.'\u2019-]*$", w) for w in substantive):
                 return True
-            if all(w and w[0].islower() for w in substantive):
-                if sum(1 for w in substantive if len(w.strip(".")) >= 3) < 2:
-                    return True
+            # Reject mixed-cased candidates (e.g. 'absconding Similipal' or 'was Ram') while allowing entirely lowercase ('ravi kumar')
+            has_upper = any(w and w[0].isupper() for w in substantive)
+            has_lower = any(w and w[0].islower() for w in substantive)
+            if has_upper and has_lower:
+                return True
+
+            if any(w.lower().strip(".") in DISTRICT_TO_STATE or w.lower().strip(".") in INDIA_STATES or w.lower().strip(".") in STOP_COUNTRIES for w in substantive):
+                return True
+
+
             if sum(1 for w in substantive if len(w.strip(".")) >= 3) == 0:
                 return True
         person_lower = person.lower().strip()
@@ -1938,7 +2024,6 @@ class HybridIntelligenceEngine:
             "exotic_bird_trafficking",
             "illegal_fishing",
             "forest_hunting_gang",
-            "animal_cruelty",
             "snake_venom_trade",
         }
         return (
@@ -2243,11 +2328,8 @@ class HybridIntelligenceEngine:
         rule_crime_type, rule_score = self._keyword_crime_scores(text)
         keyword_hits = self._keyword_signal_hits(text)
         species = self._extract_species(text)
-        state, district, location = self._extract_location(text)
+        state, district, location = self._extract_location(source_text)
 
-        # Also try extracting from original (non-lowered) text for regional scripts
-        if not state and not district:
-            state, district, location = self._extract_location(source_text)
 
         # AI fallback: use NER to detect state/district when rules found nothing
         if not state and not district:
@@ -2383,10 +2465,21 @@ class HybridIntelligenceEngine:
 
         if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:
             is_poaching = False
+
         if strict_mode and not_wildlife_prob >= 0.62 and evidence_strength < 0.75 and poach_prob < 0.70:
             is_poaching = False
 
+
+        # ---------- Hard Veto Gate ----------
+        # Reject articles immediately if the title or text matches any of our hard veto noise patterns.
+        for pattern in HARD_VETO_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE) or re.search(pattern, title or "", re.IGNORECASE):
+                is_poaching = False
+                confidence = 0.0
+                break
+
         # ---------- Content-Understanding Gate ----------
+
         # Reject articles that are about non-crime wildlife topics (tourism,
         # conservation success, zoo news, etc.) unless strong operational evidence.
         noncrime_penalty = self._content_relevance_penalty(text, title=title)
