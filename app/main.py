@@ -2118,8 +2118,9 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
     - Retrains the predictor model
     """
     db_path = _database_file_path()
-    if db_path is None:
-        raise HTTPException(status_code=400, detail="DB restore is only supported for SQLite databases.")
+    is_postgres = settings.database_url.startswith("postgresql") or settings.database_url.startswith("postgres")
+    if db_path is None and not is_postgres:
+        raise HTTPException(status_code=400, detail="DB restore is only supported for SQLite and PostgreSQL databases.")
 
     # Read uploaded file
     content = await file.read()
@@ -2130,35 +2131,100 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
     if not content[:16].startswith(b"SQLite format 3"):
         raise HTTPException(status_code=400, detail="Invalid file: not a valid SQLite database. Download the DB using the 'Download DB' button first.")
 
-    # Backup current DB if it exists
     backup_path = None
-    if db_path.exists():
-        import shutil
-        backup_path = db_path.with_suffix(f".backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db")
+    if is_postgres:
+        # Write to a temporary file
+        temp_dir = Path("./data/temp")
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_db_path = temp_dir / f"uploaded_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db"
+        temp_db_path.write_bytes(content)
+
         try:
-            shutil.copy2(db_path, backup_path)
-            app_logger.info("Current DB backed up to %s", backup_path)
+            from sqlalchemy import MetaData, Table, insert, delete, create_engine
+            from app.core.database import engine as pg_engine
+            
+            sqlite_engine = create_engine(f"sqlite:///{temp_db_path}")
+            sqlite_meta = MetaData()
+            sqlite_meta.reflect(bind=sqlite_engine)
+            
+            pg_meta = MetaData()
+            pg_meta.reflect(bind=pg_engine)
+            
+            # Deletion and insertion orders to prevent foreign key errors
+            table_delete_order = ["entities", "reports", "alerts", "news_items", "watchlists", "external_signals", "sync_logs", "sources", "districts", "species_stats", "audit_logs"]
+            table_insert_order = ["news_items", "entities", "reports", "alerts", "watchlists", "external_signals", "sync_logs", "sources", "districts", "species_stats", "audit_logs"]
+            
+            existing_sqlite_tables = sqlite_meta.tables.keys()
+            
+            with pg_engine.begin() as pg_conn:
+                # Clean up existing tables
+                for t_name in table_delete_order:
+                    if t_name in pg_meta.tables:
+                        pg_conn.execute(delete(pg_meta.tables[t_name]))
+                
+                # Copy records
+                for t_name in table_insert_order:
+                    if t_name in existing_sqlite_tables and t_name in pg_meta.tables:
+                        sqlite_table = sqlite_meta.tables[t_name]
+                        pg_table = pg_meta.tables[t_name]
+                        pg_columns = {col.name for col in pg_table.columns}
+                        
+                        with sqlite_engine.connect() as sqlite_conn:
+                            rows = sqlite_conn.execute(select(sqlite_table)).mappings().all()
+                            if not rows:
+                                continue
+                            
+                            safe_rows = [
+                                {key: value for key, value in row.items() if key in pg_columns}
+                                for row in rows
+                            ]
+                            
+                            # Insert chunked (500 records max per query)
+                            for i in range(0, len(safe_rows), 500):
+                                chunk = safe_rows[i:i+500]
+                                pg_conn.execute(insert(pg_table), chunk)
+                                
+            app_logger.info("PostgreSQL database successfully restored from uploaded SQLite file: %d bytes", len(content))
         except Exception as err:
-            app_logger.warning("Failed to backup current DB: %s", err)
-
-    # Write the uploaded DB
-    try:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        db_path.write_bytes(content)
-        app_logger.info("Database restored from upload: %d bytes", len(content))
-    except Exception as err:
-        # Restore backup if write failed
-        if backup_path and backup_path.exists():
+            app_logger.error("Failed to restore PostgreSQL database from uploaded SQLite file: %s", err)
+            raise HTTPException(status_code=500, detail=f"Failed to restore database to PostgreSQL: {err}")
+        finally:
+            if temp_db_path.exists():
+                try:
+                    temp_db_path.unlink()
+                except Exception:
+                    pass
+    else:
+        # Backup current SQLite DB if it exists
+        if db_path and db_path.exists():
             import shutil
-            shutil.copy2(backup_path, db_path)
-        raise HTTPException(status_code=500, detail=f"Failed to write database: {err}")
+            backup_path = db_path.with_suffix(f".backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db")
+            try:
+                shutil.copy2(db_path, backup_path)
+                app_logger.info("Current DB backed up to %s", backup_path)
+            except Exception as err:
+                app_logger.warning("Failed to backup current DB: %s", err)
 
-    # Run schema migrations on the restored DB
-    try:
-        init_database()
-        app_logger.info("Schema migrations applied to restored database")
-    except Exception as err:
-        app_logger.warning("Schema migration on restored DB failed (may be fine if schema matches): %s", err)
+        # Write the uploaded DB
+        try:
+            if db_path:
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                db_path.write_bytes(content)
+                app_logger.info("Database restored from upload: %d bytes", len(content))
+        except Exception as err:
+            # Restore backup if write failed
+            if db_path and backup_path and backup_path.exists():
+                import shutil
+                shutil.copy2(backup_path, db_path)
+            raise HTTPException(status_code=500, detail=f"Failed to write database: {err}")
+
+        # Run schema migrations on the restored DB
+        try:
+            init_database()
+            app_logger.info("Schema migrations applied to restored database")
+        except Exception as err:
+            app_logger.warning("Schema migration on restored DB failed (may be fine if schema matches): %s", err)
+
 
     # Retrain predictor on restored data
     retrained = False
