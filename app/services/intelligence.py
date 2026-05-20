@@ -285,6 +285,44 @@ HARD_VETO_PATTERNS = [
     r"\beco\s*tourism\b",
 ]
 
+GENERALITY_NON_INCIDENT_PATTERNS = [
+    # Opinion / Editorial / Generic How-To
+    r"^(?:opinion|editorial|commentary|perspective|insight|viewpoint|analysis|review|why)\b",
+    r"\b(?:time to fix|we need to|how to tackle|combatting wildlife|battling poaching|fight against|tackling poaching|cracking down on|protecting the|saving the|conservation of|challenges in|future of|importance of|role of|impact of|threat to|status of|rise in|decline in|history of|overview of)\b",
+    # General Policy / Future plans / Governance
+    r"\b(?:deploy|to deploy|will deploy|install|to install|will install|introduce|to introduce|will introduce|launch|to launch|will launch|approve|to approve|will approve|plan to|plans to|planning to|propose to|proposes to|proposed to|announced?|announces?|announcing|unveils?|unveiling|budget|policy|guidelines?|standard operating procedure|sop|mou|signed?|signing|agreements?|pact|treaty|framework|initiative|campaign|project|scheme|program)\b",
+    # Statistical / Annual report aggregates / mortality lists
+    r"\b(?:deaths?|mortality|died|carcass(?:es)?)\b.*?\b(?:since \d{4}|in \d+ months?|in a year|in last \d+|over \d+ years?|total of \d+|\d+ unresolved|stronghold reports \d+|annual|statistics|data|report says|study reveals|finds|estimates?|researchers?|scientists?|biologists?|ecology|environmentalists?)\b",
+    # E-commerce / generic social media reports
+    r"\b(?:facebook|ecommerce|e-commerce|websites?|online platform|platforms|social media|internet|web|hub for|report says|undercover|investigation reveals|investigation shows|investigative report|traffic report)\b.*?\b(?:illegal trade|smuggling|trafficking|poaching)\b",
+    # Profiles / Journalism human interest
+    r"\b(?:how [A-Za-z]+ [A-Za-z]+ tells|profile of|story of|life of|work of|journey of|efforts of|dedication of|activists?|pioneers?|heroes|hero|champion|veteran|expert|scholar|professor|doctor|scientist)\b"
+]
+
+CONCRETE_OPERATIONAL_TRIGGERS = [
+    r"\barrested with\b",
+    r"\bseized from\b",
+    r"\bheld with\b",
+    r"\bnabbed while\b",
+    r"\bcaught with\b",
+    r"\bbooked for\b",
+    r"\barrested for\b",
+    r"\bseized in\b",
+    r"\brecovered from\b",
+    r"\bconvicted to\b",
+    r"\bsentenced to\b",
+    r"\bthree years jail\b",
+    r"\bfive years imprisonment\b",
+    r"\barrested red-handed\b",
+    r"\bpoacher arrested\b",
+    r"\bpoachers arrested\b",
+    r"\baccused arrested\b",
+    r"\bsmuggler arrested\b",
+    r"\bsmugglers arrested\b",
+    r"\bconvicted in\b"
+]
+
+
 
 UNKNOWN_TERMS = {
     "unknown",
@@ -2478,6 +2516,26 @@ class HybridIntelligenceEngine:
                 confidence = 0.0
                 break
 
+        # ---------- Generality Non-Incident Veto Gate ----------
+        # Purge general editorials, policy announcements, statistical reports, and profiles
+        # unless there is a highly specific, concrete live operational event trigger present.
+        if is_poaching:
+            is_general = False
+            for pattern in GENERALITY_NON_INCIDENT_PATTERNS:
+                if re.search(pattern, text, re.IGNORECASE) or re.search(pattern, title or "", re.IGNORECASE):
+                    is_general = True
+                    break
+            if is_general:
+                has_concrete_trigger = False
+                for trig in CONCRETE_OPERATIONAL_TRIGGERS:
+                    if re.search(trig, text, re.IGNORECASE) or re.search(trig, title or "", re.IGNORECASE):
+                        has_concrete_trigger = True
+                        break
+                if not has_concrete_trigger:
+                    is_poaching = False
+                    confidence = 0.0
+
+
         # ---------- Content-Understanding Gate ----------
 
         # Reject articles that are about non-crime wildlife topics (tourism,
@@ -2691,6 +2749,31 @@ class HybridIntelligenceEngine:
         if settings.india_only and not is_india:
             is_poaching = False
             confidence = max(0.0, confidence * 0.5)
+
+        # ---------- Hard Veto Gate (Final Enforcement) ----------
+        for pattern in HARD_VETO_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE) or re.search(pattern, title or "", re.IGNORECASE):
+                is_poaching = False
+                confidence = 0.0
+                break
+
+        # ---------- Generality Non-Incident Veto Gate (Final Enforcement) ----------
+        if is_poaching:
+            is_general = False
+            for pattern in GENERALITY_NON_INCIDENT_PATTERNS:
+                if re.search(pattern, text, re.IGNORECASE) or re.search(pattern, title or "", re.IGNORECASE):
+                    is_general = True
+                    break
+            if is_general:
+                has_concrete_trigger = False
+                for trig in CONCRETE_OPERATIONAL_TRIGGERS:
+                    if re.search(trig, text, re.IGNORECASE) or re.search(trig, title or "", re.IGNORECASE):
+                        has_concrete_trigger = True
+                        break
+                if not has_concrete_trigger:
+                    is_poaching = False
+                    confidence = 0.0
+
 
         risk_score = self._compute_risk(
             confidence=confidence,
