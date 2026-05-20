@@ -2225,8 +2225,24 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
         except Exception as err:
             app_logger.warning("Schema migration on restored DB failed (may be fine if schema matches): %s", err)
 
+    # Dispose SQLAlchemy engine connections to force opening fresh handlers
+    try:
+        from app.core.database import engine
+        engine.dispose()
+        app_logger.info("SQLAlchemy connection pool successfully disposed for new database handler")
+    except Exception as err:
+        app_logger.warning("Failed to dispose engine connection pool: %s", err)
+
+
+    # Clear in-memory caches
+    try:
+        _clear_runtime_cache()
+        app_logger.info("In-memory API cache cleared for restored database")
+    except Exception as err:
+        app_logger.warning("Failed to clear in-memory cache: %s", err)
 
     # Retrain predictor on restored data
+
     retrained = False
     try:
         with SessionLocal() as pred_db:
