@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,6 +18,7 @@ class NewsItem(Base):
         Index("ix_news_items_crime_type", "crime_type"),
         Index("ix_news_items_url_hash", "url_hash"),
         Index("ix_news_items_duplicate_confidence", "duplicate_confidence"),
+        Index("ix_news_items_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -53,8 +54,8 @@ class NewsItem(Base):
     report_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     merged_sources: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Vector embedding for semantic search (pgvector on Postgres, Text/JSON on SQLite)
     embedding: Mapped[str | None] = mapped_column(Text, nullable=True)

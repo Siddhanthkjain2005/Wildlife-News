@@ -506,6 +506,10 @@ SOURCE_CREDIBILITY: dict[str, float] = {
     "pti": 0.92, "ani": 0.90, "reuters": 0.92, "afp": 0.92,
     "latestly": 0.60, "newsmeter": 0.62, "dt next": 0.65,
     "india today": 0.85, "outlook": 0.78, "business standard": 0.75,
+    "pib.gov.in": 0.97, "moef.gov.in": 0.97, "wii.gov.in": 0.96,
+    "ntca.gov.in": 0.96, "traffic.org": 0.93,
+    "jagran": 0.82, "amarujala": 0.82, "livehindustan": 0.80,
+    "zeenews": 0.80, "abplive": 0.79, "freepressjournal": 0.79,
 }
 _SOURCE_DEFAULT = 0.70
 
@@ -1899,6 +1903,16 @@ class HybridIntelligenceEngine:
             rule_score += 0.25
         rule_score = min(1.0, rule_score)
         india_score = min(1.0, 0.65 * india_prob + 0.35 * rule_score)
+
+        # Hard override: if an Indian state or district was positively identified,
+        # the article IS about India — a state name is definitive evidence.
+        # The multi-label classifier often gives high scores to BOTH "incident in India"
+        # and "incident outside India" simultaneously, making the outside_prob comparison
+        # unreliable. A matched Indian state name overrides the classifier.
+        if state and district:
+            return True, max(india_score, 0.75)
+        if state:
+            return True, max(india_score, 0.60)
         
         lower_text = text.lower()
         # International Veto: If specific international hubs are mentioned without strong India context
@@ -1914,7 +1928,7 @@ class HybridIntelligenceEngine:
                 if not any(s.lower() in lower_text for s in INDIA_STATES):
                     return False, 0.0
             
-            india_score -= 0.30 
+            india_score -= 0.15 if (state or district) else 0.30
 
         is_india = india_score >= settings.india_threshold and india_score >= (outside_prob - 0.05)
         return is_india, india_score
@@ -2233,7 +2247,7 @@ class HybridIntelligenceEngine:
                 and not_wildlife_prob < 0.65
                 and strong_rule_signal
                 and poach_prob >= 0.45
-                and evidence_strength >= 0.55
+                and evidence_strength >= 0.45
                 and keyword_hits >= 3
                 and (
                     unknown_ratio <= 0.80
@@ -2562,7 +2576,7 @@ class HybridIntelligenceEngine:
         crime_type = zs_crime if score_map.get("not wildlife crime", 0.0) < 0.75 else "unknown"
         if crime_type == "unknown":
             crime_type = rule_crime_type
-        if crime_type == "unknown" and (poach_prob >= 0.45 or keyword_hits >= 3):
+        if crime_type == "unknown" and (poach_prob >= 0.45 or keyword_hits >= 3) and species:
             crime_type = "poaching"
 
         outside_prob = score_map.get("incident outside India", 0.0)
@@ -2684,8 +2698,8 @@ class HybridIntelligenceEngine:
         has_crime_indicator = (
             has_operational_signal
             or any(term in text for term in POACHING_SPECIFIC_SIGNALS)
-            or rule_score >= 0.35
-            or keyword_hits >= 4
+            or rule_score >= 0.30
+            or keyword_hits >= 3
         )
         if is_poaching and not has_crime_indicator:
             is_poaching = False
@@ -2874,7 +2888,7 @@ class HybridIntelligenceEngine:
         has_crime_indicator = (
             has_operational_signal
             or any(term in text for term in POACHING_SPECIFIC_SIGNALS)
-            or rule_score >= 0.25
+            or rule_score >= 0.30
             or keyword_hits >= 3
         )
         if is_poaching and not has_crime_indicator:

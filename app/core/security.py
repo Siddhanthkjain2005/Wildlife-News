@@ -181,8 +181,19 @@ def _jwt_secret() -> str:
     if value:
         return value
     # Backward-compatible fallback when explicit JWT secret is not configured.
-    fallback = (settings.admin_token or settings.admin_password_hash or settings.admin_password or "wildlife-default-secret").strip()
-    return fallback
+    fallback = (settings.admin_token or settings.admin_password_hash or settings.admin_password or "").strip()
+    if fallback:
+        return fallback
+    # Auto-generate a per-process random secret when nothing is configured.
+    # Sessions will NOT persist across restarts — set JWT_SECRET in .env for production.
+    if not hasattr(_jwt_secret, "_auto_secret"):
+        _jwt_secret._auto_secret = secrets.token_urlsafe(48)
+        import logging
+        logging.getLogger("app.security").warning(
+            "No JWT_SECRET configured. Using auto-generated secret. "
+            "Sessions will not persist across restarts. Set JWT_SECRET in production."
+        )
+    return _jwt_secret._auto_secret
 
 
 def _token_expiry(minutes: int | None = None, days: int | None = None) -> datetime:
