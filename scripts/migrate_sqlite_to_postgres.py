@@ -7,7 +7,10 @@ from sqlalchemy import MetaData, Table, create_engine, insert, select, text
 
 SQLITE_URL = os.getenv("SQLITE_DATABASE_URL", "sqlite:///./data/news.db")
 POSTGRES_URL = os.getenv("POSTGRES_DATABASE_URL", "")
+if POSTGRES_URL.startswith("postgres://"):
+    POSTGRES_URL = POSTGRES_URL.replace("postgres://", "postgresql://", 1)
 CHUNK_SIZE = int(os.getenv("MIGRATION_CHUNK_SIZE", "500"))
+
 
 
 def _chunked(rows: Iterable[dict[str, object]], size: int) -> Iterable[list[dict[str, object]]]:
