@@ -21,8 +21,21 @@ def _main():
 @router.get("/health")
 def health(db: Session = Depends(get_db)):
     m = _main()
-    db_diag = diagnose_database()
-    total_rows = db.scalar(m._apply_today_news_scope(select(func.count()).select_from(NewsItem))) or 0
+    
+    # Gracefully handle database diagnosis failures (e.g. malformed sqlite disk images)
+    try:
+        db_diag = diagnose_database()
+    except Exception as err:
+        db_diag = {"ok": False, "error": str(err)}
+
+    # Gracefully handle NewsItem count query failures
+    try:
+        total_rows = db.scalar(m._apply_today_news_scope(select(func.count()).select_from(NewsItem))) or 0
+    except Exception as err:
+        total_rows = -1
+        db_diag["ok"] = False
+        db_diag["error"] = db_diag.get("error") or f"Query error: {err}"
+
     snapshot = m._sync_snapshot()
     started_at = m.runtime_diagnostics.get("startup_time")
     uptime_seconds = 0.0
@@ -31,14 +44,20 @@ def health(db: Session = Depends(get_db)):
             uptime_seconds = max(0.0, (datetime.now(tz=timezone.utc) - datetime.fromisoformat(started_at)).total_seconds())
         except ValueError:
             uptime_seconds = 0.0
-    pending_alerts = int(
-        db.scalar(
-            select(func.count())
-            .select_from(Alert)
-            .where((Alert.sent_popup.is_(False)) | (Alert.sent_email.is_(False)) | (Alert.sent_telegram.is_(False)))
+
+    # Gracefully handle Alert count query failures
+    try:
+        pending_alerts = int(
+            db.scalar(
+                select(func.count())
+                .select_from(Alert)
+                .where((Alert.sent_popup.is_(False)) | (Alert.sent_email.is_(False)) | (Alert.sent_telegram.is_(False)))
+            )
+            or 0
         )
-        or 0
-    )
+    except Exception:
+        pending_alerts = -1
+
     return {
         "status": "ok" if db_diag.get("ok") else "degraded",
         "db": db_diag,
@@ -66,3 +85,4 @@ def health(db: Session = Depends(get_db)):
         "total_news_rows": int(total_rows),
         "predictor": m.wildlife_predictor.model_info,
     }
+
