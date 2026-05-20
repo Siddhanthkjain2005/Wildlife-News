@@ -1964,7 +1964,7 @@ class HybridIntelligenceEngine:
         operational_details: dict[str, object],
         unknown_profile: dict[str, object],
     ) -> int:
-        score = (confidence * 52) + (poach_prob * 20)
+        score = (confidence * 55) + (poach_prob * 22)
         crime_bonus = {
             "rhino_horn_trafficking": 15,
             "tiger_skin_seizure": 14,
@@ -1982,23 +1982,31 @@ class HybridIntelligenceEngine:
         }
         score += crime_bonus.get(crime_type, 0)
 
+        # Boost confirmed live operational events (arrests/seizures) for Gov of India tracking
+        has_arrest = bool(operational_details.get("arrest_present"))
+        has_seizure = bool(operational_details.get("seizure_present"))
+        if has_arrest or has_seizure:
+            # Operational events are extremely critical, boost their base score contribution
+            score = max(score, 68)
+            score += 15 if (has_arrest and has_seizure) else 10
+
         # Endangered species bonus — higher for CITES Appendix I species
         critical_species = {"tiger", "rhino", "elephant", "snow leopard", "pangolin", "red panda"}
         high_species = {"leopard", "bear", "lion", "wolf", "red sanders", "star tortoise", "gharial"}
         if any(sp in critical_species for sp in species):
-            score += 12
+            score += 18
         elif any(sp in high_species for sp in species):
-            score += 8
+            score += 12
         elif species:
-            score += 4
+            score += 6
 
         if network_indicator:
             score += 10
         if repeat_indicator:
             score += 7
-        if operational_details.get("seizure_present"):
+        if has_seizure:
             score += 6
-        if operational_details.get("arrest_present"):
+        if has_arrest:
             score += 4
         if operational_details.get("cross_border"):
             score += 7
@@ -2020,17 +2028,22 @@ class HybridIntelligenceEngine:
             score += 3
         elif person_hits >= 1:
             score += 1
+
+        # Missing metadata penalties (mitigated if there is a verified arrest/seizure)
+        penalty_scale = 0.25 if (has_arrest or has_seizure) else 1.0
+        
         unknown_ratio = float(unknown_profile.get("unknown_ratio") or 0.0)
         if unknown_ratio:
-            score -= min(16, unknown_ratio * 14)
-        if unknown_profile.get("species_unknown") and not operational_details.get("seizure_present"):
-            score -= 4
+            score -= min(16, unknown_ratio * 14) * penalty_scale
+        if unknown_profile.get("species_unknown") and not has_seizure:
+            score -= 4 * penalty_scale
         if unknown_profile.get("location_unknown") and not network_indicator:
-            score -= 3
+            score -= 3 * penalty_scale
         if unknown_profile.get("persons_unknown") and person_hits == 0:
-            score -= 2
-        if not species and person_hits == 0 and not operational_details.get("seizure_present"):
-            score -= 6
+            score -= 2 * penalty_scale
+        if not species and person_hits == 0 and not has_seizure:
+            score -= 6 * penalty_scale
+
         return max(0, min(100, int(round(score))))
 
     @staticmethod
