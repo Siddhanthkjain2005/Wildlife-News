@@ -1964,7 +1964,10 @@ class HybridIntelligenceEngine:
         operational_details: dict[str, object],
         unknown_profile: dict[str, object],
     ) -> int:
-        score = (confidence * 55) + (poach_prob * 22)
+        # Base confidence contribution (max ~65)
+        score = (confidence * 45) + (poach_prob * 20)
+        
+        # Crime type severity bonus
         crime_bonus = {
             "rhino_horn_trafficking": 15,
             "tiger_skin_seizure": 14,
@@ -1973,43 +1976,43 @@ class HybridIntelligenceEngine:
             "snake_venom_trade": 11,
             "illegal_wildlife_trade": 10,
             "forest_hunting_gang": 10,
-            "smuggling": 9,
-            "poaching": 8,
-            "exotic_bird_trafficking": 7,
-            "habitat_destruction": 7,
-            "animal_cruelty": 6,
-            "illegal_fishing": 5,
+            "smuggling": 8,
+            "poaching": 6,
+            "exotic_bird_trafficking": 6,
+            "habitat_destruction": 5,
+            "animal_cruelty": 4,
+            "illegal_fishing": 3,
         }
         score += crime_bonus.get(crime_type, 0)
 
-        # Boost confirmed live operational events (arrests/seizures) for Gov of India tracking
-        has_arrest = bool(operational_details.get("arrest_present"))
-        has_seizure = bool(operational_details.get("seizure_present"))
-        if has_arrest or has_seizure:
-            # Operational events are extremely critical, boost their base score contribution
-            score = max(score, 68)
-            score += 15 if (has_arrest and has_seizure) else 10
-
-        # Endangered species bonus — higher for CITES Appendix I species
+        # Species severity bonus
         critical_species = {"tiger", "rhino", "elephant", "snow leopard", "pangolin", "red panda"}
         high_species = {"leopard", "bear", "lion", "wolf", "red sanders", "star tortoise", "gharial"}
         if any(sp in critical_species for sp in species):
-            score += 18
+            score += 15
         elif any(sp in high_species for sp in species):
-            score += 12
+            score += 10
         elif species:
+            score += 4
+
+        # Network and repeat indicators
+        if network_indicator:
+            score += 12
+        if repeat_indicator:
             score += 6
 
-        if network_indicator:
+        # Operational details
+        has_arrest = bool(operational_details.get("arrest_present"))
+        has_seizure = bool(operational_details.get("seizure_present"))
+        if has_arrest and has_seizure:
             score += 10
-        if repeat_indicator:
-            score += 7
-        if has_seizure:
+        elif has_seizure:
             score += 6
-        if has_arrest:
+        elif has_arrest:
             score += 4
+
         if operational_details.get("cross_border"):
-            score += 7
+            score += 8
         if operational_details.get("weapon_signal"):
             score += 5
         if operational_details.get("poaching_material_hits"):
@@ -2030,11 +2033,11 @@ class HybridIntelligenceEngine:
             score += 1
 
         # Missing metadata penalties (mitigated if there is a verified arrest/seizure)
-        penalty_scale = 0.25 if (has_arrest or has_seizure) else 1.0
+        penalty_scale = 0.50 if (has_arrest or has_seizure) else 1.0
         
         unknown_ratio = float(unknown_profile.get("unknown_ratio") or 0.0)
         if unknown_ratio:
-            score -= min(16, unknown_ratio * 14) * penalty_scale
+            score -= min(14, unknown_ratio * 12) * penalty_scale
         if unknown_profile.get("species_unknown") and not has_seizure:
             score -= 4 * penalty_scale
         if unknown_profile.get("location_unknown") and not network_indicator:
