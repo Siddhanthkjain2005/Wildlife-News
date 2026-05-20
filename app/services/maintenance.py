@@ -122,21 +122,19 @@ def start_deep_maintenance_job(*, trigger: str = "manual", on_complete=None) -> 
 
 
 def _delete_incident_with_dependents(db: Session, news_id: int) -> None:
+    for model in [Report, Alert, Entity]:
+        try:
+            with db.begin_nested():
+                db.execute(delete(model).where(model.news_id == news_id))
+        except Exception:
+            pass
     try:
-        db.execute(delete(Report).where(Report.news_id == news_id))
+        with db.begin_nested():
+            row = db.query(NewsItem).filter(NewsItem.id == news_id).first()
+            if row is not None:
+                db.delete(row)
     except Exception:
         pass
-    try:
-        db.execute(delete(Alert).where(Alert.news_id == news_id))
-    except Exception:
-        pass
-    try:
-        db.execute(delete(Entity).where(Entity.news_id == news_id))
-    except Exception:
-        pass
-    row = db.query(NewsItem).filter(NewsItem.id == news_id).first()
-    if row is not None:
-        db.delete(row)
 
 
 def run_deep_maintenance(db: Session):
