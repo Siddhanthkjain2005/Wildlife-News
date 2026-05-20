@@ -29,26 +29,39 @@ def get_system_health(db: Session) -> dict[str, object]:
     disk_usage_percent = round((used / total) * 100, 1)
     
     # 3. Data Totals
-    total_incidents = int(db.scalar(select(func.count()).select_from(NewsItem)) or 0)
-    total_alerts = int(db.scalar(select(func.count()).select_from(Alert)) or 0)
+    try:
+        total_incidents = int(db.scalar(select(func.count()).select_from(NewsItem)) or 0)
+    except Exception:
+        total_incidents = -1
+        
+    try:
+        total_alerts = int(db.scalar(select(func.count()).select_from(Alert)) or 0)
+    except Exception:
+        total_alerts = -1
     
     # 4. Recent Errors
-    recent_errors = int(db.scalar(
-        select(func.count()).select_from(AuditLog).where(AuditLog.status == "error").where(AuditLog.timestamp >= datetime.utcnow().replace(hour=0, minute=0, second=0))
-    ) or 0)
+    try:
+        recent_errors = int(db.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.status == "error").where(AuditLog.timestamp >= datetime.utcnow().replace(hour=0, minute=0, second=0))
+        ) or 0)
+    except Exception:
+        recent_errors = -1
     
     # 5. Last Sync
-    last_sync = db.execute(select(SyncLog).order_by(SyncLog.started_at.desc()).limit(1)).scalar_one_or_none()
-    last_sync_time = last_sync.ended_at.isoformat() if last_sync else "never"
-    last_sync_status = "ok" if (last_sync and last_sync.failed == 0) else ("error" if last_sync else "unknown")
+    try:
+        last_sync = db.execute(select(SyncLog).order_by(SyncLog.started_at.desc()).limit(1)).scalar_one_or_none()
+        last_sync_time = last_sync.ended_at.isoformat() if last_sync else "never"
+        last_sync_status = "ok" if (last_sync and last_sync.failed == 0) else ("error" if last_sync else "unknown")
+    except Exception:
+        last_sync_time = "error"
+        last_sync_status = "error"
     
     # 6. AI Model Status
-    # We'll need to check this from the main app instance if possible, 
-    # but for now we'll check if the model directory exists
     model_exists = Path(settings.setfit_model_path).exists() if settings.setfit_enabled else True
 
+    db_healthy = db_exists and total_incidents >= 0 and total_alerts >= 0
     return {
-        "status": "healthy" if (db_exists and disk_free_gb > 0.5 and recent_errors < 10) else "warning",
+        "status": "healthy" if (db_healthy and disk_free_gb > 0.5 and recent_errors < 10) else "warning",
         "timestamp": datetime.utcnow().isoformat(),
         "database": {
             "exists": db_exists,
@@ -76,3 +89,4 @@ def get_system_health(db: Session) -> dict[str, object]:
             "email": bool(settings.email_alerts_enabled and (settings.smtp_host or settings.sendgrid_api_key or settings.resend_api_key)),
         }
     }
+
