@@ -84,11 +84,11 @@ CRIME_TYPES: dict[str, set[str]] = {
         "ହାତୀଦାନ୍ତ",
         "હાથીદાંત",
     },
-    "tiger_skin_seizure": {"tiger skin", "tiger hide", "tiger pelt"},
-    "rhino_horn_trafficking": {"rhino horn", "rhinoceros horn"},
-    "exotic_bird_trafficking": {"exotic bird", "parrot trafficking", "macaw", "cockatoo", "parakeet smuggling"},
-    "illegal_fishing": {"illegal fishing", "blast fishing", "dynamite fishing", "trawler"},
-    "forest_hunting_gang": {"hunting gang", "poaching gang", "racket", "syndicate", "cartel", "network"},
+    "tiger_skin_seizure": {"tiger skin", "tiger hide", "tiger pelt", "बाघ की खाल", "ಹುಲಿ ಚರ್ಮ", "புலி தோல்", "పులి చర్మం", "বাঘের চামড়া"},
+    "rhino_horn_trafficking": {"rhino horn", "rhinoceros horn", "गैंडे का सींग", "ಖಡ್ಗಮೃಗ ಕೊಂಬು", "காண்டாமிருகக் கொம்பு", "ఖడ్గమృగం కొమ్ము", "গণ্ডারের শিং"},
+    "exotic_bird_trafficking": {"exotic bird", "parrot trafficking", "macaw", "cockatoo", "parakeet smuggling", "विदेशी पक्षी तस्करी", "तोता तस्करी"},
+    "illegal_fishing": {"illegal fishing", "blast fishing", "dynamite fishing", "trawler", "अवैध मछली पकड़ना", "अवैध मत्स्य"},
+    "forest_hunting_gang": {"hunting gang", "poaching gang", "racket", "syndicate", "cartel", "network", "शिकार गिरोह", "तस्कर गिरोह", "ವೇಟೆ ಗ್ಯಾಂಗ್", "வேட்டை கும்பல்"},
     "habitat_destruction": {
         "deforestation", "illegal logging", "encroachment", "forest fire arson",
         "habitat destruction", "illegal mining forest", "land grab forest",
@@ -108,7 +108,7 @@ SPECIES_KEYWORDS: dict[str, set[str]] = {
     "leopard": {"leopard", "panther", "leopardess", "तेंदुआ", "चीता", "ಚಿರತೆ", "சிறுத்தை", "చిరుత"},
     "elephant": {"elephant", "tusk", "ivory", "हाथी", "ಆನೆ", "யானை", "ఏనుగు", "হাতি", "হাতী", "ہاتھی", "ହାତୀ", "હાથી"},
     "rhino": {"rhino", "rhinoceros", "गैंडा", "ಖಡ್ಗಮೃಗ", "காண்டாமிருகம்", "ఖడ్గమృగం", "গণ্ডার", "گینڈا", "ଗଣ୍ଡମୃଗ", "ગેંડો"},
-    "pangolin": {"pangolin", "scales", "पैंगोलिन", "ಪ್ಯಾಂಗೋಲಿನ್", "பாங்கோலின்", "ప్యాంగోలిన్", "প্যাঙ্গোলিন", "پینگولن", "ପ୍ୟାଙ୍ଗୋଲିନ", "પેંગોલિન"},
+    "pangolin": {"pangolin", "scales", "पैंगोलिन", "चिंटीखोर", "ಪ್ಯಾಂಗೋಲಿನ್", "பாங்கோலின்", "ప్యాంగోలిన్", "প্যাঙ্গোলিন", "پینگولن", "ପ୍ୟାଙ୍ଗୋଲିନ", "પેંગોલિન"},
     "bear": {"bear", "sloth bear", "himalayan bear", "bear bile", "भालू", "ಕರಡಿ", "கரடி", "ఎలుగుబంటి"},
     "deer": {"deer", "sambar", "chital", "antler", "spotted deer", "barking deer", "musk deer", "hog deer", "हिरण", "ಜಿಂಕೆ", "மான்", "జింక"},
     "bird": {"parrot", "owl", "eagle", "hornbill", "falcon", "macaw", "cockatoo", "bird", "parakeet", "myna", "peacock", "emu", "ostrich", "turkey"},
@@ -121,7 +121,6 @@ SPECIES_KEYWORDS: dict[str, set[str]] = {
     "wild boar": {"wild boar", "boar", "जंगली सूअर"},
     "red sanders": {"red sanders", "red sandalwood", "red sander", "रक्तचंदन", "ఎర్রచందనం", "செம்மரம்"},
     "sandalwood": {"sandalwood", "sandal wood", "चंदन", "श्रीगंध", "சந்தனம்"},
-    "pangolin": {"pangolin", "scales", "पैंगोलिन", "चिंटीखोर", "ప్యాంగోలిన్", "பாங்கோலின்"},
 }
 
 FALSE_POSITIVE_PATTERNS = [
@@ -198,33 +197,67 @@ NETWORK_PATTERNS = [
     r"\binterstate\b",
     r"\bcross[- ]?border\b",
     r"\borganized\b",
+    # Hindi
+    r"गिरोह", r"तस्कर गिरोह", r"रैकेट", r"सिंडिकेट", r"गैंग", r"नेटवर्क", r"अंतरराज्यीय",
+    # Kannada
+    r"ಗ್ಯಾಂಗ್", r"ಜಾಲ",
+    # Tamil
+    r"கும்பல்", r"வலையமைப்பு",
+    # Telugu
+    r"ముఠా",
+    # Bengali
+    r"চক্র", r"চোরাচালান চক্র",
+    # Marathi
+    r"टोळी",
 ]
 
 ARTICLE_SIGNAL_TERMS = {
-    "seized",
-    "seizure",
-    "arrested",
-    "arrest",
-    "poacher",
-    "held",
-    "nabbed",
-    "booked",
-    "recovered",
-    "raid",
-    "detained",
-    "convicted",
-    "suspect",
-    "absconding",
-    "wanted",
-    "accused",
-    "smuggling",
-    "trafficking",
-    "wildlife crime",
+    # English
+    "seized", "seizure", "arrested", "arrest", "poacher", "held", "nabbed",
+    "booked", "recovered", "raid", "detained", "convicted", "suspect",
+    "absconding", "wanted", "accused", "smuggling", "trafficking", "wildlife crime",
+    # Hindi
+    "गिरफ्तार", "गिरफ़्तार", "जब्त", "बरामद", "शिकारी", "तस्कर", "छापा", "हिरासत",
+    "आरोपी", "फरार", "दोषी", "तस्करी", "अवैध", "वन्यजीव अपराध",
+    # Kannada
+    "ಬಂಧನ", "ಜಪ್ತಿ", "ಕಳ್ಳಬೇಟೆಗಾರ", "ಆರೋಪಿ",
+    # Tamil
+    "கைது", "பறிமுதல்", "வேட்டைக்காரன்",
+    # Telugu
+    "అరెస్ట్", "స్వాధీనం", "వేటగాడు", "ఆరోపి",
+    # Bengali
+    "গ্রেপ্তার", "গ্রেফতার", "জব্দ", "শিকারি", "অভিযুক্ত",
+    # Marathi
+    "अटक", "जप्त",
+    # Malayalam
+    "അറസ്റ്റ്", "പിടിച്ചെടുത്തു",
+    # Gujarati
+    "ધરપકડ", "જપ્ત",
+    # Urdu
+    "گرفتار", "ضبط",
+    # Odia
+    "ଗିରଫ", "ଜବତ",
+    # Punjabi
+    "ਗ੍ਰਿਫ਼ਤਾਰ", "ਜ਼ਬਤ",
 }
 
 POACHING_SPECIFIC_SIGNALS = {
+    # English
     "pangolin scales", "ivory", "tusk", "tiger skin", "rhino horn", "red sanders",
     "leopard skin", "tortoise", "star tortoise", "sand boa", "venom", "meat", "carcass",
+    "animal hide", "antler", "musk", "bear bile", "shahtoosh", "deer antler",
+    # Hindi
+    "हाथी दांत", "हस्तीदंत", "बाघ की खाल", "तेंदुए की खाल", "गैंडे का सींग",
+    "पैंगोलिन शल्क", "रक्तचंदन", "सांप का जहर", "कछुआ", "हिरण का सींग",
+    "जानवर की खाल", "शव",
+    # Kannada
+    "ದಂತ", "ಹುಲಿ ಚರ್ಮ", "ಚಿರತೆ ಚರ್ಮ",
+    # Tamil
+    "தந்தம்", "புலி தோல்", "சிறுத்தை தோல்",
+    # Telugu
+    "దంతం", "పులి చర్మం",
+    # Bengali
+    "হাতির দাঁত", "বাঘের চামড়া",
 }
 
 STOP_COUNTRIES = {
@@ -319,9 +352,100 @@ CONCRETE_OPERATIONAL_TRIGGERS = [
     r"\baccused arrested\b",
     r"\bsmuggler arrested\b",
     r"\bsmugglers arrested\b",
-    r"\bconvicted in\b"
+    r"\bconvicted in\b",
+    # Hindi
+    r"गिरफ़?\s*तार",
+    r"जब्त\s+कि",
+    r"बरामद\s+कि",
+    r"पकड़ा\s+गया",
+    r"हिरासत\s+में",
+    r"छापा\s+मार",
+    r"शिकारी\s+(?:गिरफ्तार|पकड़ा)",
+    r"तस्कर\s+(?:गिरफ्तार|पकड़ा)",
+    # Kannada
+    r"ಬಂಧಿಸ", r"ವಶಪಡಿಸಿ",
+    # Tamil
+    r"கைது\s+செய்", r"பறிமுதல்\s+செய்",
+    # Telugu
+    r"అరెస్ట్\s+చేశ", r"స్వాధీనం\s+చేసు",
+    # Bengali
+    r"গ্রে(?:প|ফ)তার\s+কর", r"জব্দ\s+কর",
+    # Marathi
+    r"अटक\s+केल", r"जप्त\s+केल",
+    # Malayalam
+    r"അറസ്റ്റ്\s+ചെയ്", r"പിടിച്ചെടു",
+    # Gujarati
+    r"ધરપકડ\s+કર", r"જપ્ત\s+કર",
 ]
 
+# Multilingual operational signal terms for arrest/seizure/weapon detection
+SEIZURE_TERMS = [
+    "seized", "seizure", "confiscated", "recovered",
+    # Hindi
+    "जब्त", "बरामद", "कब्जे में", "जप्त",
+    # Kannada
+    "ವಶಪಡಿಸಿ", "ಜಪ್ತಿ", "ವಶ",
+    # Tamil
+    "பறிமுதல்", "கைப்பற்ற",
+    # Telugu
+    "స్వాధీనం", "జప్తు",
+    # Bengali
+    "জব্দ", "বাজেয়াপ্ত", "উদ্ধার",
+    # Marathi
+    "जप्त", "ताब्यात",
+    # Malayalam
+    "പിടിച്ചെടു", "കണ്ടുകെട്ട",
+    # Gujarati
+    "જપ્ત",
+    # Urdu
+    "ضبط", "برآمد",
+    # Odia
+    "ଜବତ",
+    # Punjabi
+    "ਜ਼ਬਤ",
+]
+
+ARREST_TERMS = [
+    "arrested", "detained", "held", "nabbed", "booked",
+    # Hindi
+    "गिरफ्तार", "गिरफ़्तार", "हिरासत", "पकड़ा",
+    # Kannada
+    "ಬಂಧನ", "ಬಂಧಿಸ",
+    # Tamil
+    "கைது",
+    # Telugu
+    "అరెస్ట్", "అదుపులో",
+    # Bengali
+    "গ্রেপ্তার", "গ্রেফতার", "আটক",
+    # Marathi
+    "अटक",
+    # Malayalam
+    "അറസ്റ്റ്",
+    # Gujarati
+    "ધરપકડ",
+    # Urdu
+    "گرفتار",
+    # Odia
+    "ଗିରଫ",
+    # Punjabi
+    "ਗ੍ਰਿਫ਼ਤਾਰ",
+]
+
+WEAPON_TERMS = [
+    "rifle", "gun", "weapon", "snare", "trap", "cartridge",
+    # Hindi
+    "बंदूक", "राइफल", "हथियार", "जाल", "फंदा", "कारतूस",
+    # Kannada
+    "ಬಂದೂಕು", "ಆಯುಧ", "ಬಲೆ",
+    # Tamil
+    "துப்பாக்கி", "ஆயுதம்", "வலை",
+    # Telugu
+    "తుపాకి", "ఆయుధం", "ఉచ్చు",
+    # Bengali
+    "বন্দুক", "অস্ত্র", "ফাঁদ",
+    # Marathi
+    "बंदूक", "शस्त्र", "सापळा",
+]
 
 
 UNKNOWN_TERMS = {
@@ -1094,7 +1218,7 @@ class HybridIntelligenceEngine:
         noncrime_penalty = cls._content_relevance_penalty(text)
         if noncrime_penalty > 0:
             # Only apply penalty if there are no strong operational signals
-            has_operational = any(term in text for term in ["arrested", "seized", "seizure", "nabbed", "detained", "raided", "fir"])
+            has_operational = any(term in text for term in SEIZURE_TERMS + ARREST_TERMS)
             if not has_operational:
                 poach_signal = max(0.0, poach_signal - noncrime_penalty)
                 score_map["not wildlife crime"] = min(1.0, 0.50 + noncrime_penalty)
@@ -1808,10 +1932,10 @@ class HybridIntelligenceEngine:
         case_refs = [match.group(0) for match in CASE_REF_PATTERN.finditer(source_text)]
         vehicle_refs = [match.group(0) for match in VEHICLE_REF_PATTERN.finditer(source_text)]
         poaching_material_hits = [signal for signal in POACHING_SPECIFIC_SIGNALS if signal in lower]
-        seizure_present = any(token in lower for token in ["seized", "seizure", "confiscated", "recovered"])
-        arrest_present = any(token in lower for token in ["arrested", "detained", "held", "nabbed", "booked"])
+        seizure_present = any(token in lower for token in SEIZURE_TERMS)
+        arrest_present = any(token in lower for token in ARREST_TERMS)
         cross_border = bool(re.search(r"\bcross[- ]?border\b|\binternational\b|\bnepal\b|\bbhutan\b|\bmyanmar\b|\bbangladesh\b", lower))
-        weapon_signal = any(token in lower for token in ["rifle", "gun", "weapon", "snare", "trap", "cartridge"])
+        weapon_signal = any(token in lower for token in WEAPON_TERMS)
         return {
             "agency_hits": agency_hits[:4],
             "quantities": quantities[:4],
@@ -1939,15 +2063,8 @@ class HybridIntelligenceEngine:
         if crime_type == "unknown":
             confidence -= 0.06
 
-        # Hard penalty: articles with NO operational signals (no arrest, seizure, raid)
-        # AND few crime keywords are very likely not real incident reports
-        has_any_operational = (
-            operational_details.get("seizure_present")
-            or operational_details.get("arrest_present")
-            or operational_details.get("weapon_signal")
-        )
-        if not has_any_operational and keyword_hits < 4:
-            confidence *= 0.65  # Significant penalty for articles with no concrete crime action
+        # Mild penalty for articles with no operational signals
+        # (The main penalty is applied in analyze() itself)
 
         return max(0.0, min(1.0, confidence))
 
@@ -2509,12 +2626,12 @@ class HybridIntelligenceEngine:
         )
 
         # Strict High-Value Signal Check
-        has_operational_signal = any(t in text for t in ["arrested", "seized", "held", "nabbed", "raided", "caught", "booked", "seizure"])
+        has_operational_signal = any(t in text for t in SEIZURE_TERMS + ARREST_TERMS)
         if not has_operational_signal:
-            confidence *= 0.8 # Penalize articles with no clear action verbs
+            confidence *= 0.85  # Mild penalty for articles without concrete action verbs
             
         # Additional strict check for low signal articles
-        if is_poaching and not has_operational_signal and keyword_hits < 5:
+        if is_poaching and not has_operational_signal and keyword_hits < 3 and not species:
             is_poaching = False
 
         if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:
@@ -2742,7 +2859,7 @@ class HybridIntelligenceEngine:
             network_indicator=network_indicator,
             unknown_profile=unknown_profile,
         )
-        if is_poaching and not has_operational_signal and keyword_hits < 5:
+        if is_poaching and not has_operational_signal and keyword_hits < 3 and not species:
             is_poaching = False
         if has_false_positive and keyword_hits < 2 and poach_prob < 0.45 and not network_indicator:
             is_poaching = False
