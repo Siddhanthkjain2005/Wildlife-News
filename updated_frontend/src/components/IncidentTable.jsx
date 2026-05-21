@@ -2,7 +2,7 @@ import { Table, ExternalLink, SearchX } from "lucide-react";
 import { formatDate, riskLevel } from "../lib/format.js";
 import { resolveExternalUrl } from "../lib/api.js";
 
-export default function IncidentTable({ rows, loading }) {
+export default function IncidentTable({ rows, loading, onSelectRow }) {
   return (
     <article className="card table-card">
       <div className="card-head">
@@ -19,6 +19,7 @@ export default function IncidentTable({ rows, loading }) {
               <tr>
                 <th>Date</th>
                 <th>Risk</th>
+                <th>Status</th>
                 <th>Title</th>
                 <th>Species</th>
                 <th>State</th>
@@ -33,11 +34,20 @@ export default function IncidentTable({ rows, loading }) {
             <tbody>
               {rows.map((row) => {
                 const level = riskLevel(row.risk_score);
+                const status = row.review_status || "pending";
                 return (
-                  <tr key={row.id}>
+                  <tr
+                    key={row.id}
+                    onClick={() => onSelectRow && onSelectRow(row)}
+                    style={{ cursor: "pointer" }}
+                    className="clickable-row"
+                  >
                     <td className="cell-mono">{formatDate(row.date)}</td>
                     <td>
                       <span className={`risk-pill ${level}`}>{row.risk_score}</span>
+                    </td>
+                    <td>
+                      <span className={`status-pill ${status}`}>{status}</span>
                     </td>
                     <td className="cell-title">{row.title}</td>
                     <td className="cell-muted">{row.species || "—"}</td>
@@ -54,6 +64,7 @@ export default function IncidentTable({ rows, loading }) {
                         rel="noopener noreferrer"
                         className="feed-link"
                         aria-label="Open source article"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         Open <ExternalLink size={12} />
                       </a>
@@ -63,7 +74,7 @@ export default function IncidentTable({ rows, loading }) {
               })}
               {!rows.length && !loading ? (
                 <tr>
-                  <td colSpan={11} className="empty-cell">
+                  <td colSpan={12} className="empty-cell">
                     <div className="empty-cell-icon">
                       <SearchX size={20} />
                     </div>

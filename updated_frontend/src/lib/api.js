@@ -33,6 +33,8 @@ export const ENDPOINTS = {
   graphPersonProfile: (name) => withBase(`/api/graph/person/${encodeURIComponent(name)}`),
   ragQuery: withBase("/api/rag/query"),
   searchSemantic: withBase("/api/search/semantic"),
+  adminReanalyze: withBase("/api/admin/reanalyze"),
+  reviewIncident: (id) => withBase(`/api/incidents/${id}/review`),
   wsLive: (token) => withWs(`/api/ws/live?token=${token}`),
 };
 
@@ -110,6 +112,38 @@ export async function postJson(url, payload, { includeAuth = true, retry = true,
   if (res.status === 401 && retry && token && includeAuth) {
     const refreshed = await refreshAccessToken();
     if (refreshed) return postJson(url, payload, { includeAuth, retry: false, signal });
+  }
+
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.json();
+      detail = String(body?.detail || "").trim();
+    } catch {
+      detail = "";
+    }
+    const error = new Error(detail || `HTTP ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+export async function patchJson(url, payload, { includeAuth = true, retry = true, signal } = {}) {
+  const token = includeAuth ? getStoredToken() : "";
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  
+  const res = await fetchWithTimeout(url, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(payload || {}),
+    signal
+  });
+
+  if (res.status === 401 && retry && token && includeAuth) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return patchJson(url, payload, { includeAuth, retry: false, signal });
   }
 
   if (!res.ok) {

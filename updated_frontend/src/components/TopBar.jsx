@@ -8,7 +8,8 @@ export default function TopBar({
   onRefresh,
   onExport,
   onToggleMenu,
-  onLogout
+  onLogout,
+  onReanalyze
 }) {
   const titles = {
     overview: "Overview",
@@ -107,6 +108,11 @@ export default function TopBar({
     input.click();
   };
 
+  const handleReanalyzeDb = () => {
+    setOpenMenu(null);
+    onReanalyze();
+  };
+
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -194,6 +200,10 @@ export default function TopBar({
               <button type="button" role="menuitem" className="dropdown-item" onClick={handleUploadDb}>
                 <Upload size={14} />
                 <span>Upload Database</span>
+              </button>
+              <button type="button" role="menuitem" className="dropdown-item" onClick={handleReanalyzeDb}>
+                <RefreshCw size={14} />
+                <span>Re-analyze Database</span>
               </button>
             </div>
           )}

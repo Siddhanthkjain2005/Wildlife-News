@@ -11,7 +11,7 @@ import {
   Legend,
   Filler
 } from "chart.js";
-import { AlertCircle, Activity, Lock, ShieldCheck } from "lucide-react";
+import { AlertCircle, Activity, Lock, ShieldCheck, X, ExternalLink } from "lucide-react";
 
 import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
@@ -30,10 +30,13 @@ import {
   fetchJson,
   buildQuery,
   postJson,
+  patchJson,
   getStoredToken,
   setStoredToken,
-  clearStoredToken
+  clearStoredToken,
+  resolveExternalUrl
 } from "./lib/api.js";
+import { formatDate, riskLevel } from "./lib/format.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, BarElement, Tooltip, Legend, Filler);
 
@@ -170,6 +173,16 @@ export default function App() {
   const [reports, setReports] = useState([]);
   const [syncStatus, setSyncStatus] = useState(null);
   const [newsRows, setNewsRows] = useState(DEMO_MODE ? DEMO_NEWS_ROWS : []);
+  const [selectedIncident, setSelectedIncident] = useState(null);
+  const [reviewStatus, setReviewStatus] = useState("pending");
+  const [reviewNotes, setReviewNotes] = useState("");
+
+  useEffect(() => {
+    if (selectedIncident) {
+      setReviewStatus(selectedIncident.review_status || "pending");
+      setReviewNotes(selectedIncident.review_notes || "");
+    }
+  }, [selectedIncident]);
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [activeSection, setActiveSection] = useState("overview");
@@ -365,6 +378,50 @@ export default function App() {
     window.location.href = query ? `${base}?${query}` : base;
   }
 
+  const handleReanalyze = useCallback(async () => {
+    if (!confirm("Re-analyze the entire historical database?\n\nThis will trigger the AI pipeline in the background to classify WPA 1972 protection schedules, offence categories, and penalty classes for all historical records.")) return;
+    try {
+      setBusy(true);
+      const res = await postJson(ENDPOINTS.adminReanalyze, {});
+      alert(`Historical analysis queued successfully!\n\nStatus: ${res.status || "queued"}\nMessage: ${res.message || "Historical analysis pipeline has been triggered in the background."}`);
+      loadDashboard();
+      loadFilteredNews();
+    } catch (err) {
+      alert(`Failed to trigger database re-analysis: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [loadDashboard, loadFilteredNews]);
+
+  const handleReviewSubmit = useCallback(async (incidentId, reviewStatus, notes) => {
+    try {
+      setBusy(true);
+      const updatedIncident = await patchJson(ENDPOINTS.reviewIncident(incidentId), {
+        review_status: reviewStatus,
+        review_notes: notes
+      });
+      
+      // Update newsRows locally immediately so UI is snappy
+      setNewsRows((prevRows) =>
+        prevRows.map((row) => (row.id === incidentId ? { ...row, ...updatedIncident } : row))
+      );
+      
+      // Also update selectedIncident state if it is currently selected
+      setSelectedIncident((prev) => {
+        if (prev && prev.id === incidentId) {
+          return { ...prev, ...updatedIncident };
+        }
+        return prev;
+      });
+      
+      alert(`Incident review updated to: ${reviewStatus.toUpperCase()}`);
+    } catch (err) {
+      alert(`Failed to submit review: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   async function handleLoginSubmit(event) {
     event.preventDefault();
     setAuthBusy(true);
@@ -488,6 +545,7 @@ export default function App() {
           onExport={handleExport}
           onToggleMenu={() => setMobileOpen((v) => !v)}
           onLogout={handleLogout}
+          onReanalyze={handleReanalyze}
         />
 
         <div className="content">
@@ -599,7 +657,11 @@ export default function App() {
               onApply={() => loadFilteredNews()}
               onBriefing={() => handleExport("briefing")}
             />
-            <IncidentTable rows={newsRows} loading={loading} />
+            <IncidentTable
+              rows={newsRows}
+              loading={loading}
+              onSelectRow={(row) => setSelectedIncident(row)}
+            />
           </section>
 
           {/* Section 5: Intelligence Feed */}
@@ -620,6 +682,179 @@ export default function App() {
           </section>
         </div>
       </div>
+
+      {selectedIncident && (
+        <div className="modal-overlay" onClick={() => setSelectedIncident(null)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-area">
+                <div className="modal-title-pills">
+                  <span className={`risk-pill ${riskLevel(selectedIncident.risk_score)}`}>
+                    Risk: {selectedIncident.risk_score}
+                  </span>
+                  <span className={`status-pill ${selectedIncident.review_status || "pending"}`}>
+                    {selectedIncident.review_status || "pending"}
+                  </span>
+                </div>
+                <h1 className="modal-title">{selectedIncident.title}</h1>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setSelectedIncident(null)}
+                aria-label="Close modal"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Section 1: General Intelligence */}
+              <div>
+                <h3 className="modal-section-title">General Intelligence</h3>
+                <div className="metadata-grid">
+                  <div className="metadata-item">
+                    <span className="metadata-label">Date</span>
+                    <span className="metadata-value cell-mono">{formatDate(selectedIncident.date)}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">Species</span>
+                    <span className="metadata-value">{selectedIncident.species || "—"}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">State</span>
+                    <span className="metadata-value">{selectedIncident.state || "—"}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">District</span>
+                    <span className="metadata-value">{selectedIncident.district || "—"}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">Crime Type</span>
+                    <span className="metadata-value">{selectedIncident.crime_type || "—"}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">Involved Persons</span>
+                    <span className="metadata-value">{selectedIncident.involved_persons || "—"}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">Source</span>
+                    <span className="metadata-value">{selectedIncident.source || "—"}</span>
+                  </div>
+                  <div className="metadata-item">
+                    <span className="metadata-label">AI Confidence</span>
+                    <span className="metadata-value cell-mono">
+                      {Number(selectedIncident.confidence || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Summary / Description */}
+              {selectedIncident.summary && (
+                <div>
+                  <h3 className="modal-section-title">Incident Summary</h3>
+                  <div className="description-box">{selectedIncident.summary}</div>
+                </div>
+              )}
+
+              {/* Section 3: WPA 1972 Classification */}
+              <div>
+                <h3 className="modal-section-title">Wildlife Protection Act (WPA) 1972 Classification</h3>
+                <div className="classification-grid">
+                  <div className="classification-card">
+                    <span className="label">WPA Schedule</span>
+                    <span className="value">{selectedIncident.wpa_schedule || "Not Classified"}</span>
+                  </div>
+                  <div className="classification-card">
+                    <span className="label">WPA Section</span>
+                    <span className="value">{selectedIncident.wpa_section || "Not Classified"}</span>
+                  </div>
+                  <div className="classification-card">
+                    <span className="label">Offence Type</span>
+                    <span className="value">{selectedIncident.wpa_offence_type || "Not Classified"}</span>
+                  </div>
+                  <div className="classification-card">
+                    <span className="label">Penalty Class</span>
+                    <span className="value">{selectedIncident.wpa_penalty_class || "Not Classified"}</span>
+                  </div>
+                  <div className="classification-card">
+                    <span className="label">Protected Area Type</span>
+                    <span className="value">{selectedIncident.protected_area_type || "None / Not Applicable"}</span>
+                  </div>
+                  <div className="classification-card">
+                    <span className="label">Enforcement Authority</span>
+                    <span className="value">{selectedIncident.enforcement_authority || "Local Police / Forest Dept."}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Manual Review Option */}
+              <div className="review-section">
+                <h3 className="modal-section-title" style={{ margin: 0, border: "none", padding: 0 }}>
+                  Manual Checking & Verification
+                </h3>
+                <div className="review-status-selector">
+                  <button
+                    type="button"
+                    className={`review-status-btn pending ${reviewStatus === "pending" ? "active" : ""}`}
+                    onClick={() => setReviewStatus("pending")}
+                  >
+                    Pending
+                  </button>
+                  <button
+                    type="button"
+                    className={`review-status-btn approved ${reviewStatus === "approved" ? "active" : ""}`}
+                    onClick={() => setReviewStatus("approved")}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    className={`review-status-btn rejected ${reviewStatus === "rejected" ? "active" : ""}`}
+                    onClick={() => setReviewStatus("rejected")}
+                  >
+                    Reject
+                  </button>
+                </div>
+                <textarea
+                  className="review-notes-input"
+                  placeholder="Add manual checking notes, comments, or corrections..."
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setSelectedIncident(null)}
+              >
+                Cancel
+              </button>
+              <a
+                href={resolveExternalUrl(selectedIncident.open_url, selectedIncident.url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn"
+                style={{ marginRight: "auto" }}
+              >
+                Open Article <ExternalLink size={14} style={{ marginLeft: "4px" }} />
+              </a>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleReviewSubmit(selectedIncident.id, reviewStatus, reviewNotes)}
+                disabled={busy}
+              >
+                {busy ? "Saving..." : "Save Review"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
