@@ -1282,6 +1282,10 @@ class HybridIntelligenceEngine:
         if self._classifier is None:
             with self._lock:
                 if self._classifier is None:
+                    import os
+                    if os.environ.get("ZEROSHOT_ENABLED") == "false":
+                        self._classifier = False
+                        return self._classifier
                     if hf_pipeline is None:
                         if not self._logged_fallback_notice:
                             logger.warning(

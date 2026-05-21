@@ -41,11 +41,13 @@ class RagEngine:
                 return self._llm
             try:
                 from llama_cpp import Llama
+                import os
+                threads_limit = max(1, min(2, os.cpu_count() or 1))
 
                 self._llm = Llama(
                     model_path=self.model_path.strip(),
                     n_ctx=4096,
-                    n_threads=4,
+                    n_threads=threads_limit,
                     verbose=False,
                 )
             except Exception as err:  # noqa: BLE001

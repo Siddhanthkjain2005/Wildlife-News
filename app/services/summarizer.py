@@ -73,11 +73,13 @@ class IntelligenceSummarizer:
 
                 from llama_cpp import Llama
 
-                logger.info("Loading LLM model from: %s", self.model_path.strip())
+                import os
+                threads_limit = max(1, min(2, os.cpu_count() or 1))
+                logger.info("Loading LLM model from: %s (threads=%d)", self.model_path.strip(), threads_limit)
                 self._llm = Llama(
                     model_path=self.model_path.strip(),
                     n_ctx=4096,
-                    n_threads=4,
+                    n_threads=threads_limit,
                     verbose=False,
                 )
                 logger.info("✅ LLM model loaded successfully!")
