@@ -217,6 +217,12 @@ def run_deep_maintenance(db: Session):
                 item.likely_smuggling_route = str(intel.likely_smuggling_route or "")[:500]
                 item.enforcement_recommendation = str(intel.enforcement_recommendation or "")[:500]
                 item.confidence_explanation = str(intel.confidence_explanation or "")[:500]
+                item.wpa_schedule = str(getattr(intel, 'wpa_schedule', '') or "")[:30]
+                item.wpa_section = str(getattr(intel, 'wpa_section', '') or "")[:100]
+                item.wpa_offence_type = str(getattr(intel, 'wpa_offence_type', '') or "")[:80]
+                item.wpa_penalty_class = str(getattr(intel, 'wpa_penalty_class', '') or "")[:30]
+                item.protected_area_type = str(getattr(intel, 'protected_area_type', '') or "")[:60]
+                item.enforcement_authority = str(getattr(intel, 'enforcement_authority', '') or "")[:120]
                 upsert_report_for_news(db, item)
                 updated += 1
 

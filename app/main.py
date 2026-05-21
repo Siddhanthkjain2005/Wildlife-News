@@ -1012,6 +1012,16 @@ def _to_export_payload(row: NewsItem) -> dict[str, object]:
         ),
         "confidence_explanation": row.confidence_explanation or row.ai_reason,
         "url": row.url,
+        # Wildlife Protection Act 1972
+        "wpa_schedule": getattr(row, 'wpa_schedule', '') or "",
+        "wpa_section": getattr(row, 'wpa_section', '') or "",
+        "wpa_offence_type": getattr(row, 'wpa_offence_type', '') or "",
+        "wpa_penalty_class": getattr(row, 'wpa_penalty_class', '') or "",
+        "protected_area_type": getattr(row, 'protected_area_type', '') or "",
+        "enforcement_authority": getattr(row, 'enforcement_authority', '') or "",
+        # Review status
+        "review_status": getattr(row, 'review_status', 'pending') or "pending",
+        "reviewed_by": getattr(row, 'reviewed_by', '') or "",
     }
 
 
@@ -1794,6 +1804,44 @@ def sync_now():
     raise HTTPException(status_code=410, detail="Manual sync is disabled. Scheduler runs automatically.")
 
 
+# ---------- Manual Review API ----------
+@app.patch("/api/incidents/{incident_id}/review")
+def review_incident(incident_id: int, request: Request, _admin=Depends(require_admin_access)):
+    """Approve, reject, or reset an incident's review status."""
+    import json as _json
+    body = _json.loads(request._body.decode() if hasattr(request, '_body') else '{}')
+    # Accept body from async request
+    try:
+        import asyncio
+        body = asyncio.get_event_loop().run_until_complete(request.json())
+    except Exception:
+        pass
+
+    status = str(body.get("review_status", "")).strip().lower()
+    if status not in ("approved", "rejected", "pending"):
+        return JSONResponse(status_code=400, content={"detail": "review_status must be 'approved', 'rejected', or 'pending'"})
+
+    reviewer = str(body.get("reviewed_by", "admin"))[:120]
+    notes = str(body.get("review_notes", ""))[:500]
+
+    with SessionLocal() as db:
+        item = db.get(NewsItem, incident_id)
+        if not item:
+            return JSONResponse(status_code=404, content={"detail": "Incident not found"})
+        item.review_status = status
+        item.reviewed_by = reviewer
+        item.reviewed_at = datetime.utcnow()
+        item.review_notes = notes
+        db.commit()
+        _audit(actor=reviewer, action=f"review:{status}", notes=f"incident={incident_id} {notes[:100]}", request=request)
+        return {
+            "ok": True,
+            "id": incident_id,
+            "review_status": status,
+            "reviewed_by": reviewer,
+        }
+
+
 @app.post("/api/admin/reanalyze")
 def admin_reanalyze(request: Request, _admin=Depends(require_admin_access)):
     """Re-analyze all historical records with the current AI pipeline."""
@@ -2039,6 +2087,11 @@ def get_reports(
             "title": news.title,
             "source": news.source,
             "open_url": f"/open/{news.id}",
+            "wpa_schedule": getattr(news, 'wpa_schedule', '') or "",
+            "wpa_section": getattr(news, 'wpa_section', '') or "",
+            "wpa_offence_type": getattr(news, 'wpa_offence_type', '') or "",
+            "wpa_penalty_class": getattr(news, 'wpa_penalty_class', '') or "",
+            "review_status": getattr(news, 'review_status', 'pending') or "pending",
         }
         for report, news in rows
     ]
@@ -2071,6 +2124,13 @@ def get_report(id: int, db: Session = Depends(get_db)):
             "source": news.source,
             "published_at": news.published_at.isoformat(),
             "open_url": f"/open/{news.id}",
+            "wpa_schedule": getattr(news, 'wpa_schedule', '') or "",
+            "wpa_section": getattr(news, 'wpa_section', '') or "",
+            "wpa_offence_type": getattr(news, 'wpa_offence_type', '') or "",
+            "wpa_penalty_class": getattr(news, 'wpa_penalty_class', '') or "",
+            "protected_area_type": getattr(news, 'protected_area_type', '') or "",
+            "enforcement_authority": getattr(news, 'enforcement_authority', '') or "",
+            "review_status": getattr(news, 'review_status', 'pending') or "pending",
         },
     }
 

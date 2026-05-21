@@ -85,6 +85,16 @@ def _ensure_news_items_schema() -> None:
         "report_count": "ALTER TABLE news_items ADD COLUMN report_count INTEGER NOT NULL DEFAULT 1",
         "merged_sources": "ALTER TABLE news_items ADD COLUMN merged_sources TEXT NOT NULL DEFAULT ''",
         "embedding": "ALTER TABLE news_items ADD COLUMN embedding TEXT",
+        "review_status": "ALTER TABLE news_items ADD COLUMN review_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        "reviewed_by": "ALTER TABLE news_items ADD COLUMN reviewed_by VARCHAR(120) NOT NULL DEFAULT ''",
+        "reviewed_at": "ALTER TABLE news_items ADD COLUMN reviewed_at DATETIME",
+        "review_notes": "ALTER TABLE news_items ADD COLUMN review_notes TEXT NOT NULL DEFAULT ''",
+        "wpa_schedule": "ALTER TABLE news_items ADD COLUMN wpa_schedule VARCHAR(30) NOT NULL DEFAULT ''",
+        "wpa_section": "ALTER TABLE news_items ADD COLUMN wpa_section VARCHAR(100) NOT NULL DEFAULT ''",
+        "wpa_offence_type": "ALTER TABLE news_items ADD COLUMN wpa_offence_type VARCHAR(80) NOT NULL DEFAULT ''",
+        "wpa_penalty_class": "ALTER TABLE news_items ADD COLUMN wpa_penalty_class VARCHAR(30) NOT NULL DEFAULT ''",
+        "protected_area_type": "ALTER TABLE news_items ADD COLUMN protected_area_type VARCHAR(60) NOT NULL DEFAULT ''",
+        "enforcement_authority": "ALTER TABLE news_items ADD COLUMN enforcement_authority VARCHAR(120) NOT NULL DEFAULT ''",
     }
 
     required_postgres_columns: dict[str, str] = {
@@ -110,6 +120,16 @@ def _ensure_news_items_schema() -> None:
         "report_count": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS report_count INTEGER NOT NULL DEFAULT 1",
         "merged_sources": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS merged_sources TEXT NOT NULL DEFAULT ''",
         "embedding": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS embedding TEXT",
+        "review_status": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS review_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        "reviewed_by": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(120) NOT NULL DEFAULT ''",
+        "reviewed_at": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP",
+        "review_notes": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS review_notes TEXT NOT NULL DEFAULT ''",
+        "wpa_schedule": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS wpa_schedule VARCHAR(30) NOT NULL DEFAULT ''",
+        "wpa_section": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS wpa_section VARCHAR(100) NOT NULL DEFAULT ''",
+        "wpa_offence_type": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS wpa_offence_type VARCHAR(80) NOT NULL DEFAULT ''",
+        "wpa_penalty_class": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS wpa_penalty_class VARCHAR(30) NOT NULL DEFAULT ''",
+        "protected_area_type": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS protected_area_type VARCHAR(60) NOT NULL DEFAULT ''",
+        "enforcement_authority": "ALTER TABLE news_items ADD COLUMN IF NOT EXISTS enforcement_authority VARCHAR(120) NOT NULL DEFAULT ''",
     }
 
     existing = _existing_columns("news_items")

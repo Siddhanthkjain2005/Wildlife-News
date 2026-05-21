@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,6 +20,8 @@ class NewsItem(Base):
         Index("ix_news_items_url_hash", "url_hash"),
         Index("ix_news_items_duplicate_confidence", "duplicate_confidence"),
         Index("ix_news_items_created_at", "created_at"),
+        Index("ix_news_items_review_status", "review_status"),
+        Index("ix_news_items_wpa_schedule", "wpa_schedule"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -53,6 +56,20 @@ class NewsItem(Base):
     source_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     report_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     merged_sources: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # ----- Manual Review Fields -----
+    review_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    reviewed_by: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # ----- Wildlife Protection Act 1972 Fields -----
+    wpa_schedule: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    wpa_section: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    wpa_offence_type: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    wpa_penalty_class: Mapped[str] = mapped_column(String(30), nullable=False, default="")
+    protected_area_type: Mapped[str] = mapped_column(String(60), nullable=False, default="")
+    enforcement_authority: Mapped[str] = mapped_column(String(120), nullable=False, default="")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

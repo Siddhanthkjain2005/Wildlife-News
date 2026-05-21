@@ -1064,6 +1064,141 @@ MONEY_PATTERN = re.compile(r"(?:₹|rs\.?|inr)\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:lakh
 CASE_REF_PATTERN = re.compile(r"\b(?:fir|case)\s*(?:no|number)?\.?\s*[:#-]?\s*[A-Za-z0-9/-]{3,20}\b", re.IGNORECASE)
 VEHICLE_REF_PATTERN = re.compile(r"\b[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{3,4}\b")
 
+# ============================================================
+# Wildlife Protection Act 1972 — Classification Tables
+# ============================================================
+
+# Species → WPA Schedule mapping
+WPA_SPECIES_SCHEDULE: dict[str, str] = {
+    # Schedule I — Highest protection
+    "tiger": "Schedule I", "bengal tiger": "Schedule I", "royal bengal tiger": "Schedule I",
+    "rhinoceros": "Schedule I", "rhino": "Schedule I", "indian rhinoceros": "Schedule I",
+    "asian elephant": "Schedule I", "elephant": "Schedule I",
+    "snow leopard": "Schedule I", "clouded leopard": "Schedule I",
+    "pangolin": "Schedule I", "indian pangolin": "Schedule I", "chinese pangolin": "Schedule I",
+    "red panda": "Schedule I", "gharial": "Schedule I",
+    "lion-tailed macaque": "Schedule I", "hoolock gibbon": "Schedule I",
+    "great indian bustard": "Schedule I", "bengal florican": "Schedule I",
+    "malabar civet": "Schedule I", "dugong": "Schedule I",
+    "gangetic dolphin": "Schedule I", "dolphin": "Schedule I",
+    "himalayan musk deer": "Schedule I", "musk deer": "Schedule I",
+    "swamp deer": "Schedule I", "hangul": "Schedule I", "kashmir stag": "Schedule I",
+    "indian wild ass": "Schedule I", "wild ass": "Schedule I",
+    "one-horned rhinoceros": "Schedule I",
+    "blackbuck": "Schedule I", "chinkara": "Schedule I",
+    "indian star tortoise": "Schedule I", "star tortoise": "Schedule I",
+    "king cobra": "Schedule I",
+    "sea turtle": "Schedule I", "olive ridley": "Schedule I", "hawksbill turtle": "Schedule I",
+    "peregrine falcon": "Schedule I", "saker falcon": "Schedule I",
+    # Schedule II — High protection
+    "leopard": "Schedule II", "indian leopard": "Schedule II",
+    "bear": "Schedule II", "sloth bear": "Schedule II", "himalayan black bear": "Schedule II",
+    "wild boar": "Schedule II", "sambar": "Schedule II", "chital": "Schedule II",
+    "nilgai": "Schedule II", "gaur": "Schedule II", "bison": "Schedule II",
+    "jackal": "Schedule II", "jungle cat": "Schedule II", "fishing cat": "Schedule II",
+    "monitor lizard": "Schedule II", "cobra": "Schedule II", "python": "Schedule II",
+    "indian python": "Schedule II", "rock python": "Schedule II",
+    "mugger crocodile": "Schedule II", "crocodile": "Schedule II",
+    "flying squirrel": "Schedule II",
+    "parrot": "Schedule II", "parakeet": "Schedule II", "hill myna": "Schedule II",
+    "peacock": "Schedule II", "indian peafowl": "Schedule II",
+    "owl": "Schedule II", "eagle": "Schedule II", "vulture": "Schedule II",
+    # Schedule III — Protected
+    "hyena": "Schedule III", "striped hyena": "Schedule III",
+    "hog deer": "Schedule III", "barking deer": "Schedule III", "mouse deer": "Schedule III",
+    "porcupine": "Schedule III", "wild hare": "Schedule III",
+    # Schedule IV — Lower protection
+    "flamingo": "Schedule IV", "heron": "Schedule IV", "stork": "Schedule IV",
+    "horseshoe crab": "Schedule IV", "tortoise": "Schedule IV",
+    # Schedule V — Vermin (can be hunted)
+    "common crow": "Schedule V", "fruit bat": "Schedule V",
+    # Schedule VI — Protected plants
+    "red sanders": "Schedule VI", "red sandalwood": "Schedule VI",
+    "sandalwood": "Schedule VI",
+}
+
+# Crime type → WPA Section + Offence type mapping
+WPA_CRIME_SECTIONS: dict[str, dict[str, str]] = {
+    "poaching": {"section": "Section 9 (Prohibition of Hunting), Section 51", "offence_type": "Hunting"},
+    "forest_hunting_gang": {"section": "Section 9, Section 51(1)", "offence_type": "Organized Hunting"},
+    "smuggling": {"section": "Section 49-B (Prohibition of Trade), Section 51", "offence_type": "Trading/Smuggling"},
+    "illegal_wildlife_trade": {"section": "Section 49-B, Section 49-C, Section 51", "offence_type": "Trading"},
+    "ivory_trade": {"section": "Section 49-B, Section 51(1A) — Schedule I", "offence_type": "Trading (Schedule I)"},
+    "rhino_horn_trafficking": {"section": "Section 49-B, Section 51(1A) — Schedule I", "offence_type": "Trafficking (Schedule I)"},
+    "tiger_skin_seizure": {"section": "Section 49-B, Section 51(1A) — Schedule I", "offence_type": "Possession/Trade (Schedule I)"},
+    "exotic_bird_trafficking": {"section": "Section 9, Section 49-B, Section 51", "offence_type": "Hunting + Trading"},
+    "habitat_destruction": {"section": "Section 29 (Destruction in Sanctuary), Section 35(6)", "offence_type": "Habitat Destruction"},
+    "animal_cruelty": {"section": "Section 9, Prevention of Cruelty to Animals Act 1960", "offence_type": "Cruelty"},
+    "snake_venom_trade": {"section": "Section 49-B, Section 51", "offence_type": "Trading (Venom)"},
+    "red_sanders_smuggling": {"section": "Section 17-A (Schedule VI Plants), Section 51", "offence_type": "Plant Trade (Schedule VI)"},
+    "illegal_fishing": {"section": "Section 9, Section 51", "offence_type": "Fishing in Protected Waters"},
+}
+
+# Known Protected Areas in India
+PROTECTED_AREAS: dict[str, str] = {
+    "kaziranga": "National Park", "corbett": "National Park", "jim corbett": "National Park",
+    "bandipur": "National Park", "ranthambore": "National Park", "ranthambhore": "National Park",
+    "gir": "National Park", "kanha": "National Park", "pench": "National Park",
+    "bandhavgarh": "National Park", "sundarbans": "National Park", "sundarban": "National Park",
+    "periyar": "National Park", "nagarhole": "National Park", "dudhwa": "National Park",
+    "manas": "National Park", "sariska": "National Park", "simlipal": "National Park",
+    "hemis": "National Park", "valley of flowers": "National Park",
+    "satpura": "National Park", "tadoba": "National Park", "melghat": "Tiger Reserve",
+    "panna": "National Park", "mudumalai": "National Park",
+    "rajaji": "National Park", "nandankanan": "Zoological Park",
+    "bharatpur": "Bird Sanctuary", "keoladeo": "Bird Sanctuary",
+    "chilika": "Bird Sanctuary", "pulicat": "Bird Sanctuary",
+    "bhadra": "Tiger Reserve", "nagarjunasagar": "Tiger Reserve",
+    "buxa": "Tiger Reserve", "kalakad": "Tiger Reserve",
+    "anamalai": "Tiger Reserve", "parambikulam": "Tiger Reserve",
+    "achanakmar": "Tiger Reserve", "indravati": "Tiger Reserve",
+    "udanti": "Tiger Reserve", "palamau": "Tiger Reserve",
+    "valmiki": "Tiger Reserve", "pilibhit": "Tiger Reserve",
+    "navegaon-nagzira": "Tiger Reserve", "sahyadri": "Tiger Reserve",
+    "dandeli-anshi": "Tiger Reserve", "biligiri": "Tiger Reserve",
+    "sathyamangalam": "Tiger Reserve", "kawal": "Tiger Reserve",
+    "amrabad": "Tiger Reserve", "orang": "Tiger Reserve",
+    "pakke": "Tiger Reserve", "nameri": "Tiger Reserve",
+    "dampa": "Tiger Reserve", "kamlang": "Tiger Reserve",
+    "bor": "Tiger Reserve", "ratapani": "Tiger Reserve",
+    "gundla brahmeswaram": "Wildlife Sanctuary",
+    "chinnar": "Wildlife Sanctuary", "eravikulam": "Wildlife Sanctuary",
+    "silent valley": "National Park", "great himalayan": "National Park",
+}
+
+# Enforcement agencies
+ENFORCEMENT_AGENCIES: dict[str, str] = {
+    "forest department": "State Forest Department",
+    "forest officials": "State Forest Department",
+    "forest officer": "State Forest Department",
+    "forest guard": "State Forest Department",
+    "range officer": "State Forest Department",
+    "divisional forest officer": "State Forest Department",
+    "dfo": "State Forest Department",
+    "chief conservator": "State Forest Department",
+    "pccf": "State Forest Department",
+    "wildlife warden": "State Forest Department",
+    "wccb": "Wildlife Crime Control Bureau",
+    "wildlife crime control bureau": "Wildlife Crime Control Bureau",
+    "stf": "Special Task Force",
+    "special task force": "Special Task Force",
+    "ntca": "National Tiger Conservation Authority",
+    "tiger conservation": "National Tiger Conservation Authority",
+    "police": "State Police",
+    "customs": "Customs Department",
+    "coast guard": "Indian Coast Guard",
+    "rpf": "Railway Protection Force",
+    "railway protection": "Railway Protection Force",
+    "bsf": "Border Security Force",
+    "border security": "Border Security Force",
+    "ssb": "Sashastra Seema Bal",
+    "cisf": "Central Industrial Security Force",
+    "cbi": "Central Bureau of Investigation",
+    "nia": "National Investigation Agency",
+    "narcotics control": "Narcotics Control Bureau",
+    "enforcement directorate": "Enforcement Directorate",
+}
+
 
 @dataclass
 class IntelligenceResult:
@@ -1085,6 +1220,13 @@ class IntelligenceResult:
     enforcement_recommendation: str
     confidence_explanation: str
     reason: str
+    # Wildlife Protection Act 1972 classification
+    wpa_schedule: str = ""
+    wpa_section: str = ""
+    wpa_offence_type: str = ""
+    wpa_penalty_class: str = ""
+    protected_area_type: str = ""
+    enforcement_authority: str = ""
 
     def to_record(self) -> dict[str, object]:
         payload = asdict(self)
@@ -2442,6 +2584,71 @@ class HybridIntelligenceEngine:
             f"unknown_mentions={int(unknown_profile.get('explicit_unknown_mentions') or 0)}."
         )
 
+    @staticmethod
+    def _extract_wpa_classification(
+        species: list[str],
+        crime_type: str,
+        text: str,
+    ) -> dict[str, str]:
+        """Classify incident per Wildlife Protection Act 1972."""
+        lower = text.lower()
+
+        # 1. Map species → highest WPA Schedule
+        schedule_priority = {"Schedule I": 1, "Schedule II": 2, "Schedule III": 3,
+                             "Schedule IV": 4, "Schedule V": 5, "Schedule VI": 6}
+        best_schedule = ""
+        best_priority = 99
+        for sp in species:
+            sp_lower = sp.lower().strip()
+            sch = WPA_SPECIES_SCHEDULE.get(sp_lower, "")
+            if sch and schedule_priority.get(sch, 99) < best_priority:
+                best_schedule = sch
+                best_priority = schedule_priority[sch]
+
+        # 2. Map crime_type → WPA Section + Offence type
+        crime_info = WPA_CRIME_SECTIONS.get(crime_type, {})
+        wpa_section = crime_info.get("section", "")
+        offence_type = crime_info.get("offence_type", "")
+
+        # Upgrade section for Schedule I species
+        if best_schedule == "Schedule I" and wpa_section and "51(1A)" not in wpa_section:
+            wpa_section += ", Section 51(1A) — Schedule I species"
+
+        # 3. Determine penalty class
+        if best_schedule in ("Schedule I", "Schedule II"):
+            penalty_class = "severe"  # 3-7 years imprisonment, min ₹10,000 fine
+        elif best_schedule in ("Schedule III", "Schedule IV"):
+            penalty_class = "moderate"  # Up to 3 years, up to ₹25,000
+        elif best_schedule in ("Schedule V",):
+            penalty_class = "minor"
+        elif best_schedule == "Schedule VI":
+            penalty_class = "moderate"  # Plant trade penalties
+        else:
+            penalty_class = ""
+
+        # 4. Detect protected area
+        protected_area = ""
+        for area_name, area_type in PROTECTED_AREAS.items():
+            if area_name in lower:
+                protected_area = f"{area_name.title()} {area_type}"
+                break
+
+        # 5. Detect enforcement authority
+        enforcement = ""
+        for agency_key, agency_name in ENFORCEMENT_AGENCIES.items():
+            if agency_key in lower:
+                enforcement = agency_name
+                break
+
+        return {
+            "wpa_schedule": best_schedule,
+            "wpa_section": wpa_section,
+            "wpa_offence_type": offence_type,
+            "wpa_penalty_class": penalty_class,
+            "protected_area_type": protected_area,
+            "enforcement_authority": enforcement,
+        }
+
     def analyze(
         self,
         *,
@@ -2985,6 +3192,10 @@ class HybridIntelligenceEngine:
             f"not_wildlife={not_wildlife_prob:.2f}, unknown_ratio={float(unknown_profile.get('unknown_ratio') or 0.0):.2f}, "
             f"animal_related={int(self._is_animal_related_incident(crime_type=crime_type, species=species, operational_details=operational_details))}"
         )
+
+        # WPA 1972 classification
+        wpa = self._extract_wpa_classification(species=species, crime_type=crime_type, text=text)
+
         return IntelligenceResult(
             is_poaching=is_poaching,
             is_india=is_india,
@@ -3004,4 +3215,10 @@ class HybridIntelligenceEngine:
             enforcement_recommendation=enforcement_recommendation[:500],
             confidence_explanation=confidence_explanation[:500],
             reason=reason[:300],
+            wpa_schedule=wpa["wpa_schedule"],
+            wpa_section=wpa["wpa_section"][:100],
+            wpa_offence_type=wpa["wpa_offence_type"][:80],
+            wpa_penalty_class=wpa["wpa_penalty_class"],
+            protected_area_type=wpa["protected_area_type"][:60],
+            enforcement_authority=wpa["enforcement_authority"][:120],
         )

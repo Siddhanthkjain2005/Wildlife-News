@@ -19,17 +19,22 @@ data/*.xlsx
 data/backups/
 data/ml_models/
 *.db
+*.db-shm
+*.db-wal
 
 # Frontend
 node_modules/
 updated_frontend/node_modules/
-best_frontend/node_modules/
 
 # Build artifacts (embedded build is force-added)
 app/static/react-build/
 
 # Archives
 *.zip
+
+# Scratch / temp
+scratch/
+*.resolved
 
 # Misc
 venv_test/

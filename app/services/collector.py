@@ -1989,6 +1989,12 @@ class NewsCollector:
                                 source_count=1,
                                 report_count=1,
                                 merged_sources=source[:160],
+                                wpa_schedule=getattr(intel, 'wpa_schedule', '')[:30],
+                                wpa_section=getattr(intel, 'wpa_section', '')[:100],
+                                wpa_offence_type=getattr(intel, 'wpa_offence_type', '')[:80],
+                                wpa_penalty_class=getattr(intel, 'wpa_penalty_class', '')[:30],
+                                protected_area_type=getattr(intel, 'protected_area_type', '')[:60],
+                                enforcement_authority=getattr(intel, 'enforcement_authority', '')[:120],
                                 created_at=datetime.utcnow(),
                                 last_seen_at=datetime.utcnow(),
                             )
