@@ -1115,6 +1115,8 @@ WPA_SPECIES_SCHEDULE: dict[str, str] = {
     # Schedule VI — Protected plants
     "red sanders": "Schedule VI", "red sandalwood": "Schedule VI",
     "sandalwood": "Schedule VI",
+    # Added general species for robust mapping
+    "lion": "Schedule I", "wolf": "Schedule I",
 }
 
 # Crime type → WPA Section + Offence type mapping
@@ -2593,22 +2595,123 @@ class HybridIntelligenceEngine:
         """Classify incident per Wildlife Protection Act 1972."""
         lower = text.lower()
 
+        # Let's map high-level categories to their default schedules as a fallback
+        category_fallbacks = {
+            "tiger": "Schedule I",
+            "leopard": "Schedule II",
+            "elephant": "Schedule I",
+            "rhino": "Schedule I",
+            "pangolin": "Schedule I",
+            "bear": "Schedule II",
+            "deer": "Schedule II", # Most Indian deer are Schedule II or III
+            "bird": "Schedule II", # Peacock, owl, parrot, parakeet, eagle are Schedule II
+            "reptile": "Schedule II", # Cobra, python, crocodile are Schedule II
+            "marine": "Schedule II", # Sharks/rays are protected under Schedule II/I
+            "snow leopard": "Schedule I",
+            "red panda": "Schedule I",
+            "lion": "Schedule I",
+            "wolf": "Schedule I",
+            "wild boar": "Schedule II",
+            "red sanders": "Schedule VI",
+            "sandalwood": "Schedule VI",
+        }
+
         # 1. Map species → highest WPA Schedule
         schedule_priority = {"Schedule I": 1, "Schedule II": 2, "Schedule III": 3,
                              "Schedule IV": 4, "Schedule V": 5, "Schedule VI": 6}
         best_schedule = ""
         best_priority = 99
-        for sp in species:
-            sp_lower = sp.lower().strip()
-            sch = WPA_SPECIES_SCHEDULE.get(sp_lower, "")
+
+        # Collect matched terms/phrases from text
+        matched_terms = set()
+        
+        # 1a. Scan for specific keywords defined in SPECIES_KEYWORDS
+        for s_cat, keywords in SPECIES_KEYWORDS.items():
+            for kw in keywords:
+                kw_lower = kw.lower().strip()
+                # Check for word boundary singular or plural for ASCII words
+                if kw_lower.isascii() and kw_lower.isalnum():
+                    if re.search(rf"\b{re.escape(kw_lower)}s?\b", lower):
+                        matched_terms.add((kw_lower, s_cat))
+                else:
+                    # For non-ascii or multi-token with punctuations
+                    if kw_lower in lower:
+                        matched_terms.add((kw_lower, s_cat))
+
+        # 1b. Scan for specific WPA schedule keys directly in the text
+        for wpa_sp in WPA_SPECIES_SCHEDULE.keys():
+            wpa_sp_lower = wpa_sp.lower().strip()
+            if wpa_sp_lower.isascii() and wpa_sp_lower.isalnum():
+                if re.search(rf"\b{re.escape(wpa_sp_lower)}s?\b", lower):
+                    matched_terms.add((wpa_sp_lower, None))
+            else:
+                if wpa_sp_lower in lower:
+                    matched_terms.add((wpa_sp_lower, None))
+
+        # Determine the highest priority schedule from matched terms
+        for term, s_cat in matched_terms:
+            sch = ""
+            # Try exact match in WPA_SPECIES_SCHEDULE
+            if term in WPA_SPECIES_SCHEDULE:
+                sch = WPA_SPECIES_SCHEDULE[term]
+            
+            # Try partial match/containment with keys in WPA_SPECIES_SCHEDULE
+            if not sch:
+                best_len = 0
+                for wpa_sp, wpa_sch in WPA_SPECIES_SCHEDULE.items():
+                    wpa_sp_lower = wpa_sp.lower().strip()
+                    if wpa_sp_lower in term or term in wpa_sp_lower:
+                        if len(wpa_sp_lower) > best_len:
+                            sch = wpa_sch
+                            best_len = len(wpa_sp_lower)
+
+            # Try mapping using high-level category fallback
+            if not sch and s_cat in category_fallbacks:
+                sch = category_fallbacks[s_cat]
+
+            # Additional specific term overrides
+            if not sch:
+                if "ivory" in term or "tusk" in term:
+                    sch = "Schedule I"
+                elif "peacock" in term or "peafowl" in term:
+                    sch = "Schedule II"
+                elif "venom" in term or "cobra" in term:
+                    sch = "Schedule II" if "king cobra" not in lower else "Schedule I"
+
             if sch and schedule_priority.get(sch, 99) < best_priority:
                 best_schedule = sch
                 best_priority = schedule_priority[sch]
+
+        # 1c. Fallback to input 'species' list category defaults if best_schedule is still empty
+        if not best_schedule:
+            for s_cat in species:
+                s_cat_lower = s_cat.lower().strip()
+                sch = category_fallbacks.get(s_cat_lower, "")
+                if not sch:
+                    for cat, cat_sch in category_fallbacks.items():
+                        if cat in s_cat_lower or s_cat_lower in cat:
+                            sch = cat_sch
+                            break
+                if sch and schedule_priority.get(sch, 99) < best_priority:
+                    best_schedule = sch
+                    best_priority = schedule_priority[sch]
 
         # 2. Map crime_type → WPA Section + Offence type
         crime_info = WPA_CRIME_SECTIONS.get(crime_type, {})
         wpa_section = crime_info.get("section", "")
         offence_type = crime_info.get("offence_type", "")
+
+        # Intelligent section fallbacks if empty
+        if not wpa_section:
+            if best_schedule == "Schedule VI":
+                wpa_section = "Section 17-A (Prohibition of picking/uprooting), Section 51"
+                offence_type = "Plant Trade (Schedule VI)"
+            elif best_schedule:
+                wpa_section = "Section 9 (Prohibition of Hunting), Section 51"
+                offence_type = "Hunting/Possession"
+            else:
+                wpa_section = "Section 9 / Section 49-B, Section 51"
+                offence_type = "Hunting / Possession / Illegal Trade"
 
         # Upgrade section for Schedule I species
         if best_schedule == "Schedule I" and wpa_section and "51(1A)" not in wpa_section:
@@ -2628,17 +2731,32 @@ class HybridIntelligenceEngine:
 
         # 4. Detect protected area
         protected_area = ""
-        for area_name, area_type in PROTECTED_AREAS.items():
-            if area_name in lower:
-                protected_area = f"{area_name.title()} {area_type}"
-                break
+        sorted_areas = sorted(PROTECTED_AREAS.keys(), key=len, reverse=True)
+        for area_name in sorted_areas:
+            if len(area_name) < 5:
+                # Word boundaries for short names to prevent false matching inside larger words
+                if re.search(rf"\b{re.escape(area_name)}\b", lower):
+                    area_type = PROTECTED_AREAS[area_name]
+                    protected_area = f"{area_name.title()} {area_type}"
+                    break
+            else:
+                if area_name in lower:
+                    area_type = PROTECTED_AREAS[area_name]
+                    protected_area = f"{area_name.title()} {area_type}"
+                    break
 
         # 5. Detect enforcement authority
         enforcement = ""
-        for agency_key, agency_name in ENFORCEMENT_AGENCIES.items():
-            if agency_key in lower:
-                enforcement = agency_name
-                break
+        sorted_agencies = sorted(ENFORCEMENT_AGENCIES.keys(), key=len, reverse=True)
+        for agency_key in sorted_agencies:
+            if len(agency_key) < 4:
+                if re.search(rf"\b{re.escape(agency_key)}\b", lower):
+                    enforcement = ENFORCEMENT_AGENCIES[agency_key]
+                    break
+            else:
+                if agency_key in lower:
+                    enforcement = ENFORCEMENT_AGENCIES[agency_key]
+                    break
 
         return {
             "wpa_schedule": best_schedule,

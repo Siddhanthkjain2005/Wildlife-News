@@ -117,3 +117,49 @@ def test_unknown_profile_lowers_confidence_and_risk() -> None:
     )
     assert risk_unknown < risk_known
 
+
+def test_extract_wpa_classification_robust_matching() -> None:
+    # Test case 1: exact matches and species plurals
+    text1 = "Forest guards intercepted a suspect who was in possession of tiger skins and leopard parts."
+    res1 = HybridIntelligenceEngine._extract_wpa_classification(
+        species=["tiger", "leopard"],
+        crime_type="poaching",
+        text=text1
+    )
+    assert res1["wpa_schedule"] == "Schedule I"  # tiger is Schedule I, leopard is Schedule II. Priority to Schedule I.
+    assert "Section 9" in res1["wpa_section"]
+    assert "51(1A)" in res1["wpa_section"]
+    assert res1["wpa_penalty_class"] == "severe"
+
+    # Test case 2: high-level species fallback and plurals (e.g. elephants, pythons)
+    text2 = "Smugglers caught with elephant tusks and pythons."
+    res2 = HybridIntelligenceEngine._extract_wpa_classification(
+        species=["elephant", "reptile"],
+        crime_type="smuggling",
+        text=text2
+    )
+    assert res2["wpa_schedule"] == "Schedule I" # elephant is Schedule I
+    assert "Section 49-B" in res2["wpa_section"]
+    assert "51(1A)" in res2["wpa_section"]
+
+    # Test case 3: protected area and enforcement authority detection
+    text3 = "Forest department range officer arrested two poachers inside Jim Corbett national park."
+    res3 = HybridIntelligenceEngine._extract_wpa_classification(
+        species=["tiger"],
+        crime_type="poaching",
+        text=text3
+    )
+    assert "Corbett National Park" in res3["protected_area_type"]
+    assert res3["enforcement_authority"] == "State Forest Department"
+
+    # Test case 4: no species in dict but in fallback categories
+    text4 = "Hornbill hunting reported by villagers."
+    res4 = HybridIntelligenceEngine._extract_wpa_classification(
+        species=["bird"],
+        crime_type="poaching",
+        text=text4
+    )
+    # hornbill is part of bird category -> fallbacks to Schedule II
+    assert res4["wpa_schedule"] == "Schedule II"
+    assert res4["wpa_penalty_class"] == "severe"
+
