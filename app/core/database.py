@@ -141,7 +141,12 @@ def _ensure_news_items_schema() -> None:
         for column_name, ddl in column_ddl.items():
             if engine.dialect.name == "sqlite" and column_name in existing:
                 continue
-            conn.execute(text(ddl))
+            try:
+                conn.execute(text(ddl))
+            except Exception as col_err:
+                # Gracefully handle read-only databases (e.g., Docker containers)
+                # or columns that already exist on Postgres
+                logger.warning("Schema migration skipped column %s: %s", column_name, col_err)
 
         if engine.dialect.name == "sqlite":
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_news_items_risk_score ON news_items (risk_score)"))
@@ -346,16 +351,17 @@ def init_database() -> None:
                 logger.error("Failed to create SQLite database directory %s: %s", db_path.parent, err)
                 raise
 
-    Base.metadata.create_all(bind=engine)
     try:
+        Base.metadata.create_all(bind=engine)
         _ensure_postgres_extensions()
         _ensure_news_items_schema()
         _ensure_reports_schema()
         _ensure_audit_logs_schema()
         _ensure_alerts_schema()
     except SQLAlchemyError as err:
-        if engine.dialect.name == "sqlite" and "database is locked" in str(err).lower():
-            logger.warning("Schema compatibility checks skipped due to database lock; continuing startup.")
+        err_msg = str(err).lower()
+        if engine.dialect.name == "sqlite" and ("database is locked" in err_msg or "readonly" in err_msg):
+            logger.warning("Database setup or schema compatibility checks skipped due to database lock or readonly database; continuing startup.")
             return
         logger.error("Failed to ensure schema compatibility: %s", err)
         raise

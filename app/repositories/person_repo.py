@@ -5,13 +5,13 @@ from collections import Counter
 from sqlalchemy.orm import Session
 
 from app.repositories.incident_repo import IncidentRepository
-from app.services.graph_engine import GraphIntelligenceEngine
 
 
 class PersonRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.incident_repo = IncidentRepository(db)
+        from app.services.graph_engine import GraphIntelligenceEngine
         self.graph_engine = GraphIntelligenceEngine()
 
     def top_persons(self, *, limit: int = 50, incident_limit: int = 5000) -> list[dict[str, object]]:
