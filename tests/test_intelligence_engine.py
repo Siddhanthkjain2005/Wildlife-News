@@ -269,4 +269,38 @@ def test_intelligence_wpa_llm_override() -> None:
     assert result.enforcement_authority == "Wildlife Crime Control Bureau (WCCB)"
 
 
+def test_intelligence_suspects_merging() -> None:
+    from unittest.mock import MagicMock
+    engine = HybridIntelligenceEngine()
+    
+    # Mock summarizer generate output to return a suspect not captured by the regex/NER engine
+    engine._summarizer = MagicMock()
+    engine._summarizer.generate.return_value = {
+        "summary": "Mock summary",
+        "key_facts": ["Mock fact 1"],
+        "smuggling_route": "Mock route",
+        "recommendation": "Mock recommendation",
+        "risk_factors": [],
+        "extracted_species": ["tiger"],
+        "extracted_location": "karnataka",
+        "extracted_suspects": ["Lokesh Gowda", "Ramesh Kumar"],
+        "confidence_explanation": "Mock explanation",
+        "is_wildlife_poaching_incident": True,
+        "suggested_confidence_score": 90.0,
+        "llm_classification_reason": "Tiger poaching.",
+    }
+    
+    # The article has Ramesh Kumar in NER/Regex format, and LLM finds Lokesh Gowda as well.
+    result = engine.analyze(
+        title="Forest department seized tiger skin in Karnataka",
+        summary="A suspect named Ramesh Kumar was arrested with tiger skins.",
+        full_content="Seized tiger skin from a smuggler in Karnataka. Ramesh Kumar confessed.",
+    )
+    
+    # Verify both suspects are combined and sanitized successfully.
+    assert "Ramesh Kumar" in result.involved_persons
+    assert "Lokesh Gowda" in result.involved_persons
+
+
+
 

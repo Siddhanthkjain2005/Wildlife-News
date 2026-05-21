@@ -3204,11 +3204,15 @@ class HybridIntelligenceEngine:
                 state, district, location = s_ext, d_ext, l_ext
         
         llm_suspects = llm_summary.get("extracted_suspects")
-        if isinstance(llm_suspects, list) and not involved_persons:
-            involved_persons = self._sanitize_involved_persons(
-                [str(p).strip() for p in llm_suspects if str(p).strip()],
-                limit=8,
-            )
+        if isinstance(llm_suspects, list):
+            combined_suspects = list(involved_persons)
+            seen_lower = {s.lower().strip() for s in combined_suspects if s.strip()}
+            for p in llm_suspects:
+                p_str = str(p).strip()
+                if p_str and p_str.lower() not in seen_lower:
+                    combined_suspects.append(p_str)
+                    seen_lower.add(p_str.lower())
+            involved_persons = self._sanitize_involved_persons(combined_suspects, limit=30)
 
         unknown_profile = self._extract_unknown_profile(
             source_text=source_text,
