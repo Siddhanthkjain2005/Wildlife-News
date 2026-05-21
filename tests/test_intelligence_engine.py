@@ -302,5 +302,39 @@ def test_intelligence_suspects_merging() -> None:
     assert "Lokesh Gowda" in result.involved_persons
 
 
+def test_intelligence_species_merging() -> None:
+    from unittest.mock import MagicMock
+    engine = HybridIntelligenceEngine()
+    
+    # Mock summarizer generate output to return a species not captured by the static rules dictionary
+    engine._summarizer = MagicMock()
+    engine._summarizer.generate.return_value = {
+        "summary": "Mock summary",
+        "key_facts": ["Mock fact 1"],
+        "smuggling_route": "Mock route",
+        "recommendation": "Mock recommendation",
+        "risk_factors": [],
+        "extracted_species": ["pangolin", "star tortoise"],
+        "extracted_location": "karnataka",
+        "extracted_suspects": [],
+        "confidence_explanation": "Mock explanation",
+        "is_wildlife_poaching_incident": True,
+        "suggested_confidence_score": 90.0,
+        "llm_classification_reason": "Pangolin smuggling.",
+    }
+    
+    # The article has 'star tortoise' which matches the keyword mapping, and LLM finds 'pangolin' as well.
+    result = engine.analyze(
+        title="Forest department seized star tortoise in Karnataka",
+        summary="A smuggler was arrested with star tortoises.",
+        full_content="Seized star tortoise in Karnataka. Smuggler also smuggled rare pangolin scale.",
+    )
+    
+    # Verify both species are combined successfully.
+    assert "star tortoise" in result.species
+    assert "pangolin" in result.species
+
+
+
 
 

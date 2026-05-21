@@ -143,7 +143,8 @@ class IntelligenceSummarizer:
             "8. 'protected_area_type': Name and type of national park or sanctuary if mentioned (e.g. 'Bandipur National Park', or 'None / Not Applicable').\n"
             "9. 'enforcement_authority': Agency enforcing action (e.g. 'State Forest Department', 'Wildlife Crime Control Bureau (WCCB)', 'Local Police', or 'Local Police / Forest Dept.').\n"
             "10. Keep summary to 2-3 sentences and key_facts to <=6 bullets.\n"
-            "11. 'extracted_suspects': Extract all involved persons, suspects, or perpetrators (e.g. poachers, smugglers, traders, buyers, or arrested individuals) mentioned by name in the article. Provide them as a JSON list of full names (e.g. ['Ramesh Kumar', 'Suresh Singh']). Do NOT extract names of forest officers, investigators, police officers, or department officials unless they are themselves accused of a crime."
+            "11. 'extracted_suspects': Extract all involved persons, suspects, or perpetrators (e.g. poachers, smugglers, traders, buyers, or arrested individuals) mentioned by name in the article. Provide them as a JSON list of full names (e.g. ['Ramesh Kumar', 'Suresh Singh']). Do NOT extract names of forest officers, investigators, police officers, or department officials unless they are themselves accused of a crime.\n"
+            "12. 'extracted_species': Extract all animal or plant species mentioned in the article that are victims of poaching, trafficking, seizure, or illegal trade. Provide them as a JSON list of lowercased common names (e.g. ['tiger', 'pangolin', 'red sanders']). Do NOT include generic terms like 'wildlife', 'animal', 'carcass', 'reptile', or 'bird'."
         )
 
         try:

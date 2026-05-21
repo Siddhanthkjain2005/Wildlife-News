@@ -3191,10 +3191,16 @@ class HybridIntelligenceEngine:
         enforcement_recommendation = str(llm_summary.get("recommendation") or enforcement_recommendation)
         confidence_explanation = str(llm_summary.get("confidence_explanation") or confidence_explanation)
 
-        # Post-Analysis Metadata Recovery (using LLM hints)
         llm_species = llm_summary.get("extracted_species")
-        if isinstance(llm_species, list) and not species:
-            species = [str(s).strip().lower() for s in llm_species if str(s).strip()]
+        if isinstance(llm_species, list):
+            combined_species = list(species)
+            seen_lower = {s.lower().strip() for s in combined_species if s.strip()}
+            for s in llm_species:
+                s_str = str(s).strip().lower()
+                if s_str and s_str not in seen_lower and s_str not in ("wildlife", "animal", "carcass", "reptile", "bird", "mammal"):
+                    combined_species.append(s_str)
+                    seen_lower.add(s_str)
+            species = combined_species
         
         llm_location = str(llm_summary.get("extracted_location") or "").strip()
         if llm_location and not (state or district):
