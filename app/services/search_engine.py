@@ -43,6 +43,16 @@ class SemanticSearchEngine:
             "source": item.source,
             "open_url": f"/open/{item.id}",
             "similarity": round(float(similarity), 4),
+            "wpa_schedule": getattr(item, "wpa_schedule", "") or "",
+            "wpa_section": getattr(item, "wpa_section", "") or "",
+            "wpa_offence_type": getattr(item, "wpa_offence_type", "") or "",
+            "wpa_penalty_class": getattr(item, "wpa_penalty_class", "") or "",
+            "protected_area_type": getattr(item, "protected_area_type", "") or "",
+            "enforcement_authority": getattr(item, "enforcement_authority", "") or "",
+            "review_status": getattr(item, "review_status", "pending") or "pending",
+            "reviewed_by": getattr(item, "reviewed_by", "") or "",
+            "review_notes": getattr(item, "review_notes", "") or "",
+            "reviewed_at": item.reviewed_at.isoformat() if getattr(item, "reviewed_at", None) else "",
         }
 
     def _load_candidates(self, db: Session, *, candidate_limit: int) -> list[NewsItem]:

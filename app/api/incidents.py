@@ -76,6 +76,16 @@ def get_news(
             "source_count": row.source_count,
             "report_count": row.report_count,
             "merged_sources": row.merged_sources,
+            "wpa_schedule": getattr(row, "wpa_schedule", "") or "",
+            "wpa_section": getattr(row, "wpa_section", "") or "",
+            "wpa_offence_type": getattr(row, "wpa_offence_type", "") or "",
+            "wpa_penalty_class": getattr(row, "wpa_penalty_class", "") or "",
+            "protected_area_type": getattr(row, "protected_area_type", "") or "",
+            "enforcement_authority": getattr(row, "enforcement_authority", "") or "",
+            "review_status": getattr(row, "review_status", "pending") or "pending",
+            "reviewed_by": getattr(row, "reviewed_by", "") or "",
+            "review_notes": getattr(row, "review_notes", "") or "",
+            "reviewed_at": row.reviewed_at.isoformat() if getattr(row, "reviewed_at", None) else "",
         }
         for row in rows
     ]
@@ -129,6 +139,16 @@ def live_incidents(
             "merged_sources": row.merged_sources,
             "url": row.url,
             "open_url": f"/open/{row.id}",
+            "wpa_schedule": getattr(row, "wpa_schedule", "") or "",
+            "wpa_section": getattr(row, "wpa_section", "") or "",
+            "wpa_offence_type": getattr(row, "wpa_offence_type", "") or "",
+            "wpa_penalty_class": getattr(row, "wpa_penalty_class", "") or "",
+            "protected_area_type": getattr(row, "protected_area_type", "") or "",
+            "enforcement_authority": getattr(row, "enforcement_authority", "") or "",
+            "review_status": getattr(row, "review_status", "pending") or "pending",
+            "reviewed_by": getattr(row, "reviewed_by", "") or "",
+            "review_notes": getattr(row, "review_notes", "") or "",
+            "reviewed_at": row.reviewed_at.isoformat() if getattr(row, "reviewed_at", None) else "",
         }
         for row in rows
     ]
@@ -192,6 +212,16 @@ def filter_news(
                 ),
                 "confidence_explanation": row.confidence_explanation or row.ai_reason,
                 "open_url": f"/open/{row.id}",
+                "wpa_schedule": getattr(row, "wpa_schedule", "") or "",
+                "wpa_section": getattr(row, "wpa_section", "") or "",
+                "wpa_offence_type": getattr(row, "wpa_offence_type", "") or "",
+                "wpa_penalty_class": getattr(row, "wpa_penalty_class", "") or "",
+                "protected_area_type": getattr(row, "protected_area_type", "") or "",
+                "enforcement_authority": getattr(row, "enforcement_authority", "") or "",
+                "review_status": getattr(row, "review_status", "pending") or "pending",
+                "reviewed_by": getattr(row, "reviewed_by", "") or "",
+                "review_notes": getattr(row, "review_notes", "") or "",
+                "reviewed_at": row.reviewed_at.isoformat() if getattr(row, "reviewed_at", None) else "",
             }
             for row in rows
         ],

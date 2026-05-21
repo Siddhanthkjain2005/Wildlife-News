@@ -1022,6 +1022,8 @@ def _to_export_payload(row: NewsItem) -> dict[str, object]:
         # Review status
         "review_status": getattr(row, 'review_status', 'pending') or "pending",
         "reviewed_by": getattr(row, 'reviewed_by', '') or "",
+        "reviewed_at": row.reviewed_at.isoformat() if getattr(row, 'reviewed_at', None) else "",
+        "review_notes": getattr(row, 'review_notes', '') or "",
     }
 
 
@@ -1839,6 +1841,8 @@ def review_incident(incident_id: int, request: Request, _admin=Depends(require_a
             "id": incident_id,
             "review_status": status,
             "reviewed_by": reviewer,
+            "review_notes": notes,
+            "reviewed_at": item.reviewed_at.isoformat() if item.reviewed_at else "",
         }
 
 
@@ -2091,7 +2095,12 @@ def get_reports(
             "wpa_section": getattr(news, 'wpa_section', '') or "",
             "wpa_offence_type": getattr(news, 'wpa_offence_type', '') or "",
             "wpa_penalty_class": getattr(news, 'wpa_penalty_class', '') or "",
+            "protected_area_type": getattr(news, 'protected_area_type', '') or "",
+            "enforcement_authority": getattr(news, 'enforcement_authority', '') or "",
             "review_status": getattr(news, 'review_status', 'pending') or "pending",
+            "reviewed_by": getattr(news, 'reviewed_by', '') or "",
+            "reviewed_at": news.reviewed_at.isoformat() if getattr(news, 'reviewed_at', None) else "",
+            "review_notes": getattr(news, 'review_notes', '') or "",
         }
         for report, news in rows
     ]
@@ -2131,6 +2140,9 @@ def get_report(id: int, db: Session = Depends(get_db)):
             "protected_area_type": getattr(news, 'protected_area_type', '') or "",
             "enforcement_authority": getattr(news, 'enforcement_authority', '') or "",
             "review_status": getattr(news, 'review_status', 'pending') or "pending",
+            "reviewed_by": getattr(news, 'reviewed_by', '') or "",
+            "reviewed_at": news.reviewed_at.isoformat() if getattr(news, 'reviewed_at', None) else "",
+            "review_notes": getattr(news, 'review_notes', '') or "",
         },
     }
 

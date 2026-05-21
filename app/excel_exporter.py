@@ -40,6 +40,16 @@ NEWS_HEADERS = [
     "url",
     "ai_reason",
     "last_seen_at",
+    "wpa_schedule",
+    "wpa_section",
+    "wpa_offence_type",
+    "wpa_penalty_class",
+    "protected_area_type",
+    "enforcement_authority",
+    "review_status",
+    "reviewed_by",
+    "reviewed_at",
+    "review_notes",
 ]
 
 LIVE_EVENT_HEADERS = [
@@ -141,6 +151,16 @@ def export_news_to_excel(db: Session) -> int:
                     item.url,
                     item.ai_reason,
                     item.last_seen_at.isoformat(sep=" ", timespec="seconds"),
+                    getattr(item, "wpa_schedule", "") or "",
+                    getattr(item, "wpa_section", "") or "",
+                    getattr(item, "wpa_offence_type", "") or "",
+                    getattr(item, "wpa_penalty_class", "") or "",
+                    getattr(item, "protected_area_type", "") or "",
+                    getattr(item, "enforcement_authority", "") or "",
+                    getattr(item, "review_status", "pending") or "pending",
+                    getattr(item, "reviewed_by", "") or "",
+                    item.reviewed_at.isoformat(sep=" ", timespec="seconds") if getattr(item, "reviewed_at", None) else "",
+                    getattr(item, "review_notes", "") or "",
                 ]
             )
 

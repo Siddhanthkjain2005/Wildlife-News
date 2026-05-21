@@ -29,6 +29,16 @@ def build_csv_bytes(rows: list[dict[str, object]]) -> bytes:
         "likely_smuggling_route",
         "action_recommendation",
         "confidence_explanation",
+        "wpa_schedule",
+        "wpa_section",
+        "wpa_offence_type",
+        "wpa_penalty_class",
+        "protected_area_type",
+        "enforcement_authority",
+        "review_status",
+        "reviewed_by",
+        "reviewed_at",
+        "review_notes",
     ]
     stream = StringIO()
     writer = csv.DictWriter(stream, fieldnames=fields)
@@ -113,6 +123,16 @@ def build_excel_bytes(rows: list[dict[str, object]], title: str = "Wildlife Inte
         "likely_smuggling_route",
         "action_recommendation",
         "confidence_explanation",
+        "wpa_schedule",
+        "wpa_section",
+        "wpa_offence_type",
+        "wpa_penalty_class",
+        "protected_area_type",
+        "enforcement_authority",
+        "review_status",
+        "reviewed_by",
+        "reviewed_at",
+        "review_notes",
     ]
     ws_incidents.append(incident_fields)
     for col_idx in range(1, len(incident_fields) + 1):
@@ -138,6 +158,16 @@ def build_excel_bytes(rows: list[dict[str, object]], title: str = "Wildlife Inte
         "M": 48,
         "N": 48,
         "O": 52,
+        "P": 18,
+        "Q": 20,
+        "R": 22,
+        "S": 18,
+        "T": 22,
+        "U": 24,
+        "V": 15,
+        "W": 18,
+        "X": 20,
+        "Y": 30,
     }
     for column, width in widths.items():
         ws_incidents.column_dimensions[column].width = width
@@ -190,6 +220,16 @@ def build_excel_incidents_reports_bytes(
         "likely_smuggling_route",
         "action_recommendation",
         "confidence_explanation",
+        "wpa_schedule",
+        "wpa_section",
+        "wpa_offence_type",
+        "wpa_penalty_class",
+        "protected_area_type",
+        "enforcement_authority",
+        "review_status",
+        "reviewed_by",
+        "reviewed_at",
+        "review_notes",
     ]
     ws_incidents.append(incident_fields)
     for col_idx in range(1, len(incident_fields) + 1):
@@ -215,6 +255,16 @@ def build_excel_incidents_reports_bytes(
         "M": 48,
         "N": 48,
         "O": 52,
+        "P": 18,
+        "Q": 20,
+        "R": 22,
+        "S": 18,
+        "T": 22,
+        "U": 24,
+        "V": 15,
+        "W": 18,
+        "X": 20,
+        "Y": 30,
     }.items():
         ws_incidents.column_dimensions[column].width = width
     for row in ws_incidents.iter_rows(min_row=2):

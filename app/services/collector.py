@@ -1703,6 +1703,49 @@ class NewsCollector:
         existing.source_count = max(existing.source_count, source_count)
         existing.report_count = max(1, existing.report_count) + 1
 
+        # Smart WPA fields merging to prevent "Not Classified" values
+        def is_better_wpa_val(existing_val: str | None, incoming_val: str | None) -> bool:
+            if not incoming_val:
+                return False
+            if not existing_val:
+                return True
+            ev = existing_val.lower().strip()
+            iv = incoming_val.lower().strip()
+            if ev in ("", "none", "not classified", "not found", "local police / forest dept.", "none / not applicable"):
+                if iv not in ("", "none", "not classified", "not found", "local police / forest dept.", "none / not applicable"):
+                    return True
+            return False
+
+        if is_better_wpa_val(existing.wpa_schedule, getattr(intel, 'wpa_schedule', '')):
+            existing.wpa_schedule = getattr(intel, 'wpa_schedule', '')[:30]
+        else:
+            existing.wpa_schedule = existing.wpa_schedule or getattr(intel, 'wpa_schedule', '')[:30]
+
+        if is_better_wpa_val(existing.wpa_section, getattr(intel, 'wpa_section', '')):
+            existing.wpa_section = getattr(intel, 'wpa_section', '')[:100]
+        else:
+            existing.wpa_section = existing.wpa_section or getattr(intel, 'wpa_section', '')[:100]
+
+        if is_better_wpa_val(existing.wpa_offence_type, getattr(intel, 'wpa_offence_type', '')):
+            existing.wpa_offence_type = getattr(intel, 'wpa_offence_type', '')[:80]
+        else:
+            existing.wpa_offence_type = existing.wpa_offence_type or getattr(intel, 'wpa_offence_type', '')[:80]
+
+        if is_better_wpa_val(existing.wpa_penalty_class, getattr(intel, 'wpa_penalty_class', '')):
+            existing.wpa_penalty_class = getattr(intel, 'wpa_penalty_class', '')[:30]
+        else:
+            existing.wpa_penalty_class = existing.wpa_penalty_class or getattr(intel, 'wpa_penalty_class', '')[:30]
+
+        if is_better_wpa_val(existing.protected_area_type, getattr(intel, 'protected_area_type', '')):
+            existing.protected_area_type = getattr(intel, 'protected_area_type', '')[:60]
+        else:
+            existing.protected_area_type = existing.protected_area_type or getattr(intel, 'protected_area_type', '')[:60]
+
+        if is_better_wpa_val(existing.enforcement_authority, getattr(intel, 'enforcement_authority', '')):
+            existing.enforcement_authority = getattr(intel, 'enforcement_authority', '')[:120]
+        else:
+            existing.enforcement_authority = existing.enforcement_authority or getattr(intel, 'enforcement_authority', '')[:120]
+
     def _fetch_batch_parallel(
         self,
         *,
