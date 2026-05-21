@@ -2591,6 +2591,7 @@ class HybridIntelligenceEngine:
         species: list[str],
         crime_type: str,
         text: str,
+        llm_wpa: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Classify incident per Wildlife Protection Act 1972."""
         lower = text.lower()
@@ -2713,10 +2714,6 @@ class HybridIntelligenceEngine:
                 wpa_section = "Section 9 / Section 49-B, Section 51"
                 offence_type = "Hunting / Possession / Illegal Trade"
 
-        # Upgrade section for Schedule I species
-        if best_schedule == "Schedule I" and wpa_section and "51(1A)" not in wpa_section:
-            wpa_section += ", Section 51(1A) — Schedule I species"
-
         # 3. Determine penalty class
         if best_schedule in ("Schedule I", "Schedule II"):
             penalty_class = "severe"  # 3-7 years imprisonment, min ₹10,000 fine
@@ -2757,6 +2754,75 @@ class HybridIntelligenceEngine:
                 if agency_key in lower:
                     enforcement = ENFORCEMENT_AGENCIES[agency_key]
                     break
+
+        # 6. Merge LLM-extracted WPA fields if provided to maximize LLM usage
+        if llm_wpa:
+            def is_valid_llm_str(val: str | None) -> bool:
+                if not val:
+                    return False
+                v = val.lower().strip()
+                return v not in ("", "none", "not applicable", "n/a", "not classified", "not found", "unknown", "null")
+
+            # Parse LLM schedule
+            llm_sch = ""
+            raw_sch = str(llm_wpa.get("wpa_schedule") or "").strip()
+            if is_valid_llm_str(raw_sch):
+                for sch_name in ["Schedule I", "Schedule II", "Schedule III", "Schedule IV", "Schedule V", "Schedule VI"]:
+                    if sch_name.lower() in raw_sch.lower() or raw_sch.lower() in sch_name.lower():
+                        llm_sch = sch_name
+                        break
+            
+            if llm_sch:
+                if not best_schedule:
+                    best_schedule = llm_sch
+                else:
+                    # Take higher priority schedule
+                    p_static = schedule_priority.get(best_schedule, 99)
+                    p_llm = schedule_priority.get(llm_sch, 99)
+                    if p_llm < p_static:
+                        best_schedule = llm_sch
+
+            # Merge WPA Section
+            llm_sec = str(llm_wpa.get("wpa_section") or "").strip()
+            if is_valid_llm_str(llm_sec):
+                wpa_section = llm_sec
+
+            # Merge WPA Offence Type
+            llm_off = str(llm_wpa.get("wpa_offence_type") or "").strip()
+            if is_valid_llm_str(llm_off):
+                offence_type = llm_off
+
+            # Merge Protected Area Type
+            llm_pa = str(llm_wpa.get("protected_area_type") or "").strip()
+            if is_valid_llm_str(llm_pa):
+                if not protected_area or protected_area.lower().strip() in ("none", "none / not applicable", "not applicable", "not classified"):
+                    protected_area = llm_pa
+
+            # Merge Enforcement Authority
+            llm_enf = str(llm_wpa.get("enforcement_authority") or "").strip()
+            if is_valid_llm_str(llm_enf):
+                if not enforcement or enforcement.lower().strip() in ("local police / forest dept.", "none", "unknown", "not classified"):
+                    enforcement = llm_enf
+
+        # Upgrade section for Schedule I species if upgraded/verified
+        if best_schedule == "Schedule I" and wpa_section and "51(1A)" not in wpa_section:
+            wpa_section += ", Section 51(1A) — Schedule I species"
+
+        # Re-determine final penalty class based on finalized best_schedule
+        if best_schedule in ("Schedule I", "Schedule II"):
+            penalty_class = "severe"
+        elif best_schedule in ("Schedule III", "Schedule IV"):
+            penalty_class = "moderate"
+        elif best_schedule in ("Schedule V",):
+            penalty_class = "minor"
+        elif best_schedule == "Schedule VI":
+            penalty_class = "moderate"
+        else:
+            penalty_class = ""
+            if llm_wpa:
+                llm_pc = str(llm_wpa.get("wpa_penalty_class") or "").strip().lower()
+                if llm_pc in ("severe", "moderate", "minor"):
+                    penalty_class = llm_pc
 
         return {
             "wpa_schedule": best_schedule,
@@ -3334,7 +3400,20 @@ class HybridIntelligenceEngine:
             reason += f" | {llm_verdict}"
 
         # WPA 1972 classification
-        wpa = self._extract_wpa_classification(species=species, crime_type=crime_type, text=text)
+        llm_wpa_data = {
+            "wpa_schedule": llm_summary.get("wpa_schedule"),
+            "wpa_section": llm_summary.get("wpa_section"),
+            "wpa_offence_type": llm_summary.get("wpa_offence_type"),
+            "wpa_penalty_class": llm_summary.get("wpa_penalty_class"),
+            "protected_area_type": llm_summary.get("protected_area_type"),
+            "enforcement_authority": llm_summary.get("enforcement_authority"),
+        }
+        wpa = self._extract_wpa_classification(
+            species=species,
+            crime_type=crime_type,
+            text=text,
+            llm_wpa=llm_wpa_data,
+        )
 
         return IntelligenceResult(
             is_poaching=is_poaching,

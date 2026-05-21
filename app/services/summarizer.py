@@ -45,6 +45,12 @@ class IntelligenceSummarizer:
             "is_wildlife_poaching_incident": None,
             "suggested_confidence_score": None,
             "llm_classification_reason": "",
+            "wpa_schedule": None,
+            "wpa_section": "",
+            "wpa_offence_type": "",
+            "wpa_penalty_class": "",
+            "protected_area_type": "",
+            "enforcement_authority": "",
         }
 
     def _get_llm(self):
@@ -123,13 +129,20 @@ class IntelligenceSummarizer:
             "Return STRICT JSON with keys: "
             "is_wildlife_poaching_incident, suggested_confidence_score, llm_classification_reason, "
             "summary, key_facts, smuggling_route, recommendation, risk_factors, "
-            "extracted_species, extracted_location, extracted_suspects, confidence_explanation.\n\n"
+            "extracted_species, extracted_location, extracted_suspects, confidence_explanation, "
+            "wpa_schedule, wpa_section, wpa_offence_type, wpa_penalty_class, protected_area_type, enforcement_authority.\n\n"
             f"Article:\n{article_text[:4500]}\n\n"
             "Guidelines:\n"
             "1. 'is_wildlife_poaching_incident': Set to true only if this article describes a real, specific event of poaching, hunting, animal cruelty, smuggling, seizures, or illegal trade of wildlife parts in India. Set to false for general policy announcements, tourism safari updates, conservation successes, zoo updates, or opinions.\n"
             "2. 'suggested_confidence_score': Provide a rating from 0 to 100 representing how verified/factual the report is.\n"
             "3. 'llm_classification_reason': Brief sentence explaining why it is or is not an active wildlife crime incident.\n"
-            "4. Keep summary to 2-3 sentences and key_facts to <=6 bullets."
+            "4. 'wpa_schedule': Extracted Indian Wildlife Protection Act 1972 schedule (one of: 'Schedule I', 'Schedule II', 'Schedule III', 'Schedule IV', 'Schedule V', 'Schedule VI', or 'Not Classified').\n"
+            "5. 'wpa_section': Sections of the Wildlife Protection Act applicable (e.g. 'Section 9', 'Section 51', 'Section 51(1A)', 'Section 39', 'Section 49-B').\n"
+            "6. 'wpa_offence_type': Type of WPA offence (e.g. 'Hunting', 'Possession', 'Illegal Trade', 'Plant Trade', etc.).\n"
+            "7. 'wpa_penalty_class': Penalty severity (one of: 'severe', 'moderate', 'minor', or '').\n"
+            "8. 'protected_area_type': Name and type of national park or sanctuary if mentioned (e.g. 'Bandipur National Park', or 'None / Not Applicable').\n"
+            "9. 'enforcement_authority': Agency enforcing action (e.g. 'State Forest Department', 'Wildlife Crime Control Bureau (WCCB)', 'Local Police', or 'Local Police / Forest Dept.').\n"
+            "10. Keep summary to 2-3 sentences and key_facts to <=6 bullets."
         )
 
         try:
@@ -190,6 +203,12 @@ class IntelligenceSummarizer:
             "is_wildlife_poaching_incident": is_incident,
             "suggested_confidence_score": suggested_score,
             "llm_classification_reason": classification_reason,
+            "wpa_schedule": str(parsed.get("wpa_schedule") or "").strip(),
+            "wpa_section": str(parsed.get("wpa_section") or "").strip(),
+            "wpa_offence_type": str(parsed.get("wpa_offence_type") or "").strip(),
+            "wpa_penalty_class": str(parsed.get("wpa_penalty_class") or "").strip(),
+            "protected_area_type": str(parsed.get("protected_area_type") or "").strip(),
+            "enforcement_authority": str(parsed.get("enforcement_authority") or "").strip(),
         }
 
 

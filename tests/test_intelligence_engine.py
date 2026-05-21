@@ -229,3 +229,44 @@ def test_intelligence_llm_semantic_boost() -> None:
     assert "Explicit tiger skin seizure" in result.reason
 
 
+def test_intelligence_wpa_llm_override() -> None:
+    from unittest.mock import MagicMock
+    engine = HybridIntelligenceEngine()
+    
+    engine._summarizer = MagicMock()
+    engine._summarizer.generate.return_value = {
+        "summary": "Mock summary of rare animal incident.",
+        "key_facts": ["Mock fact 1"],
+        "smuggling_route": "Mock route",
+        "recommendation": "Mock recommendation",
+        "risk_factors": [],
+        "extracted_species": ["unknown-rare-species"],
+        "extracted_location": "karnataka",
+        "extracted_suspects": [],
+        "confidence_explanation": "Mock explanation",
+        "is_wildlife_poaching_incident": True,
+        "suggested_confidence_score": 80.0,
+        "llm_classification_reason": "Mock poaching incident.",
+        "wpa_schedule": "Schedule I",
+        "wpa_section": "Section 9, Section 51(1A)",
+        "wpa_offence_type": "Trafficking of rare species",
+        "wpa_penalty_class": "severe",
+        "protected_area_type": "Nagarhole National Park",
+        "enforcement_authority": "Wildlife Crime Control Bureau (WCCB)",
+    }
+    
+    result = engine.analyze(
+        title="Rare animal trafficking reported",
+        summary="A rare species was seized.",
+        full_content="An unidentified animal was seized at Karnataka border.",
+    )
+    
+    assert result.wpa_schedule == "Schedule I"
+    assert "Section 51(1A)" in result.wpa_section
+    assert result.wpa_offence_type == "Trafficking of rare species"
+    assert result.wpa_penalty_class == "severe"
+    assert result.protected_area_type == "Nagarhole National Park"
+    assert result.enforcement_authority == "Wildlife Crime Control Bureau (WCCB)"
+
+
+
