@@ -2208,7 +2208,7 @@ async def public_upload_db(request: Request, file: UploadFile = File(...)):
     backup_path = None
     if is_postgres:
         # Write to a temporary file
-        temp_dir = Path("./data/temp")
+        temp_dir = Path(settings.backups_dir).parent / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
         temp_db_path = temp_dir / f"uploaded_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db"
         temp_db_path.write_bytes(content)

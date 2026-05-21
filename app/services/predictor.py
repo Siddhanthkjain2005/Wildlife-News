@@ -26,13 +26,14 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.intelligence import DistrictStat, Entity, SpeciesStat
 from app.models.news import NewsItem
 from app.repositories.news_filters import apply_strict_incident_filters, is_strict_incident_record
 
 logger = logging.getLogger("app.predictor")
 
-_MODEL_DIR = Path("./data/ml_models")
+_MODEL_DIR = Path(settings.backups_dir).parent / "ml_models"
 _MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 _model_lock = Lock()

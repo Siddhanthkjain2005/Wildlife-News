@@ -136,7 +136,21 @@ class Settings(BaseSettings):
     )
 
 
+import os
+
 settings = Settings()
 if settings.database_url and settings.database_url.startswith("postgres://"):
     settings.database_url = settings.database_url.replace("postgres://", "postgresql://", 1)
+
+# Post-process settings for read-only Docker/container environments
+if os.path.exists("/data") and os.access("/data", os.W_OK):
+    # If the user hasn't overridden the default relative sqlite DB path, redirect to the writable /data volume
+    if settings.database_url == "sqlite:///./data/news.db":
+        settings.database_url = "sqlite:////data/news.db"
+    # Same for excel export and backups
+    if settings.excel_path == "./data/wildlife_poaching_news.xlsx":
+        settings.excel_path = "/data/wildlife_poaching_news.xlsx"
+    if settings.backups_dir == "./data/backups":
+        settings.backups_dir = "/data/backups"
+
 
