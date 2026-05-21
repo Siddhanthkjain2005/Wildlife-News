@@ -57,6 +57,7 @@ class IntelligenceSummarizer:
         if self._llm is not None:
             return self._llm
         if not self.enabled or not self.model_path.strip():
+            logger.info("LLM summarizer DISABLED (enabled=%s, model_path=%r)", self.enabled, self.model_path)
             self._llm = False
             return self._llm
 
@@ -64,16 +65,27 @@ class IntelligenceSummarizer:
             if self._llm is not None:
                 return self._llm
             try:
+                import os
+                if not os.path.isfile(self.model_path.strip()):
+                    logger.error("LLM model file NOT FOUND at: %s", self.model_path.strip())
+                    self._llm = False
+                    return self._llm
+
                 from llama_cpp import Llama
 
+                logger.info("Loading LLM model from: %s", self.model_path.strip())
                 self._llm = Llama(
                     model_path=self.model_path.strip(),
                     n_ctx=4096,
                     n_threads=4,
                     verbose=False,
                 )
+                logger.info("✅ LLM model loaded successfully!")
+            except ImportError:
+                logger.error("❌ llama-cpp-python is NOT installed! pip install llama-cpp-python>=0.2.90")
+                self._llm = False
             except Exception as err:  # noqa: BLE001
-                logger.warning("LLM summarizer unavailable, using fallback summaries: %s", err)
+                logger.error("❌ LLM summarizer failed to load: %s", err)
                 self._llm = False
             return self._llm
 

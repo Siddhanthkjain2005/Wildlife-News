@@ -15,10 +15,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system dependencies for Postgres and others
+# Install system dependencies for Postgres, llama-cpp-python build, and others
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
+    g++ \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
@@ -35,7 +37,7 @@ COPY scripts /app/scripts
 RUN mkdir -p /app/app/static/react-build
 COPY --from=frontend-builder /build/dist /app/app/static/react-build
 
-RUN mkdir -p /data /app/logs
+RUN mkdir -p /data /app/logs /app/data/models
 
 # Create non-root user for production security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app /data /app/logs
