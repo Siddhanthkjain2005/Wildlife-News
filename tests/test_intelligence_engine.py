@@ -163,3 +163,69 @@ def test_extract_wpa_classification_robust_matching() -> None:
     assert res4["wpa_schedule"] == "Schedule II"
     assert res4["wpa_penalty_class"] == "severe"
 
+
+def test_intelligence_llm_semantic_veto() -> None:
+    from unittest.mock import MagicMock
+    engine = HybridIntelligenceEngine()
+    
+    # Mock summarizer generate output to veto the incident
+    engine._summarizer = MagicMock()
+    engine._summarizer.generate.return_value = {
+        "summary": "Mock summary",
+        "key_facts": ["Mock fact 1"],
+        "smuggling_route": "Mock route",
+        "recommendation": "Mock recommendation",
+        "risk_factors": [],
+        "extracted_species": ["tiger"],
+        "extracted_location": "karnataka",
+        "extracted_suspects": [],
+        "confidence_explanation": "Mock explanation",
+        "is_wildlife_poaching_incident": False,
+        "suggested_confidence_score": 10.0,
+        "llm_classification_reason": "Just a general discussion about Bandipur national park.",
+    }
+    
+    result = engine.analyze(
+        title="Tiger conservation discussions in Bandipur",
+        summary="Officials hold a meeting in Bandipur to discuss tiger conservation efforts.",
+        full_content="Bandipur forest department hosted a workshop on conservation.",
+    )
+    
+    assert result.is_poaching is False
+    assert "LLM_VETO" in result.reason
+    assert "Just a general discussion" in result.reason
+
+
+def test_intelligence_llm_semantic_boost() -> None:
+    from unittest.mock import MagicMock
+    engine = HybridIntelligenceEngine()
+    
+    # Mock summarizer generate output to confirm/boost the incident
+    engine._summarizer = MagicMock()
+    engine._summarizer.generate.return_value = {
+        "summary": "Mock summary of tiger poaching arrest.",
+        "key_facts": ["Mock fact 1"],
+        "smuggling_route": "Mock route",
+        "recommendation": "Mock recommendation",
+        "risk_factors": [],
+        "extracted_species": ["tiger"],
+        "extracted_location": "karnataka",
+        "extracted_suspects": ["Ravi"],
+        "confidence_explanation": "Mock explanation",
+        "is_wildlife_poaching_incident": True,
+        "suggested_confidence_score": 95.0,
+        "llm_classification_reason": "Explicit tiger skin seizure and arrest in Karnataka.",
+    }
+    
+    result = engine.analyze(
+        title="Forest department seized tiger skin in Karnataka",
+        summary="A suspect named Ravi was arrested with tiger skins.",
+        full_content="Seized tiger skin from a smuggler in Karnataka.",
+    )
+    
+    assert result.is_poaching is True
+    assert result.confidence >= 0.95
+    assert "LLM_CONFIRM" in result.reason
+    assert "Explicit tiger skin seizure" in result.reason
+
+

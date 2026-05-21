@@ -142,15 +142,21 @@ settings = Settings()
 if settings.database_url and settings.database_url.startswith("postgres://"):
     settings.database_url = settings.database_url.replace("postgres://", "postgresql://", 1)
 
-# Post-process settings for read-only Docker/container environments
-if os.path.exists("/data") and os.access("/data", os.W_OK):
-    # If the user hasn't overridden the default relative sqlite DB path, redirect to the writable /data volume
-    if settings.database_url == "sqlite:///./data/news.db":
-        settings.database_url = "sqlite:////data/news.db"
+# Post-process settings for read-only Docker/container environments or persistent volumes
+persistent_dir = None
+if os.path.exists("/app/data") and os.access("/app/data", os.W_OK):
+    persistent_dir = "/app/data"
+elif os.path.exists("/data") and os.access("/data", os.W_OK):
+    persistent_dir = "/data"
+
+if persistent_dir:
+    # If the user hasn't overridden the default relative sqlite DB path, redirect to the persistent volume
+    if settings.database_url in ("sqlite:///./data/news.db", "sqlite:///data/news.db"):
+        settings.database_url = f"sqlite:///{persistent_dir}/news.db"
     # Same for excel export and backups
-    if settings.excel_path == "./data/wildlife_poaching_news.xlsx":
-        settings.excel_path = "/data/wildlife_poaching_news.xlsx"
-    if settings.backups_dir == "./data/backups":
-        settings.backups_dir = "/data/backups"
+    if settings.excel_path in ("./data/wildlife_poaching_news.xlsx", "data/wildlife_poaching_news.xlsx"):
+        settings.excel_path = f"{persistent_dir}/wildlife_poaching_news.xlsx"
+    if settings.backups_dir in ("./data/backups", "data/backups"):
+        settings.backups_dir = f"{persistent_dir}/backups"
 
 

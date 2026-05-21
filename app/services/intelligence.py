@@ -3222,6 +3222,26 @@ class HybridIntelligenceEngine:
             is_poaching = False
             confidence = max(0.0, confidence * 0.5)
 
+        # ---------- LLM Intelligent Veto & Boost Integration ----------
+        llm_is_poaching = llm_summary.get("is_wildlife_poaching_incident")
+        llm_suggested_score = llm_summary.get("suggested_confidence_score")
+        llm_reason = llm_summary.get("llm_classification_reason")
+        llm_verdict = ""
+
+        if llm_is_poaching is not None:
+            if not llm_is_poaching:
+                # LLM determined this is NOT a wildlife poaching incident (Semantic Veto)
+                is_poaching = False
+                confidence = max(0.0, confidence * 0.3)
+                llm_verdict = f"LLM_VETO: {llm_reason or 'Not a poaching incident'}"
+            else:
+                # LLM confirmed this IS a wildlife poaching incident
+                is_poaching = True
+                if llm_suggested_score is not None:
+                    # Incorporate the LLM's suggested confidence
+                    confidence = max(confidence, float(llm_suggested_score) / 100.0)
+                llm_verdict = f"LLM_CONFIRM: {llm_reason or 'Confirmed poaching incident'}"
+
         # ---------- Hard Veto Gate (Final Enforcement) ----------
         for pattern in HARD_VETO_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE) or re.search(pattern, title or "", re.IGNORECASE):
@@ -3310,6 +3330,8 @@ class HybridIntelligenceEngine:
             f"not_wildlife={not_wildlife_prob:.2f}, unknown_ratio={float(unknown_profile.get('unknown_ratio') or 0.0):.2f}, "
             f"animal_related={int(self._is_animal_related_incident(crime_type=crime_type, species=species, operational_details=operational_details))}"
         )
+        if llm_verdict:
+            reason += f" | {llm_verdict}"
 
         # WPA 1972 classification
         wpa = self._extract_wpa_classification(species=species, crime_type=crime_type, text=text)

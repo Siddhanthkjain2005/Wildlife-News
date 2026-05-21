@@ -39,7 +39,7 @@ RUN mkdir -p /data /app/logs
 
 # Create non-root user for production security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app /data /app/logs
-USER appuser
+# USER appuser
 
 EXPOSE 8000
 

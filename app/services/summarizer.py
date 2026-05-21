@@ -42,6 +42,9 @@ class IntelligenceSummarizer:
             "recommendation": default_recommendation,
             "risk_factors": [],
             "confidence_explanation": default_confidence_explanation,
+            "is_wildlife_poaching_incident": None,
+            "suggested_confidence_score": None,
+            "llm_classification_reason": "",
         }
 
     def _get_llm(self):
@@ -116,16 +119,17 @@ class IntelligenceSummarizer:
             return fallback
 
         prompt = (
-            "You are a wildlife crime intelligence analyst. "
-            "Return STRICT JSON with keys: summary, key_facts, smuggling_route, recommendation, risk_factors, extracted_species, extracted_location, extracted_suspects, confidence_explanation.\n\n"
+            "You are a wildlife crime intelligence analyst for the Government of India. "
+            "Return STRICT JSON with keys: "
+            "is_wildlife_poaching_incident, suggested_confidence_score, llm_classification_reason, "
+            "summary, key_facts, smuggling_route, recommendation, risk_factors, "
+            "extracted_species, extracted_location, extracted_suspects, confidence_explanation.\n\n"
             f"Article:\n{article_text[:4500]}\n\n"
-            "Extracted facts:\n"
-            f"- Crime type: {crime_type}\n"
-            f"- Species: {', '.join(species) if species else 'unknown'}\n"
-            f"- Location: {district or 'unknown'}, {state or 'unknown'}\n"
-            f"- Suspects: {', '.join(suspects) if suspects else 'unknown'}\n"
-            "If any facts are 'unknown', try to find them in the article text. "
-            "Keep summary to 2-3 sentences and key_facts to <=6 bullets."
+            "Guidelines:\n"
+            "1. 'is_wildlife_poaching_incident': Set to true only if this article describes a real, specific event of poaching, hunting, animal cruelty, smuggling, seizures, or illegal trade of wildlife parts in India. Set to false for general policy announcements, tourism safari updates, conservation successes, zoo updates, or opinions.\n"
+            "2. 'suggested_confidence_score': Provide a rating from 0 to 100 representing how verified/factual the report is.\n"
+            "3. 'llm_classification_reason': Brief sentence explaining why it is or is not an active wildlife crime incident.\n"
+            "4. Keep summary to 2-3 sentences and key_facts to <=6 bullets."
         )
 
         try:
@@ -157,6 +161,20 @@ class IntelligenceSummarizer:
         if risk_points:
             points.extend([f"Risk factor: {item}" for item in risk_points[:3]])
 
+        # Parse new validation keys
+        is_incident = parsed.get("is_wildlife_poaching_incident")
+        if is_incident is not None:
+            is_incident = bool(is_incident)
+            
+        suggested_score = parsed.get("suggested_confidence_score")
+        if suggested_score is not None:
+            try:
+                suggested_score = float(suggested_score)
+            except (ValueError, TypeError):
+                suggested_score = None
+                
+        classification_reason = str(parsed.get("llm_classification_reason") or "").strip()
+
         return {
             "summary": summary or fallback["summary"],
             "key_facts": points[:8],
@@ -169,7 +187,11 @@ class IntelligenceSummarizer:
             "confidence_explanation": str(
                 parsed.get("confidence_explanation") or fallback["confidence_explanation"]
             )[:500],
+            "is_wildlife_poaching_incident": is_incident,
+            "suggested_confidence_score": suggested_score,
+            "llm_classification_reason": classification_reason,
         }
+
 
 
 @lru_cache
