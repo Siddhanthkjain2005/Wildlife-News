@@ -138,6 +138,19 @@ class IntelligenceSummarizer:
         if llm is False:
             return fallback
 
+        # Dynamic truncation: fit article within the 4096-token context window.
+        # Prompt instructions ≈ 750 tokens, max_tokens (output) = 320,
+        # leaving ~3026 tokens for article text. At ~3.5 chars/token → ~10500 chars.
+        # Use conservative limit of 2800 chars to avoid overflow.
+        n_ctx = 4096
+        prompt_overhead_tokens = 750  # instructions + JSON keys
+        available_for_article = n_ctx - prompt_overhead_tokens - self.max_tokens
+        # Conservative: ~3.5 chars per token for English text
+        max_article_chars = max(500, int(available_for_article * 3.5))
+        truncated_article = article_text[:max_article_chars]
+        if len(article_text) > max_article_chars:
+            truncated_article += "\n[...truncated]"
+
         prompt = (
             "You are a wildlife crime intelligence analyst for the Government of India. "
             "Return STRICT JSON with keys: "
@@ -145,7 +158,7 @@ class IntelligenceSummarizer:
             "summary, key_facts, smuggling_route, recommendation, risk_factors, "
             "extracted_species, extracted_location, extracted_suspects, confidence_explanation, "
             "wpa_schedule, wpa_section, wpa_offence_type, wpa_penalty_class, protected_area_type, enforcement_authority.\n\n"
-            f"Article:\n{article_text[:4500]}\n\n"
+            f"Article:\n{truncated_article}\n\n"
             "Guidelines:\n"
             "1. 'is_wildlife_poaching_incident': Set to true only if this article describes a real, specific event of poaching, hunting, animal cruelty, smuggling, seizures, or illegal trade of wildlife parts in India. Set to false for general policy announcements, tourism safari updates, conservation successes, zoo updates, or opinions.\n"
             "2. 'suggested_confidence_score': Provide a rating from 0 to 100 representing how verified/factual the report is.\n"

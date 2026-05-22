@@ -80,15 +80,43 @@ def run_backfill():
         print("     LLM_SUMMARY_ENABLED=true")
         print("     LLM_SUMMARY_MODEL_PATH=/app/data/models/Phi-3-mini-4k-instruct-q4.gguf\n")
 
+    # Check for --force flag
+    force_all = "--force" in sys.argv
+
     engine = HybridIntelligenceEngine()
     db = SessionLocal()
 
     try:
         items = db.query(NewsItem).order_by(NewsItem.id.asc()).all()
         total = len(items)
-        print(f"📊 Found {total} articles to process.\n")
+
+        # Filter to only items needing WPA backfill (unless --force)
+        if not force_all:
+            needs_work = []
+            already_done = 0
+            for item in items:
+                wpa_sch = (getattr(item, "wpa_schedule", "") or "").strip()
+                if wpa_sch and wpa_sch.lower() not in ("", "not classified"):
+                    already_done += 1
+                else:
+                    needs_work.append(item)
+            if already_done > 0:
+                print(f"⏭️  Skipping {already_done} articles that already have WPA schedules.")
+                print(f"   (Use --force to re-process all articles)\n")
+            items = needs_work
+
+        to_process = len(items)
+        print(f"📊 Found {to_process} articles to process (of {total} total).\n")
+
+        if to_process == 0:
+            print("✅ All articles already have WPA data. Nothing to do!")
+            print("   Use --force flag to re-process everything.\n")
+            return
 
         updated = 0
+        wpa_added = 0
+        species_changed_count = 0
+        persons_changed_count = 0
         errors = 0
         start_time = time.time()
 
@@ -129,6 +157,15 @@ def run_backfill():
 
                 old_species = item.species or ""
                 old_persons = item.involved_persons or ""
+                old_wpa = (getattr(item, "wpa_schedule", "") or "").strip()
+
+                # New WPA values
+                new_wpa_schedule = str(getattr(intel, "wpa_schedule", "") or "")[:30]
+                new_wpa_section = str(getattr(intel, "wpa_section", "") or "")[:100]
+                new_wpa_offence = str(getattr(intel, "wpa_offence_type", "") or "")[:80]
+                new_wpa_penalty = str(getattr(intel, "wpa_penalty_class", "") or "")[:30]
+                new_protected = str(getattr(intel, "protected_area_type", "") or "")[:60]
+                new_enforcement = str(getattr(intel, "enforcement_authority", "") or "")[:120]
 
                 # Update ALL fields
                 item.ai_score = float(intel.confidence)
@@ -150,12 +187,12 @@ def run_backfill():
                 item.likely_smuggling_route = str(intel.likely_smuggling_route or "")[:500]
                 item.enforcement_recommendation = str(intel.enforcement_recommendation or "")[:500]
                 item.confidence_explanation = str(intel.confidence_explanation or "")[:500]
-                item.wpa_schedule = str(getattr(intel, "wpa_schedule", "") or "")[:30]
-                item.wpa_section = str(getattr(intel, "wpa_section", "") or "")[:100]
-                item.wpa_offence_type = str(getattr(intel, "wpa_offence_type", "") or "")[:80]
-                item.wpa_penalty_class = str(getattr(intel, "wpa_penalty_class", "") or "")[:30]
-                item.protected_area_type = str(getattr(intel, "protected_area_type", "") or "")[:60]
-                item.enforcement_authority = str(getattr(intel, "enforcement_authority", "") or "")[:120]
+                item.wpa_schedule = new_wpa_schedule
+                item.wpa_section = new_wpa_section
+                item.wpa_offence_type = new_wpa_offence
+                item.wpa_penalty_class = new_wpa_penalty
+                item.protected_area_type = new_protected
+                item.enforcement_authority = new_enforcement
 
                 # Upsert the report
                 try:
@@ -166,21 +203,27 @@ def run_backfill():
                 db.commit()
                 updated += 1
 
-                # Print progress with change highlights
+                # Print progress with change highlights (now tracks WPA too!)
                 species_changed = old_species.strip() != species_text.strip()
                 persons_changed = old_persons.strip() != persons_text.strip()
+                wpa_changed = old_wpa != new_wpa_schedule.strip()
                 markers = []
                 if species_changed:
                     markers.append(f"species: '{old_species[:40]}' → '{species_text[:40]}'")
+                    species_changed_count += 1
                 if persons_changed:
                     markers.append(f"persons: '{old_persons[:40]}' → '{persons_text[:40]}'")
+                    persons_changed_count += 1
+                if wpa_changed and new_wpa_schedule.strip():
+                    markers.append(f"WPA: '{old_wpa or 'empty'}' → '{new_wpa_schedule}'")
+                    wpa_added += 1
 
                 change_str = " | ".join(markers) if markers else "no change"
-                print(f"  [{idx}/{total}] ID={item.id} ✅ {change_str}")
+                print(f"  [{idx}/{to_process}] ID={item.id} ✅ {change_str}")
 
             except Exception as err:
                 errors += 1
-                print(f"  [{idx}/{total}] ID={item.id} ❌ Error: {err}")
+                print(f"  [{idx}/{to_process}] ID={item.id} ❌ Error: {err}")
                 try:
                     db.rollback()
                 except Exception:
@@ -189,8 +232,11 @@ def run_backfill():
         elapsed = time.time() - start_time
         print(f"\n{'='*60}")
         print(f"✅ Backfill complete in {elapsed:.1f}s")
-        print(f"   Updated: {updated}/{total}")
-        print(f"   Errors:  {errors}")
+        print(f"   Processed:       {updated}/{to_process}")
+        print(f"   WPA added:       {wpa_added}")
+        print(f"   Species changed: {species_changed_count}")
+        print(f"   Persons changed: {persons_changed_count}")
+        print(f"   Errors:          {errors}")
         print(f"{'='*60}\n")
 
     finally:
