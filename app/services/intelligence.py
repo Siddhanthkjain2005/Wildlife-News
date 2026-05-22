@@ -3196,107 +3196,41 @@ class HybridIntelligenceEngine:
         confidence_explanation = str(llm_summary.get("confidence_explanation") or confidence_explanation)
 
         llm_species = llm_summary.get("extracted_species")
-        if isinstance(llm_species, list) and llm_species:
-            # ---- LLM-authoritative species merge ----
-            # The LLM is better at contextual understanding than regex rules.
-            # When the LLM returns species, use them as the primary source.
-            # However, validate LLM species against our known species taxonomy
-            # and also keep any rule-based species that the LLM might have missed.
+        if isinstance(llm_species, list):
+            # ---- LLM-authoritative species extraction ----
+            # The LLM is the absolute authority for contextual understanding.
+            # If the LLM successfully returned a list of species, we use it, 
+            # filtering out generic terms, and do NOT fallback to rule-based species
+            # unless the LLM returned nothing or failed to run.
             generic_terms = {"wildlife", "animal", "carcass", "reptile", "bird", "mammal",
                              "fish", "insect", "snake", "creature", "fauna", "flora",
                              "species", "organism", "predator", "prey", "livestock"}
-            # Normalize LLM species
             llm_valid = []
             for s in llm_species:
                 s_str = str(s).strip().lower()
                 if s_str and s_str not in generic_terms and len(s_str) >= 2:
                     llm_valid.append(s_str)
+            species = llm_valid
 
-            if llm_valid:
-                # Start with LLM species as primary (they have better contextual accuracy)
-                merged = list(llm_valid)
-                seen = {s.lower() for s in merged}
-                # Add rule-based species only if they are validated in SPECIES_KEYWORDS
-                # and NOT already covered by LLM. This recovers any species the LLM
-                # may have missed while removing rule-based false positives.
-                for rs in species:
-                    rs_lower = rs.lower().strip()
-                    if rs_lower not in seen:
-                        # Only keep rule-based species if the species category name
-                        # itself (e.g., "tiger", "leopard") appears literally in text,
-                        # or the LLM also detected something in the same category
-                        if rs_lower in SPECIES_KEYWORDS:
-                            # Verify this rule-based category has a genuine keyword match
-                            # in the article text (not a coincidental substring match)
-                            kw_set = SPECIES_KEYWORDS[rs_lower]
-                            has_strong_match = False
-                            for kw in kw_set:
-                                kw_l = kw.lower().strip()
-                                if kw_l == rs_lower:
-                                    # Self-match — only count if found with word boundary
-                                    if re.search(rf"(?<![a-zA-Z0-9]){re.escape(kw_l)}(?![a-zA-Z0-9])", text):
-                                        has_strong_match = True
-                                        break
-                                elif len(kw_l) >= 4:
-                                    # Multi-char keyword — check with word boundary
-                                    if re.search(rf"(?<![a-zA-Z0-9]){re.escape(kw_l)}(?![a-zA-Z0-9])", text):
-                                        has_strong_match = True
-                                        break
-                            if has_strong_match:
-                                merged.append(rs_lower)
-                                seen.add(rs_lower)
-                species = merged
-            else:
-                # LLM returned species but all were generic/invalid — keep rule-based
-                pass
-        elif isinstance(llm_species, list):
-            # LLM explicitly returned empty list — trust it if rule-based is weak
-            # (fewer than 2 species from rules suggests low confidence)
-            pass
-        # else: LLM didn't return species at all (failure/fallback) — keep rule-based
-        
         llm_location = str(llm_summary.get("extracted_location") or "").strip()
         if llm_location and not (state or district):
             # Attempt to re-extract location from the LLM's suggested text
             s_ext, d_ext, l_ext = self._extract_location(llm_location.lower())
             if s_ext or d_ext:
                 state, district, location = s_ext, d_ext, l_ext
-        
+
         llm_suspects = llm_summary.get("extracted_suspects")
-        if isinstance(llm_suspects, list) and llm_suspects:
-            # ---- LLM-authoritative persons merge ----
-            # The LLM is better at distinguishing suspects from officers/officials.
-            # Use LLM suspects as primary, supplement with high-confidence rule/NER hits.
+        if isinstance(llm_suspects, list):
+            # ---- LLM-authoritative suspects extraction ----
+            # Use LLM suspects as the primary and exclusive list when available,
+            # sanitizing the names and skipping rule/NER candidates to avoid false positives
+            # (like forest officers or local police names).
             llm_valid_suspects = []
             for p in llm_suspects:
                 p_str = str(p).strip()
                 if p_str and len(p_str) >= 2:
                     llm_valid_suspects.append(p_str)
-
-            if llm_valid_suspects:
-                # Start with LLM suspects (better contextual accuracy)
-                merged_persons = list(llm_valid_suspects)
-                seen_lower = {p.lower().strip() for p in merged_persons}
-                # Add rule/NER persons only if they are NOT already covered
-                for existing_p in involved_persons:
-                    ep_lower = existing_p.lower().strip()
-                    if ep_lower not in seen_lower:
-                        # Check if the LLM person is a substring match (same person, different form)
-                        is_dup = any(
-                            ep_lower in llm_p.lower() or llm_p.lower() in ep_lower
-                            for llm_p in llm_valid_suspects
-                        )
-                        if not is_dup:
-                            merged_persons.append(existing_p)
-                            seen_lower.add(ep_lower)
-                involved_persons = self._sanitize_involved_persons(merged_persons, limit=30)
-            else:
-                # LLM returned suspects but all were invalid — keep rule-based
-                pass
-        elif isinstance(llm_suspects, list):
-            # LLM explicitly returned empty list — keep rule/NER persons
-            pass
-        # else: LLM didn't return suspects at all (failure/fallback) — keep rule-based
+            involved_persons = self._sanitize_involved_persons(llm_valid_suspects, limit=30)
 
         unknown_profile = self._extract_unknown_profile(
             source_text=source_text,
