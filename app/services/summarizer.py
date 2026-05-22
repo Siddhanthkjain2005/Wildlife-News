@@ -139,8 +139,8 @@ class IntelligenceSummarizer:
             return fallback
 
         # Dynamic truncation: fit article within the 4096-token context window.
-        # Prompt instructions ≈ 750 tokens, max_tokens (output) = 320,
-        # leaving ~3026 tokens for article text. At ~3.5 chars/token → ~10500 chars.
+        # Prompt instructions ≈ 750 tokens, max_tokens (output) = 512,
+        # leaving ~2834 tokens for article text. At ~3.5 chars/token → ~9900 chars.
         # Use conservative limit of 2800 chars to avoid overflow.
         n_ctx = 4096
         prompt_overhead_tokens = 750  # instructions + JSON keys

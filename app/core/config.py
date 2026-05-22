@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     article_enrichment_max_chars: int = 3500
     llm_summary_enabled: bool = True
     llm_summary_model_path: str = "/app/data/models/Phi-3-mini-4k-instruct-q4.gguf"
-    llm_summary_max_tokens: int = 320
+    llm_summary_max_tokens: int = 512
     llm_summary_temperature: float = 0.2
     rag_qa_enabled: bool = False
     rag_qa_max_tokens: int = 420

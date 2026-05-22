@@ -90,26 +90,30 @@ def run_backfill():
         items = db.query(NewsItem).order_by(NewsItem.id.asc()).all()
         total = len(items)
 
-        # Filter to only items needing WPA backfill (unless --force)
+        # Filter to only items needing backfill (unless --force)
+        # An article needs work if it's missing species, persons, or WPA schedule
         if not force_all:
             needs_work = []
             already_done = 0
             for item in items:
                 wpa_sch = (getattr(item, "wpa_schedule", "") or "").strip()
-                if wpa_sch and wpa_sch.lower() not in ("", "not classified"):
+                has_wpa = wpa_sch and wpa_sch.lower() not in ("", "not classified")
+                has_species = bool((item.species or "").strip())
+                # Don't require persons — many articles legitimately have no named suspects
+                if has_wpa and has_species:
                     already_done += 1
                 else:
                     needs_work.append(item)
             if already_done > 0:
-                print(f"⏭️  Skipping {already_done} articles that already have WPA schedules.")
-                print(f"   (Use --force to re-process all articles)\n")
+                print(f"⏭️  Skipping {already_done} articles that already have species + WPA.")
+                print(f"   (Use --force to re-process ALL articles)\n")
             items = needs_work
 
         to_process = len(items)
         print(f"📊 Found {to_process} articles to process (of {total} total).\n")
 
         if to_process == 0:
-            print("✅ All articles already have WPA data. Nothing to do!")
+            print("✅ All articles already have species + WPA data. Nothing to do!")
             print("   Use --force flag to re-process everything.\n")
             return
 
