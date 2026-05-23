@@ -34,9 +34,22 @@ def fetch_full_article_content(url: str) -> str:
         import requests
         from bs4 import BeautifulSoup
         
+        url_to_fetch = url.strip()
+        if "news.google.com" in url_to_fetch or "rss/articles" in url_to_fetch:
+            try:
+                from googlenewsdecoder import gnewsdecoder
+                decoded_res = gnewsdecoder(url_to_fetch)
+                if isinstance(decoded_res, dict) and decoded_res.get("status"):
+                    target_url = decoded_res.get("decoded_url")
+                    if target_url:
+                        print(f"   ℹ️ Decoded Google News URL to: {target_url}")
+                        url_to_fetch = target_url
+            except Exception as e:
+                print(f"   ⚠️ Failed to decode Google News URL: {e}")
+        
         # Bypass proxies for direct web queries
         response = requests.get(
-            url.strip(),
+            url_to_fetch,
             timeout=10,
             headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
             allow_redirects=True,
