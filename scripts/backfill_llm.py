@@ -26,6 +26,64 @@ from app.services.intelligence import HybridIntelligenceEngine
 from app.services.reports import upsert_report_for_news
 
 
+def fetch_full_article_content(url: str) -> str:
+    """Fetch and scrape the full article body from the URL using BeautifulSoup."""
+    if not url or not url.strip() or not url.startswith("http"):
+        return ""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        # Bypass proxies for direct web queries
+        response = requests.get(
+            url.strip(),
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            allow_redirects=True,
+            proxies={"http": None, "https": None}
+        )
+        if response.status_code >= 400:
+            return ""
+        
+        content_type = str(response.headers.get("Content-Type", "")).lower()
+        if "html" not in content_type:
+            return ""
+            
+        soup = BeautifulSoup(response.text, "html.parser")
+        for node in soup.select("script,style,noscript,svg,form,nav,footer,header,aside"):
+            node.decompose()
+            
+        article_chunks = []
+        content_selectors = [
+            "article",
+            "main",
+            "[itemprop='articleBody']",
+            ".article-body",
+            ".post-content",
+            ".entry-content",
+            ".story-body",
+            "#article-body",
+        ]
+        for selector in content_selectors:
+            for block in soup.select(selector):
+                text = block.get_text(" ", strip=True)
+                if text:
+                    article_chunks.append(text)
+            if article_chunks:
+                break
+        if not article_chunks:
+            for paragraph in soup.select("p"):
+                text = paragraph.get_text(" ", strip=True)
+                if text:
+                    article_chunks.append(text)
+                    
+        combined = " ".join(part.strip() for part in article_chunks if part.strip())
+        normalized = " ".join(combined.split())
+        return normalized
+    except Exception as e:
+        return ""
+
+
 def check_llm_status() -> bool:
     """Check whether the LLM model file exists and can be loaded."""
     if os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1"):
@@ -137,16 +195,30 @@ def run_backfill():
 
         for idx, item in enumerate(items, 1):
             try:
-                # Build full text from all available fields
+                # Try to fetch the full web article content first to maximize LLM extraction accuracy!
+                web_body = ""
+                if item.url:
+                    print(f"🌐 [{idx}/{to_process}] Crawling full webpage: {item.url[:80]}...")
+                    web_body = fetch_full_article_content(item.url)
+                    if web_body:
+                        print(f"   ✅ Fetched {len(web_body)} chars of full article content!")
+                    else:
+                        print("   ⚠️  Webpage crawl failed or blocked, falling back to local DB content.")
+                
+                # Combine fetched web body with local fields
                 base_summary = item.summary or ""
+                full_content_parts = [item.title or "", base_summary]
+                if web_body:
+                    full_content_parts.append(web_body)
+                else:
+                    if item.intel_summary:
+                        full_content_parts.append(item.intel_summary)
+                    if item.confidence_explanation:
+                        full_content_parts.append(item.confidence_explanation)
+                        
                 full_content = "\n".join(
                     part.strip()
-                    for part in [
-                        item.title or "",
-                        base_summary,
-                        item.intel_summary or "",
-                        item.confidence_explanation or "",
-                    ]
+                    for part in full_content_parts
                     if part and part.strip()
                 )
 

@@ -3213,8 +3213,8 @@ class HybridIntelligenceEngine:
             species = llm_valid
 
         llm_location = str(llm_summary.get("extracted_location") or "").strip()
-        if llm_location and not (state or district):
-            # Attempt to re-extract location from the LLM's suggested text
+        if llm_location:
+            # Attempt to re-extract location from the LLM's suggested text to override rule mistakes
             s_ext, d_ext, l_ext = self._extract_location(llm_location.lower())
             if s_ext or d_ext:
                 state, district, location = s_ext, d_ext, l_ext
