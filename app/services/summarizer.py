@@ -134,6 +134,118 @@ class IntelligenceSummarizer:
             default_confidence_explanation=default_confidence_explanation,
         )
 
+        import os
+        import requests
+
+        ollama_enabled = os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1")
+        if ollama_enabled:
+            ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-v3.1:671b-cloud")
+            ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+            
+            # Safe character-based truncation for large Ollama cloud models
+            truncated_article = article_text[:12000]
+            if len(article_text) > 12000:
+                truncated_article += "\n[...truncated]"
+
+            prompt = (
+                "You are a wildlife crime intelligence analyst for the Government of India. "
+                "Return STRICT JSON with keys: "
+                "is_wildlife_poaching_incident, suggested_confidence_score, llm_classification_reason, "
+                "summary, key_facts, smuggling_route, recommendation, risk_factors, "
+                "extracted_species, extracted_location, extracted_suspects, confidence_explanation, "
+                "wpa_schedule, wpa_section, wpa_offence_type, wpa_penalty_class, protected_area_type, enforcement_authority.\n\n"
+                f"Article:\n{truncated_article}\n\n"
+                "Guidelines:\n"
+                "1. 'is_wildlife_poaching_incident': Set to true only if this article describes a real, specific event of poaching, hunting, animal cruelty, smuggling, seizures, or illegal trade of wildlife parts in India. Set to false for general policy announcements, tourism safari updates, conservation successes, zoo updates, or opinions.\n"
+                "2. 'suggested_confidence_score': Provide a rating from 0 to 100 representing how verified/factual the report is.\n"
+                "3. 'llm_classification_reason': Brief sentence explaining why it is or is not an active wildlife crime incident.\n"
+                "4. 'wpa_schedule': Extracted Indian Wildlife Protection Act 1972 schedule (one of: 'Schedule I', 'Schedule II', 'Schedule III', 'Schedule IV', 'Schedule V', 'Schedule VI', or 'Not Classified').\n"
+                "5. 'wpa_section': Sections of the Wildlife Protection Act applicable (e.g. 'Section 9', 'Section 51', 'Section 51(1A)', 'Section 39', 'Section 49-B').\n"
+                "6. 'wpa_offence_type': Type of WPA offence (e.g. 'Hunting', 'Possession', 'Illegal Trade', 'Plant Trade', etc.).\n"
+                "7. 'wpa_penalty_class': Penalty severity (one of: 'severe', 'moderate', 'minor', or '').\n"
+                "8. 'protected_area_type': Name and type of national park or sanctuary if mentioned (e.g. 'Bandipur National Park', or 'None / Not Applicable').\n"
+                "9. 'enforcement_authority': Agency enforcing action (e.g. 'State Forest Department', 'Wildlife Crime Control Bureau (WCCB)', 'Local Police', or 'Local Police / Forest Dept.').\n"
+                "10. Keep summary to 2-3 sentences and key_facts to <=6 bullets.\n"
+                "11. 'extracted_suspects': Extract all involved persons, suspects, or perpetrators (e.g. poachers, smugglers, traders, buyers, or arrested individuals) mentioned by name in the article. Provide them as a JSON list of full names (e.g. ['Ramesh Kumar', 'Suresh Singh']). Do NOT extract names of forest officers, investigators, police officers, or department officials unless they are themselves accused of a crime.\n"
+                "12. 'extracted_species': Extract all animal or plant species mentioned in the article that are victims of poaching, trafficking, seizure, or illegal trade. Provide them as a JSON list of lowercased common names (e.g. ['tiger', 'pangolin', 'red sanders']). Do NOT include generic terms like 'wildlife', 'animal', 'carcass', 'reptile', or 'bird'."
+            )
+
+            try:
+                payload = {
+                    "model": ollama_model,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "stream": False,
+                    "format": "json",
+                    "options": {
+                        "temperature": self.temperature,
+                        "num_predict": self.max_tokens
+                    }
+                }
+                response = requests.post(ollama_url, json=payload, timeout=120, proxies={"http": None, "https": None})
+                response.raise_for_status()
+                res_json = response.json()
+                raw_text = res_json.get("message", {}).get("content", "")
+                parsed = self._extract_json_object(raw_text)
+                if parsed is None:
+                    logger.warning("Ollama returned non-parseable JSON content: %s", raw_text)
+                    return fallback
+            except Exception as err:
+                logger.warning("Ollama summary generation failed: %s", err)
+                return fallback
+
+            summary = str(parsed.get("summary") or fallback["summary"]).strip()[:500]
+            key_facts = parsed.get("key_facts")
+            if isinstance(key_facts, list):
+                points = [str(item).strip() for item in key_facts if str(item).strip()][:8]
+            else:
+                points = list(default_points)
+            if not points:
+                points = list(default_points)
+
+            risk_factors = parsed.get("risk_factors")
+            risk_points = [str(item).strip() for item in risk_factors] if isinstance(risk_factors, list) else []
+            if risk_points:
+                points.extend([f"Risk factor: {item}" for item in risk_points[:3]])
+
+            # Parse new validation keys
+            is_incident = parsed.get("is_wildlife_poaching_incident")
+            if is_incident is not None:
+                is_incident = bool(is_incident)
+                
+            suggested_score = parsed.get("suggested_confidence_score")
+            if suggested_score is not None:
+                try:
+                    suggested_score = float(suggested_score)
+                except (ValueError, TypeError):
+                    suggested_score = None
+                    
+            classification_reason = str(parsed.get("llm_classification_reason") or "").strip()
+
+            return {
+                "summary": summary or fallback["summary"],
+                "key_facts": points[:8],
+                "smuggling_route": str(parsed.get("smuggling_route") or fallback["smuggling_route"])[:500],
+                "recommendation": str(parsed.get("recommendation") or fallback["recommendation"])[:500],
+                "risk_factors": risk_points[:5],
+                "extracted_species": parsed.get("extracted_species") or [],
+                "extracted_location": str(parsed.get("extracted_location") or ""),
+                "extracted_suspects": parsed.get("extracted_suspects") or [],
+                "confidence_explanation": str(
+                    parsed.get("confidence_explanation") or fallback["confidence_explanation"]
+                )[:500],
+                "is_wildlife_poaching_incident": is_incident,
+                "suggested_confidence_score": suggested_score,
+                "llm_classification_reason": classification_reason,
+                "wpa_schedule": str(parsed.get("wpa_schedule") or "").strip(),
+                "wpa_section": str(parsed.get("wpa_section") or "").strip(),
+                "wpa_offence_type": str(parsed.get("wpa_offence_type") or "").strip(),
+                "wpa_penalty_class": str(parsed.get("wpa_penalty_class") or "").strip(),
+                "protected_area_type": str(parsed.get("protected_area_type") or "").strip(),
+                "enforcement_authority": str(parsed.get("enforcement_authority") or "").strip(),
+            }
+
         llm = self._get_llm()
         if llm is False:
             return fallback

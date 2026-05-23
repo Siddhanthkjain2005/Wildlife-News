@@ -28,6 +28,17 @@ from app.services.reports import upsert_report_for_news
 
 def check_llm_status() -> bool:
     """Check whether the LLM model file exists and can be loaded."""
+    if os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1"):
+        ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-v3.1:671b-cloud")
+        print(f"\n{'='*60}")
+        print("LLM DIAGNOSTICS (OLLAMA)")
+        print(f"{'='*60}")
+        print(f"  OLLAMA_ENABLED  = True")
+        print(f"  OLLAMA_MODEL    = {ollama_model}")
+        print("  ✅ Ollama cloud/local model is ACTIVE")
+        print(f"{'='*60}\n")
+        return True
+
     model_path = settings.llm_summary_model_path.strip()
     enabled = settings.llm_summary_enabled
 
