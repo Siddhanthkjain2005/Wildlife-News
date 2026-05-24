@@ -6,6 +6,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
+from app.core.realtime import InMemoryEventBus
 from app.core.security import admin_sessions, decode_jwt_token, has_permission
 
 router = APIRouter(tags=["websocket"])
@@ -41,24 +42,76 @@ async def websocket_live(websocket: WebSocket):
     redis_url = (settings.redis_url or "").strip()
 
     if not redis_url:
+        # ── In-memory event bus mode ──
         from app import main as app_main
 
-        await websocket.send_json({"channel": "sync_status", "data": {"type": "websocket_connected", "redis": False}})
+        bus = app_main.event_bus
+        channels = ["incidents", "alerts", "sync_status"]
+        queues = {}
+
+        # Subscribe to in-memory event bus if available
+        if isinstance(bus, InMemoryEventBus):
+            for ch in channels:
+                queues[ch] = bus.subscribe(ch)
+
+        await websocket.send_json({
+            "channel": "sync_status",
+            "data": {"type": "websocket_connected", "redis": False, "bus": "memory" if queues else "none"},
+        })
+
+        # Send initial sync snapshot
         try:
-            while True:
-                await asyncio.sleep(15)
-                await websocket.send_json(
-                    {
+            await websocket.send_json({
+                "channel": "sync_status",
+                "data": {"type": "sync_snapshot", "snapshot": app_main._sync_snapshot()},
+            })
+        except Exception:
+            pass
+
+        try:
+            if queues:
+                # Merge all queues into a single stream + periodic snapshot
+                snapshot_interval = 15  # seconds
+                last_snapshot = asyncio.get_event_loop().time()
+
+                while True:
+                    # Drain all queues with a short timeout
+                    got_message = False
+                    for ch, q in queues.items():
+                        try:
+                            payload = await asyncio.wait_for(q.get(), timeout=0.1)
+                            await websocket.send_json({"channel": ch, "data": payload})
+                            got_message = True
+                        except asyncio.TimeoutError:
+                            continue
+
+                    now = asyncio.get_event_loop().time()
+                    if not got_message and (now - last_snapshot) >= snapshot_interval:
+                        await websocket.send_json({
+                            "channel": "sync_status",
+                            "data": {"type": "sync_snapshot", "snapshot": app_main._sync_snapshot()},
+                        })
+                        last_snapshot = now
+
+                    if not got_message:
+                        await asyncio.sleep(0.5)
+            else:
+                # Fallback: no event bus, just poll snapshots
+                while True:
+                    await asyncio.sleep(15)
+                    await websocket.send_json({
                         "channel": "sync_status",
-                        "data": {
-                            "type": "sync_snapshot",
-                            "snapshot": app_main._sync_snapshot(),
-                        },
-                    }
-                )
+                        "data": {"type": "sync_snapshot", "snapshot": app_main._sync_snapshot()},
+                    })
         except WebSocketDisconnect:
             return
+        finally:
+            if isinstance(bus, InMemoryEventBus):
+                for ch, q in queues.items():
+                    bus.unsubscribe(ch, q)
+        return
 
+    # ── Redis pub/sub mode ──
     import redis.asyncio as redis_async
 
     client = redis_async.from_url(redis_url, decode_responses=True)
@@ -94,3 +147,4 @@ async def websocket_live(websocket: WebSocket):
         finally:
             await pubsub.close()
             await client.close()
+

@@ -363,7 +363,7 @@ def init_database() -> None:
         if engine.dialect.name == "sqlite" and ("database is locked" in err_msg or "readonly" in err_msg):
             logger.warning("Database setup or schema compatibility checks skipped due to database lock or readonly database; continuing startup.")
             return
-        logger.error("Failed to ensure schema compatibility: %s", err)
+        logger.error("Failed to ensure schema compatibility: %s", err, exc_info=True)
         raise
 
 

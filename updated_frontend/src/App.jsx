@@ -56,7 +56,7 @@ const EMPTY_FILTERS = {
 // Demo mode - set to true to bypass authentication and show mock data
 const DEMO_MODE = false;
 // Maintenance mode - set to true to show the maintenance screen
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 
 const DEMO_SUMMARY = {
   total_incidents: 2847,
@@ -303,11 +303,26 @@ function DashboardApp() {
         try {
           const { channel, data } = JSON.parse(event.data);
           if (channel === "alerts") {
-            setAlerts((prev) => [data, ...prev].slice(0, 100));
+            const alertPayload = data?.payload || data;
+            setAlerts((prev) => [alertPayload, ...prev].slice(0, 100));
           } else if (channel === "incidents") {
-            setNewsRows((prev) => [data, ...prev].slice(0, 200));
+            const incidentPayload = data?.payload || data;
+            setNewsRows((prev) => [incidentPayload, ...prev].slice(0, 200));
           } else if (channel === "sync_status") {
-            setSyncStatus(data);
+            if (data?.type === "sync_snapshot" && data.snapshot) {
+              setSyncStatus(data.snapshot);
+            } else if (data?.type === "sync_completed") {
+              setSyncStatus((prev) => ({
+                ...prev,
+                running: false,
+                finished_at: data.finished_at || new Date().toISOString(),
+                duration_seconds: data.duration_seconds,
+                stats: data.stats || prev?.stats,
+                message: `Completed in ${(data.duration_seconds || 0).toFixed(1)}s`,
+              }));
+            } else {
+              setSyncStatus(data);
+            }
           }
         } catch (err) {
           console.error("WS parse error:", err);

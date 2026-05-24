@@ -140,12 +140,26 @@ class IntelligenceSummarizer:
         ollama_enabled = os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1")
         if ollama_enabled:
             ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-v3.1:671b-cloud")
-            ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
-            ollama_token = os.environ.get("OLLAMA_BEARER_TOKEN") or os.environ.get("LLM_API_KEY")
+            
+            base_url = os.environ.get("OLLAMA_BASE_URL", "").strip()
+            if base_url:
+                if base_url.endswith("/"):
+                    ollama_url = f"{base_url}chat/completions"
+                else:
+                    ollama_url = f"{base_url}/chat/completions"
+            else:
+                ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+                
+            ollama_token = (
+                os.environ.get("OLLAMA_BEARER_TOKEN") or 
+                os.environ.get("LLM_API_KEY") or 
+                os.environ.get("OLLAMA_API_KEY")
+            )
 
             is_openai_format = (
                 ollama_token is not None or
                 "v1/chat/completions" in ollama_url or
+                "inference.do-ai.run" in ollama_url or
                 "digitalocean.com" in ollama_url or
                 "azure.com" in ollama_url or
                 "openai.com" in ollama_url or

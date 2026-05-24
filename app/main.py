@@ -1276,6 +1276,13 @@ def _update_sync_progress(progress: dict[str, str | int]) -> None:
         f"for '{query_short}' | scanned={scanned}, kept={kept}"
     )
     sync_state_store.update_progress(payload=dict(progress), message=message)
+    event_bus.publish(
+        "sync_status",
+        {
+            "type": "sync_snapshot",
+            "snapshot": sync_state_store.snapshot(),
+        },
+    )
 
 
 def _register_incident_event(event: dict[str, str | int | float]) -> None:
@@ -1441,6 +1448,13 @@ def _run_sync_job(trigger: str) -> None:
 def _scheduled_sync_job() -> None:
     if not _try_start_sync(trigger="scheduled"):
         return
+    event_bus.publish(
+        "sync_status",
+        {
+            "type": "sync_snapshot",
+            "snapshot": sync_state_store.snapshot(),
+        },
+    )
     _run_sync_job(trigger="scheduled")
 
 
@@ -1846,10 +1860,34 @@ def sync_now(request: Request, _admin=Depends(require_admin_access)):
     if not _try_start_sync(trigger="manual"):
         raise HTTPException(status_code=409, detail="A sync or maintenance job is already running.")
     
+    event_bus.publish(
+        "sync_status",
+        {
+            "type": "sync_snapshot",
+            "snapshot": sync_state_store.snapshot(),
+        },
+    )
     # Run in a background thread to prevent HTTP gateway timeout (sub-second return!)
     from threading import Thread
     Thread(target=_run_sync_job, args=("manual",), daemon=True).start()
     return {"ok": True, "message": "Manual news sync successfully started in background."}
+
+
+@app.post("/api/admin/sync-reset")
+def admin_sync_reset(request: Request, _admin=Depends(require_admin_access)):
+    """Force-reset a stuck sync lock."""
+    was_running = sync_state_store.force_reset(reason="admin_manual_reset")
+    _audit(
+        actor="admin",
+        action="sync_reset",
+        status="ok",
+        notes=f"was_running={was_running}",
+    )
+    return {
+        "ok": True,
+        "was_running": was_running,
+        "message": "Sync lock has been force-reset." if was_running else "Sync was not running (already idle).",
+    }
 
 
 # ---------- Manual Review API ----------

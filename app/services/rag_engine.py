@@ -139,9 +139,22 @@ class RagEngine:
         ollama_enabled = os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1")
         if ollama_enabled and items:
             import requests as _requests
-            ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+            
+            base_url = os.environ.get("OLLAMA_BASE_URL", "").strip()
+            if base_url:
+                if base_url.endswith("/"):
+                    ollama_url = f"{base_url}chat/completions"
+                else:
+                    ollama_url = f"{base_url}/chat/completions"
+            else:
+                ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+                
             ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.3-70b-instruct")
-            ollama_token = os.environ.get("OLLAMA_BEARER_TOKEN") or os.environ.get("LLM_API_KEY")
+            ollama_token = (
+                os.environ.get("OLLAMA_BEARER_TOKEN") or 
+                os.environ.get("LLM_API_KEY") or 
+                os.environ.get("OLLAMA_API_KEY")
+            )
             prompt_text = self._build_prompt(query, items)
             headers = {"Content-Type": "application/json"}
             if ollama_token:

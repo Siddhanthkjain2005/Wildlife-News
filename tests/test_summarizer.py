@@ -35,6 +35,8 @@ def test_generate_returns_fallback_when_disabled() -> None:
 
 
 def test_generate_uses_llm_json_when_available() -> None:
+    from unittest.mock import patch
+
     class FakeLlm:
         @staticmethod
         def create_completion(**_: object) -> dict[str, object]:
@@ -50,10 +52,12 @@ def test_generate_uses_llm_json_when_available() -> None:
                 ]
             }
 
-    summarizer = _summarizer(enabled=True, model_path="/tmp/fake.gguf")
-    summarizer._llm = FakeLlm()
-    result = summarizer.generate(**_defaults())
-    assert result["summary"] == "LLM summary"
-    assert "Fact 1" in result["key_facts"]
-    assert "Risk factor: Cross-border" in result["key_facts"]
-    assert result["recommendation"] == "Action Y"
+    with patch.dict("os.environ", {"OLLAMA_ENABLED": "false"}):
+        summarizer = _summarizer(enabled=True, model_path="/tmp/fake.gguf")
+        summarizer._llm = FakeLlm()
+        result = summarizer.generate(**_defaults())
+        assert result["summary"] == "LLM summary"
+        assert "Fact 1" in result["key_facts"]
+        assert "Risk factor: Cross-border" in result["key_facts"]
+        assert result["recommendation"] == "Action Y"
+
