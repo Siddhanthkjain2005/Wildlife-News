@@ -1,8 +1,13 @@
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
 const withBase = (path) => (API_BASE ? `${API_BASE}${path}` : path);
 const AUTH_TOKEN_KEY = "wildlife_admin_token";
-const WS_BASE = API_BASE.replace(/^http/, "ws");
-const withWs = (path) => (WS_BASE ? `${WS_BASE}${path}` : `ws://${window.location.host}${path}`);
+const WS_BASE = API_BASE.replace(/^https/, "wss").replace(/^http(?!s)/, "ws");
+const withWs = (path) => {
+  if (WS_BASE) return `${WS_BASE}${path}`;
+  // Derive ws/wss from the current page protocol so HTTPS pages use wss://
+  const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${wsProto}://${window.location.host}${path}`;
+};
 const REQUEST_TIMEOUT_MS = 20000;
 
 export const ENDPOINTS = {

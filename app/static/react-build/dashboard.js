@@ -21089,7 +21089,7 @@ var ph = { exports: {} };
   });
 })(ph, ph.exports);
 var VM = ph.exports;
-const xa = /* @__PURE__ */ mg(VM), mh = "".trim().replace(/\/$/, ""), wt = (e) => mh ? `${mh}${e}` : e, Pd = "wildlife_admin_token", lg = mh.replace(/^http/, "ws"), ZM = (e) => lg ? `${lg}${e}` : `ws://${window.location.host}${e}`, UM = 2e4, Bt = {
+const xa = /* @__PURE__ */ mg(VM), mh = "".trim().replace(/\/$/, ""), wt = (e) => mh ? `${mh}${e}` : e, Pd = "wildlife_admin_token", lg = mh.replace(/^https/, "wss").replace(/^http(?!s)/, "ws"), ZM = (e) => lg ? `${lg}${e}` : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}${e}`, UM = 2e4, Bt = {
   adminLogin: wt("/api/admin/login"),
   adminLogout: wt("/api/admin/logout"),
   adminRefresh: wt("/api/admin/refresh"),
