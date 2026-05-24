@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import requests
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.api import admin, dashboard, exports, graph, health, incidents, predictions, rag, search, websocket
@@ -370,7 +371,7 @@ class AdminRefreshPayload(BaseModel):
 @app.middleware("http")
 async def api_rate_limiter(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api") and path not in {"/api/admin/login", "/api/admin/refresh"} and not path.startswith("/api/public/"):
+    if path.startswith("/api") and path not in {"/api/admin/login", "/api/admin/refresh"} and not path.startswith("/api/public/") and not path.startswith("/api/ws/"):
         if request.method.upper() != "OPTIONS":
             try:
                 _require_api_permission(request, _permission_for_api_path(path))
@@ -1872,30 +1873,40 @@ async def review_incident(
     reviewer = review_req.reviewed_by[:120] or "admin"
     notes = review_req.review_notes[:500]
 
-    with SessionLocal() as db:
-        item = db.get(NewsItem, incident_id)
-        if not item:
-            return JSONResponse(status_code=404, content={"detail": "Incident not found"})
-        item.review_status = status
-        item.reviewed_by = reviewer
-        item.reviewed_at = datetime.utcnow()
-        item.review_notes = notes
-        db.commit()
-        _audit(
-            actor=reviewer,
-            action=f"review:{status}",
-            status="ok",
-            ip=_client_ip(request),
-            notes=f"incident={incident_id} {notes[:100]}",
-        )
-        return {
-            "ok": True,
-            "id": incident_id,
-            "review_status": status,
-            "reviewed_by": reviewer,
-            "review_notes": notes,
-            "reviewed_at": item.reviewed_at.isoformat() if item.reviewed_at else "",
-        }
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with SessionLocal() as db:
+                item = db.get(NewsItem, incident_id)
+                if not item:
+                    return JSONResponse(status_code=404, content={"detail": "Incident not found"})
+                item.review_status = status
+                item.reviewed_by = reviewer
+                item.reviewed_at = datetime.utcnow()
+                item.review_notes = notes
+                db.commit()
+                _audit(
+                    actor=reviewer,
+                    action=f"review:{status}",
+                    status="ok",
+                    ip=_client_ip(request),
+                    notes=f"incident={incident_id} {notes[:100]}",
+                )
+                return {
+                    "ok": True,
+                    "id": incident_id,
+                    "review_status": status,
+                    "reviewed_by": reviewer,
+                    "review_notes": notes,
+                    "reviewed_at": item.reviewed_at.isoformat() if item.reviewed_at else "",
+                }
+        except OperationalError:
+            if attempt < max_retries - 1:
+                import time as _time
+                _time.sleep(0.3 * (attempt + 1))
+            else:
+                logger.error("review_incident: database locked after %d retries for incident %d", max_retries, incident_id)
+                return JSONResponse(status_code=503, content={"detail": "Database busy. Please retry in a few seconds."})
 
 
 @app.post("/api/admin/reanalyze")
