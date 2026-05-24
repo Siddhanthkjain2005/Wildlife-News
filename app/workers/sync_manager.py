@@ -155,17 +155,29 @@ class SyncStateStore:
         with self._lock:
             self._state.running = False
             self._state.trigger = trigger
-            self._state.finished_at = datetime.now(tz=timezone.utc).isoformat()
+            finished_at = datetime.now(tz=timezone.utc).isoformat()
+            self._state.finished_at = finished_at
             self._state.duration_seconds = round(duration_seconds, 2)
             self._state.error = ""
             self._state.stats = stats
             self._state.message = message
+            last_search = dict(self._state.last_search or {})
+            last_search["updated_at"] = finished_at
+            if not last_search.get("stage"):
+                last_search["stage"] = "completed"
+            self._state.last_search = last_search
 
     def fail(self, *, trigger: str, duration_seconds: float, error: str) -> None:
         with self._lock:
             self._state.running = False
             self._state.trigger = trigger
-            self._state.finished_at = datetime.now(tz=timezone.utc).isoformat()
+            finished_at = datetime.now(tz=timezone.utc).isoformat()
+            self._state.finished_at = finished_at
             self._state.duration_seconds = round(duration_seconds, 2)
             self._state.error = error
             self._state.message = error
+            last_search = dict(self._state.last_search or {})
+            last_search["updated_at"] = finished_at
+            if not last_search.get("stage"):
+                last_search["stage"] = "failed"
+            self._state.last_search = last_search

@@ -1,7 +1,37 @@
-const API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
+const RAW_API_BASE = String(import.meta.env.VITE_API_BASE_URL || "").trim();
+const normalizeBase = (value) => value.replace(/\/$/, "");
+const resolveApiBase = () => {
+  const cleaned = normalizeBase(RAW_API_BASE);
+  if (!cleaned) return "";
+  if (typeof window === "undefined") return cleaned;
+  if (!/^https?:\/\//i.test(cleaned)) return cleaned;
+  if (window.location.protocol === "https:" && cleaned.startsWith("http://")) {
+    return cleaned.replace(/^http:\/\//i, "https://");
+  }
+  return cleaned;
+};
+const API_BASE = resolveApiBase();
 const withBase = (path) => (API_BASE ? `${API_BASE}${path}` : path);
 const AUTH_TOKEN_KEY = "wildlife_admin_token";
-const WS_BASE = API_BASE.replace(/^https/, "wss").replace(/^http(?!s)/, "ws");
+const resolveWsBase = () => {
+  if (!API_BASE) return "";
+  const hasWindow = typeof window !== "undefined";
+  const pageSecure = hasWindow && window.location.protocol === "https:";
+  try {
+    const origin = hasWindow ? window.location.origin : "http://localhost";
+    const url = new URL(API_BASE, origin);
+    const wsProtocol = pageSecure || url.protocol === "https:" ? "wss:" : "ws:";
+    url.protocol = wsProtocol;
+    return normalizeBase(url.toString());
+  } catch {
+    let fallback = API_BASE.replace(/^https?:\/\//i, (match) =>
+      match.toLowerCase().startsWith("https") ? "wss://" : "ws://"
+    );
+    if (pageSecure) fallback = fallback.replace(/^ws:\/\//i, "wss://");
+    return fallback;
+  }
+};
+const WS_BASE = resolveWsBase();
 const withWs = (path) => {
   if (WS_BASE) return `${WS_BASE}${path}`;
   // Derive ws/wss from the current page protocol so HTTPS pages use wss://

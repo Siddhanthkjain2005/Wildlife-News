@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut, Database, HardDrive, Upload, ChevronDown } from "lucide-react";
+import { formatDateShort } from "../lib/format.js";
 
 export default function TopBar({
   activeSection,
@@ -30,6 +31,7 @@ export default function TopBar({
   const query = typeof activeData.query === "string" && activeData.query !== "-" ? activeData.query : "";
   const scanned = activeData.scanned !== undefined ? activeData.scanned : null;
   const kept = activeData.kept !== undefined ? activeData.kept : null;
+  const updatedAt = typeof activeData.updated_at === "string" && activeData.updated_at !== "-" ? activeData.updated_at : "";
   
   const scope = [provider, language].filter(Boolean).join(" / ");
   const syncMetaParts = [];
@@ -38,7 +40,10 @@ export default function TopBar({
   if (query) syncMetaParts.push(`q: ${query}`);
   if (scanned !== null && kept !== null) syncMetaParts.push(`scanned ${scanned}, kept ${kept}`);
   
-  const syncMeta = syncMetaParts.length ? syncMetaParts.join(" • ") : (isSearching ? (syncMessage || "Collecting live reports") : "");
+  if (!isSearching && updatedAt) syncMetaParts.push(`updated ${formatDateShort(updatedAt)}`);
+  const syncMeta = syncMetaParts.length
+    ? syncMetaParts.join(" • ")
+    : (syncMessage || (isSearching ? "Collecting live reports" : ""));
 
   const [openMenu, setOpenMenu] = useState(null); // 'export' | 'database' | null
   const exportRef = useRef(null);

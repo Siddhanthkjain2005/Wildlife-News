@@ -625,9 +625,6 @@ class NewsCollector:
                 ordered.append(normalized)
         if not ordered:
             ordered = ["en", "hi", "kn", "ta", "te"]
-        for lang in QUERY_BY_LANGUAGE:
-            if lang not in ordered:
-                ordered.append(lang)
         return ordered
 
     @property
@@ -848,7 +845,13 @@ class NewsCollector:
         query_tokens = [token.strip().lower() for token in query.split() if token.strip()]
         for feed_url in urls:
             self._throttle_provider(provider)
-            feed = feedparser.parse(feed_url)
+            try:
+                response = self.http.get(feed_url, timeout=settings.request_timeout_seconds)
+                response.raise_for_status()
+                feed = feedparser.parse(response.text)
+            except requests.RequestException:
+                parse_failures += 1
+                continue
             if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
                 parse_failures += 1
                 continue
@@ -891,7 +894,13 @@ class NewsCollector:
                 f"https://www.reddit.com/r/{subreddit}/search.rss?"
                 f"q={quote_plus(query)}&restrict_sr=1&sort=new&t=week"
             )
-            feed = feedparser.parse(feed_url)
+            try:
+                response = self.http.get(feed_url, timeout=settings.request_timeout_seconds)
+                response.raise_for_status()
+                feed = feedparser.parse(response.text)
+            except requests.RequestException:
+                parse_failures += 1
+                continue
             if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
                 parse_failures += 1
                 continue
@@ -940,7 +949,9 @@ class NewsCollector:
     def _fetch_google_rss(self, language: str, query: str, limit: int) -> list[RawArticle]:
         hl, gl, ceid, _ = self._region(language)
         feed_url = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl={hl}&gl={gl}&ceid={ceid}"
-        feed = feedparser.parse(feed_url)
+        response = self.http.get(feed_url, timeout=settings.request_timeout_seconds)
+        response.raise_for_status()
+        feed = feedparser.parse(response.text)
         if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
             raise ValueError(f"google_rss_parse_failure language={language} query={query[:80]}")
         items: list[RawArticle] = []
@@ -979,7 +990,9 @@ class NewsCollector:
     def _fetch_bing_rss(self, language: str, query: str, limit: int) -> list[RawArticle]:
         _, _, _, mkt = self._region(language)
         rss_url = f"https://www.bing.com/news/search?q={quote_plus(query)}&format=rss&mkt={mkt}"
-        feed = feedparser.parse(rss_url)
+        response = self.http.get(rss_url, timeout=settings.request_timeout_seconds)
+        response.raise_for_status()
+        feed = feedparser.parse(response.text)
         if bool(getattr(feed, "bozo", False)) and not getattr(feed, "entries", []):
             raise ValueError(f"bing_rss_parse_failure language={language} query={query[:80]}")
         items: list[RawArticle] = []
@@ -1970,6 +1983,7 @@ class NewsCollector:
                             full_content=analysis_summary,
                             prior_source_hits=prior_source,
                             source=source,
+                            allow_llm=False,
                         )
                         prior_district = self._prior_district_hits(db, initial_intel.district)
                         intel = self.intelligence_engine.analyze(

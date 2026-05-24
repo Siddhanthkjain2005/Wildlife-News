@@ -6,7 +6,7 @@ import "./styles.css";
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, message: "" };
+    this.state = { hasError: false, message: "", redirecting: false };
   }
 
   static getDerivedStateFromError(error) {
@@ -15,6 +15,17 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error) {
     console.error("Dashboard runtime error:", error);
+    const message = error instanceof Error ? error.message : "";
+    const shouldRedirect =
+      typeof window !== "undefined" &&
+      /WebSocket/i.test(message) &&
+      /insecure/i.test(message);
+    if (shouldRedirect) {
+      this.setState({ redirecting: true });
+      window.setTimeout(() => {
+        window.location.replace("/legacy?legacy=1");
+      }, 1500);
+    }
   }
 
   render() {
@@ -26,7 +37,13 @@ class ErrorBoundary extends React.Component {
             {this.state.message || "Unexpected client error."}
           </p>
           <p style={{ opacity: 0.8 }}>
-            Open <a href="/legacy?legacy=1" style={{ color: "#9ec2ff" }}>legacy dashboard</a> while this is being fixed.
+            {this.state.redirecting
+              ? "Redirecting to the legacy dashboard..."
+              : (
+                <>
+                  Open <a href="/legacy?legacy=1" style={{ color: "#9ec2ff" }}>legacy dashboard</a> while this is being fixed.
+                </>
+              )}
           </p>
         </div>
       );

@@ -125,6 +125,7 @@ class IntelligenceSummarizer:
         default_route: str,
         default_recommendation: str,
         default_confidence_explanation: str,
+        use_llm: bool = True,
     ) -> dict[str, object]:
         fallback = self._fallback_payload(
             default_summary=default_summary,
@@ -133,6 +134,8 @@ class IntelligenceSummarizer:
             default_recommendation=default_recommendation,
             default_confidence_explanation=default_confidence_explanation,
         )
+        if not use_llm:
+            return fallback
 
         import os
         import requests

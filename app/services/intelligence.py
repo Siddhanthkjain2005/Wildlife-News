@@ -2846,6 +2846,7 @@ class HybridIntelligenceEngine:
         source: str = "",
         prior_district_hits: int = 0,
         prior_source_hits: int = 0,
+        allow_llm: bool = True,
     ) -> IntelligenceResult:
         # Always preserve title+summary context and append full article body when available.
         base_text = normalize_space(f"{title}. {summary}")
@@ -3182,6 +3183,7 @@ class HybridIntelligenceEngine:
             default_route=likely_smuggling_route,
             default_recommendation=enforcement_recommendation,
             default_confidence_explanation=confidence_explanation,
+            use_llm=allow_llm,
         )
         summary_text = str(llm_summary.get("summary") or summary_text)
         key_facts = llm_summary.get("key_facts")

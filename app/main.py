@@ -544,7 +544,7 @@ def _parse_intel_points(raw: str) -> list[str]:
 
 def _sync_snapshot() -> dict[str, object]:
     snapshot = sync_state_store.snapshot()
-    if not snapshot.get("finished_at"):
+    if not snapshot.get("running") and (not snapshot.get("finished_at") or not snapshot.get("last_search")):
         # Fallback to the latest SyncLog entry in the database
         try:
             with SessionLocal() as db:
@@ -553,22 +553,34 @@ def _sync_snapshot() -> dict[str, object]:
                     # Convert UTC ended_at and started_at to IST (Asia/Kolkata)
                     ended_utc = latest.ended_at.replace(tzinfo=timezone.utc)
                     ended_ist = ended_utc.astimezone(ZoneInfo("Asia/Kolkata"))
-                    snapshot["finished_at"] = ended_ist.isoformat()
-                    
                     started_utc = latest.started_at.replace(tzinfo=timezone.utc)
                     started_ist = started_utc.astimezone(ZoneInfo("Asia/Kolkata"))
-                    snapshot["started_at"] = started_ist.isoformat()
-                    
-                    snapshot["duration_seconds"] = latest.duration_sec
-                    snapshot["stats"] = {
-                        "scanned": latest.scanned,
-                        "inserted": latest.kept,
-                        "updated": 0,
-                        "failed": latest.failed,
-                    }
-                    snapshot["message"] = f"Finished (historical): scanned={latest.scanned}, new={latest.kept}"
+                    if not snapshot.get("finished_at"):
+                        snapshot["finished_at"] = ended_ist.isoformat()
+                        snapshot["started_at"] = started_ist.isoformat()
+                        snapshot["duration_seconds"] = latest.duration_sec
+                        snapshot["stats"] = {
+                            "scanned": latest.scanned,
+                            "inserted": latest.kept,
+                            "updated": 0,
+                            "failed": latest.failed,
+                        }
+                        snapshot["message"] = f"Finished (historical): scanned={latest.scanned}, new={latest.kept}"
+                    if not snapshot.get("last_search"):
+                        snapshot["last_search"] = {
+                            "stage": "sync",
+                            "provider": latest.provider or "all",
+                            "language": "",
+                            "query": "",
+                            "scanned": latest.scanned,
+                            "kept": latest.kept,
+                            "updated_at": ended_ist.isoformat(),
+                        }
         except Exception:
             pass
+
+    if not snapshot.get("last_search") and snapshot.get("finished_at"):
+        snapshot["last_search"] = {"updated_at": snapshot.get("finished_at")}
             
     # Present active/runtime timestamps in IST as well
     for key in ("started_at", "finished_at"):
@@ -578,6 +590,17 @@ def _sync_snapshot() -> dict[str, object]:
                 dt = datetime.fromisoformat(val)
                 dt_ist = dt.astimezone(ZoneInfo("Asia/Kolkata"))
                 snapshot[key] = dt_ist.isoformat()
+            except Exception:
+                pass
+
+    last_search = snapshot.get("last_search")
+    if isinstance(last_search, dict):
+        updated_at = last_search.get("updated_at")
+        if isinstance(updated_at, str) and updated_at:
+            try:
+                dt = datetime.fromisoformat(updated_at)
+                dt_ist = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+                last_search["updated_at"] = dt_ist.isoformat()
             except Exception:
                 pass
                 

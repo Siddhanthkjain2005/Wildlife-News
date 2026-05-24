@@ -175,7 +175,22 @@ function MaintenanceScreen() {
       </article>
     </div>
   );
-}
+};
+
+const pickLatestTimestamp = (values) => {
+  let latestValue = "";
+  let latestMs = null;
+  values.forEach((value) => {
+    if (!value) return;
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) return;
+    if (latestMs === null || parsed > latestMs) {
+      latestMs = parsed;
+      latestValue = value;
+    }
+  });
+  return latestValue;
+};
 
 export default function App() {
   if (MAINTENANCE_MODE) {
@@ -391,7 +406,16 @@ function DashboardApp() {
   }, [reports]);
 
   const filterOptions = chartData?.filters || { states: [], species: [], crime_types: [], sources: [] };
-  const lastSync = summary?.last_sync_time || syncStatus?.finished_at;
+  const lastSync = useMemo(
+    () =>
+      pickLatestTimestamp([
+        summary?.last_sync_time,
+        syncStatus?.finished_at,
+        syncStatus?.last_search?.updated_at,
+        syncStatus?.started_at
+      ]),
+    [summary?.last_sync_time, syncStatus?.finished_at, syncStatus?.last_search?.updated_at, syncStatus?.started_at]
+  );
   const formatSearchDetails = useCallback((progress, { last = false } = {}) => {
     const scopeData = progress || {};
     const stage = typeof scopeData.stage === "string" && scopeData.stage !== "-" ? scopeData.stage : "";
