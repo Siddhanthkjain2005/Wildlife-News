@@ -2114,10 +2114,11 @@ class NewsCollector:
                         upsert_report_for_news(db=db, news=incident_row)
 
                         # Incremental ML model training on each new article
-                        try:
-                            wildlife_predictor.incremental_update(db=db, news_item=incident_row)
-                        except Exception as _pred_err:
-                            logger.debug("Incremental predictor update skipped: %s", _pred_err)
+                        if event_type == "inserted":
+                            try:
+                                wildlife_predictor.incremental_update(db=db, news_item=incident_row)
+                            except Exception as _pred_err:
+                                logger.debug("Incremental predictor update skipped: %s", _pred_err)
 
                         self._upsert_source_stat(
                             db=db,
