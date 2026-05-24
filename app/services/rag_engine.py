@@ -134,28 +134,79 @@ class RagEngine:
         answer = self._fallback_answer(query, items)
         llm_used = False
 
-        llm = self._get_llm()
-        if llm is not False and items:
-            prompt = self._build_prompt(query, items)
+        # Try Cloud LLM first (DigitalOcean / Ollama / OpenAI-compatible)
+        import os
+        ollama_enabled = os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1")
+        if ollama_enabled and items:
+            import requests as _requests
+            ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+            ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.3-70b-instruct")
+            ollama_token = os.environ.get("OLLAMA_BEARER_TOKEN") or os.environ.get("LLM_API_KEY")
+            prompt_text = self._build_prompt(query, items)
+            headers = {"Content-Type": "application/json"}
+            if ollama_token:
+                headers["Authorization"] = f"Bearer {ollama_token}"
+            payload = {
+                "model": ollama_model,
+                "messages": [{"role": "user", "content": prompt_text}],
+                "stream": False,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+            }
             try:
-                response = llm.create_completion(
-                    prompt=prompt,
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                    stop=["\n\nContext incidents:"],
+                resp = _requests.post(
+                    ollama_url, json=payload, headers=headers,
+                    timeout=60, proxies={"http": None, "https": None},
                 )
-                raw = str((response.get("choices") or [{}])[0].get("text") or "").strip()
-                if raw:
-                    answer = raw[:1600]
+                resp.raise_for_status()
+                rj = resp.json()
+                raw = ""
+                if "choices" in rj and len(rj["choices"]) > 0:
+                    raw = rj["choices"][0].get("message", {}).get("content", "")
+                elif "message" in rj:
+                    raw = rj["message"].get("content", "")
+                if raw.strip():
+                    answer = raw.strip()[:2000]
                     llm_used = True
             except Exception as err:  # noqa: BLE001
-                logger.warning("RAG completion failed, keeping retrieval-only fallback: %s", err)
+                logger.warning("RAG Cloud LLM failed, trying local fallback: %s", err)
+
+        # Fallback to local GGUF model
+        if not llm_used:
+            llm = self._get_llm()
+            if llm is not False and items:
+                prompt = self._build_prompt(query, items)
+                try:
+                    response = llm.create_completion(
+                        prompt=prompt,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        stop=["\n\nContext incidents:"],
+                    )
+                    raw = str((response.get("choices") or [{}])[0].get("text") or "").strip()
+                    if raw:
+                        answer = raw[:1600]
+                        llm_used = True
+                except Exception as err:  # noqa: BLE001
+                    logger.warning("RAG completion failed, keeping retrieval-only fallback: %s", err)
+
+        sources = [
+            {
+                "id": it.get("id"),
+                "title": it.get("title", ""),
+                "relevance": it.get("similarity", 0.0),
+                "date": str(it.get("published_at", "")).split("T")[0] if "T" in str(it.get("published_at", "")) else str(it.get("published_at", "")),
+                "url": it.get("open_url", "")
+            }
+            for it in items
+        ]
 
         return {
             "query": query,
             "answer": answer,
             "llm_used": llm_used,
             "citations": items,
+            "sources": sources,
             "count": len(items),
         }
 

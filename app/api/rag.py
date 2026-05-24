@@ -1,12 +1,33 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.rag_engine import rag_engine
 
 router = APIRouter(tags=["rag"])
+
+
+class RagQueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+@router.post("/api/rag/query")
+def rag_query_endpoint(
+    req: RagQueryRequest,
+    db: Session = Depends(get_db),
+):
+    query = req.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    return rag_engine.ask(
+        db,
+        query=query,
+        limit=req.top_k,
+    )
 
 
 @router.get("/api/rag/ask")

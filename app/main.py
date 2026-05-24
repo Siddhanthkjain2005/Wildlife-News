@@ -978,7 +978,8 @@ def _fetch_filtered_news_rows(
     safe_limit = max(1, min(1000, limit))
     stmt = _strict_incident_scope(select(NewsItem)).where(NewsItem.confidence >= min_confidence)
     stmt = stmt.order_by(NewsItem.published_at.desc())
-    stmt = _apply_today_news_scope(stmt)
+    # Bypass today's scope so the analyst can search the entire database of incidents
+    # stmt = _apply_today_news_scope(stmt)
     if q.strip():
         q_like = f"%{q.strip().lower()}%"
         stmt = stmt.where(

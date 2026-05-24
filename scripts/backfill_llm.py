@@ -47,22 +47,47 @@ def fetch_full_article_content(url: str) -> str:
             except Exception as e:
                 print(f"   ⚠️ Failed to decode Google News URL: {e}")
         
-        # Bypass proxies for direct web queries
-        response = requests.get(
-            url_to_fetch,
-            timeout=10,
-            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
-            allow_redirects=True,
-            proxies={"http": None, "https": None}
-        )
-        if response.status_code >= 400:
-            return ""
+        html_content = ""
         
-        content_type = str(response.headers.get("Content-Type", "")).lower()
-        if "html" not in content_type:
+        # 1. Try curl_cffi Chrome Impersonation
+        try:
+            from curl_cffi import requests as cffi_requests
+            res = cffi_requests.get(url_to_fetch, impersonate="chrome120", timeout=15)
+            if res.status_code == 200 and "html" in str(res.headers.get("Content-Type", "")).lower():
+                html_content = res.text
+        except Exception:
+            pass
+            
+        # 2. Try cloudscraper
+        if not html_content:
+            try:
+                import cloudscraper
+                scraper = cloudscraper.create_scraper()
+                res = scraper.get(url_to_fetch, timeout=15)
+                if res.status_code == 200 and "html" in str(res.headers.get("Content-Type", "")).lower():
+                    html_content = res.text
+            except Exception:
+                pass
+                
+        # 3. Try standard requests
+        if not html_content:
+            try:
+                res = requests.get(
+                    url_to_fetch,
+                    timeout=10,
+                    headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+                    allow_redirects=True,
+                    proxies={"http": None, "https": None}
+                )
+                if res.status_code == 200 and "html" in str(res.headers.get("Content-Type", "")).lower():
+                    html_content = res.text
+            except Exception:
+                pass
+
+        if not html_content:
             return ""
             
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(html_content, "html.parser")
         for node in soup.select("script,style,noscript,svg,form,nav,footer,header,aside"):
             node.decompose()
             

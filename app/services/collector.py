@@ -474,69 +474,116 @@ class NewsCollector:
         parsed = urlparse(target)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             return ""
+
+        url_to_fetch = target.strip()
+        if "news.google.com" in url_to_fetch or "rss/articles" in url_to_fetch:
+            try:
+                from googlenewsdecoder import gnewsdecoder
+                decoded_res = gnewsdecoder(url_to_fetch)
+                if isinstance(decoded_res, dict) and decoded_res.get("status"):
+                    target_url = decoded_res.get("decoded_url")
+                    if target_url:
+                        logger.info("Decoded Google News URL to: %s", target_url)
+                        url_to_fetch = target_url
+            except Exception as e:
+                logger.warning("Failed to decode Google News URL in collector: %s", e)
+
+        html_content = ""
+        # 1. Try curl_cffi Chrome Impersonation
         try:
-            response = self.http.get(
-                target,
-                timeout=max(5, int(settings.article_fetch_timeout_seconds)),
-                headers={"User-Agent": "WildlifeNewsBot/1.0 (+https://wildlife-news.vercel.app/)"},
-                allow_redirects=True,
-            )
-        except requests.RequestException:
-            return ""
-        if response.status_code >= 400:
-            return ""
-        content_type = str(response.headers.get("Content-Type", "")).lower()
-        if "html" not in content_type:
+            from curl_cffi import requests as cffi_requests
+            res = cffi_requests.get(url_to_fetch, impersonate="chrome120", timeout=15)
+            if res.status_code == 200 and "html" in str(res.headers.get("Content-Type", "")).lower():
+                html_content = res.text
+        except Exception:
+            pass
+
+        # 2. Try cloudscraper
+        if not html_content:
+            try:
+                import cloudscraper
+                scraper = cloudscraper.create_scraper()
+                res = scraper.get(url_to_fetch, timeout=15)
+                if res.status_code == 200 and "html" in str(res.headers.get("Content-Type", "")).lower():
+                    html_content = res.text
+            except Exception:
+                pass
+
+        # 3. Try standard requests with modern browser headers (prevents blocks/403)
+        if not html_content:
+            try:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5",
+                }
+                res = self.http.get(
+                    url_to_fetch,
+                    timeout=max(5, int(settings.article_fetch_timeout_seconds)),
+                    headers=headers,
+                    allow_redirects=True,
+                )
+                if res.status_code == 200 and "html" in str(res.headers.get("Content-Type", "")).lower():
+                    html_content = res.text
+            except Exception:
+                pass
+
+        if not html_content:
             return ""
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        for node in soup.select("script,style,noscript,svg,form,nav,footer,header,aside"):
-            node.decompose()
+        try:
+            soup = BeautifulSoup(html_content, "html.parser")
+            for node in soup.select("script,style,noscript,svg,form,nav,footer,header,aside"):
+                node.decompose()
 
-        article_chunks: list[str] = []
-        content_selectors = [
-            "article",
-            "main",
-            "[itemprop='articleBody']",
-            ".article-body",
-            ".post-content",
-            ".entry-content",
-            ".story-body",
-            "#article-body",
-        ]
-        for selector in content_selectors:
-            for block in soup.select(selector):
-                text = block.get_text(" ", strip=True)
-                if text:
-                    article_chunks.append(text)
-            if article_chunks:
-                break
-        if not article_chunks:
-            for paragraph in soup.select("p"):
-                text = paragraph.get_text(" ", strip=True)
-                if text:
-                    article_chunks.append(text)
+            article_chunks: list[str] = []
+            content_selectors = [
+                "article",
+                "main",
+                "[itemprop='articleBody']",
+                ".article-body",
+                ".post-content",
+                ".entry-content",
+                ".story-body",
+                "#article-body",
+            ]
+            for selector in content_selectors:
+                for block in soup.select(selector):
+                    text = block.get_text(" ", strip=True)
+                    if text:
+                        article_chunks.append(text)
+                if article_chunks:
+                    break
+            if not article_chunks:
+                for paragraph in soup.select("p"):
+                    text = paragraph.get_text(" ", strip=True)
+                    if text:
+                        article_chunks.append(text)
 
-        combined = " ".join(part.strip() for part in article_chunks if part.strip())
-        normalized = " ".join(combined.split())
-        return normalized[: max(500, int(settings.article_enrichment_max_chars))]
+            combined = " ".join(part.strip() for part in article_chunks if part.strip())
+            normalized = " ".join(combined.split())
+            return normalized[: max(500, int(settings.article_enrichment_max_chars))]
+        except Exception as e:
+            logger.warning("Error parsing html content in collector: %s", e)
+            return ""
 
     def _build_analysis_summary(self, *, summary: str, url: str, allow_enrichment: bool) -> str:
         cleaned_summary = " ".join((summary or "").split())
         if not allow_enrichment or not settings.article_enrichment_enabled:
             return cleaned_summary
-        if len(cleaned_summary) >= int(settings.article_enrichment_min_chars):
-            return cleaned_summary[: max(500, int(settings.article_enrichment_max_chars))]
 
+        # ALWAYS try to scrape full text first for high LLM accuracy
         article_text = self._extract_article_text(url)
-        if not article_text:
-            return cleaned_summary
-        if not cleaned_summary:
+        if article_text and len(article_text) >= 200:
+            if cleaned_summary and cleaned_summary.lower() not in article_text.lower():
+                # If the RSS summary contains text not found in the scraped body, prepend it
+                # to avoid losing any details already present in the RSS summary
+                enriched = f"{cleaned_summary}\n\n{article_text}"
+                return enriched[: max(500, int(settings.article_enrichment_max_chars))]
             return article_text
-        if cleaned_summary.lower() in article_text.lower():
-            return article_text
-        enriched = f"{cleaned_summary}\n\n{article_text}"
-        return enriched[: max(500, int(settings.article_enrichment_max_chars))]
+
+        # Fallback to RSS summary if scraping failed or returned too little content
+        return cleaned_summary[: max(500, int(settings.article_enrichment_max_chars))]
 
     @staticmethod
     def _csv_list(raw_value: str) -> list[str]:

@@ -185,6 +185,14 @@ export default function App() {
   }, [selectedIncident]);
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [debouncedFilters, setDebouncedFilters] = useState(EMPTY_FILTERS);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedFilters(filters);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [filters]);
   const [activeSection, setActiveSection] = useState("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -236,7 +244,7 @@ export default function App() {
 
   const loadFilteredNews = useCallback(async () => {
     if (!authToken || DEMO_MODE) return;
-    const query = buildQuery({ ...filters, min_confidence: 0, limit: 120 });
+    const query = buildQuery({ ...debouncedFilters, min_confidence: 0, limit: 120 });
     try {
       const data = await fetchJson(`${ENDPOINTS.filterNews}?${query}`);
       setNewsRows(Array.isArray(data.items) ? data.items : []);
@@ -248,7 +256,7 @@ export default function App() {
         setError((current) => current || "Incident feed is temporarily unavailable.");
       }
     }
-  }, [authToken, filters, handleUnauthorized]);
+  }, [authToken, debouncedFilters, handleUnauthorized]);
 
   useEffect(() => {
     if (DEMO_MODE) return undefined;
@@ -290,10 +298,8 @@ export default function App() {
 
     setLoading(true);
     loadDashboard();
-    loadFilteredNews();
     const timer = window.setInterval(() => {
       loadDashboard();
-      loadFilteredNews();
     }, AUTO_REFRESH_MS);
 
     return () => {
@@ -304,7 +310,11 @@ export default function App() {
         ws.close();
       }
     };
-  }, [authToken, loadDashboard, loadFilteredNews]);
+  }, [authToken, loadDashboard]);
+
+  useEffect(() => {
+    loadFilteredNews();
+  }, [loadFilteredNews]);
 
   // Track active section via scroll
   useEffect(() => {

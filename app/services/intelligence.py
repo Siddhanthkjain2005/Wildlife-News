@@ -3214,10 +3214,19 @@ class HybridIntelligenceEngine:
 
         llm_location = str(llm_summary.get("extracted_location") or "").strip()
         if llm_location:
-            # Attempt to re-extract location from the LLM's suggested text to override rule mistakes
-            s_ext, d_ext, l_ext = self._extract_location(llm_location.lower())
-            if s_ext or d_ext:
-                state, district, location = s_ext, d_ext, l_ext
+            # First attempt to split comma-separated 'State, District' cleanly to preserve direct LLM precision
+            if "," in llm_location:
+                parts = [p.strip() for p in llm_location.split(",", 1)]
+                if len(parts) == 2:
+                    s_part = parts[0].strip().title()
+                    d_part = parts[1].strip().title()
+                    if s_part and d_part:
+                        state, district, location = s_part, d_part, f"{d_part}, {s_part}"
+            else:
+                # Fallback to the rule-based keyword search on the LLM location text
+                s_ext, d_ext, l_ext = self._extract_location(llm_location.lower())
+                if s_ext or d_ext:
+                    state, district, location = s_ext, d_ext, l_ext
 
         llm_suspects = llm_summary.get("extracted_suspects")
         if isinstance(llm_suspects, list):
