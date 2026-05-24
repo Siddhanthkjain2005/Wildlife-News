@@ -22,18 +22,23 @@ export default function TopBar({
   };
   const isSearching = Boolean(syncStatus?.running);
   const syncLabel = isSearching ? "Search in progress" : "Auto search active";
-  const syncProgress = syncStatus?.progress || {};
+  const activeData = isSearching ? (syncStatus?.progress || {}) : (syncStatus?.last_search || {});
   const syncMessage = String(syncStatus?.message || "").trim();
-  const stage = typeof syncProgress.stage === "string" && syncProgress.stage !== "-" ? syncProgress.stage : "";
-  const provider = typeof syncProgress.provider === "string" && syncProgress.provider !== "-" ? syncProgress.provider : "";
-  const language = typeof syncProgress.language === "string" && syncProgress.language !== "-" ? syncProgress.language : "";
-  const query = typeof syncProgress.query === "string" && syncProgress.query !== "-" ? syncProgress.query : "";
+  const stage = typeof activeData.stage === "string" && activeData.stage !== "-" ? activeData.stage : "";
+  const provider = typeof activeData.provider === "string" && activeData.provider !== "-" ? activeData.provider : "";
+  const language = typeof activeData.language === "string" && activeData.language !== "-" ? activeData.language : "";
+  const query = typeof activeData.query === "string" && activeData.query !== "-" ? activeData.query : "";
+  const scanned = activeData.scanned !== undefined ? activeData.scanned : null;
+  const kept = activeData.kept !== undefined ? activeData.kept : null;
+  
   const scope = [provider, language].filter(Boolean).join(" / ");
   const syncMetaParts = [];
-  if (stage) syncMetaParts.push(`stage: ${stage}`);
+  if (stage) syncMetaParts.push(`stage: ${isSearching ? stage : `last ${stage}`}`);
   if (scope) syncMetaParts.push(scope);
   if (query) syncMetaParts.push(`q: ${query}`);
-  const syncMeta = isSearching ? (syncMetaParts.join(" • ") || syncMessage || "Collecting live reports") : "";
+  if (scanned !== null && kept !== null) syncMetaParts.push(`scanned ${scanned}, kept ${kept}`);
+  
+  const syncMeta = syncMetaParts.length ? syncMetaParts.join(" • ") : (isSearching ? (syncMessage || "Collecting live reports") : "");
 
   const [openMenu, setOpenMenu] = useState(null); // 'export' | 'database' | null
   const exportRef = useRef(null);

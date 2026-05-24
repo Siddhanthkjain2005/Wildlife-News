@@ -29,20 +29,21 @@ class InMemoryEventBus:
 
     def __init__(self) -> None:
         self._lock = Lock()
-        # channel -> list[asyncio.Queue]
-        self._subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)
+        # channel -> list[(asyncio.Queue, asyncio.AbstractEventLoop)]
+        self._subscribers: dict[str, list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]]] = defaultdict(list)
 
     def subscribe(self, channel: str) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=256)
+        loop = asyncio.get_running_loop()
         with self._lock:
-            self._subscribers[channel].append(q)
+            self._subscribers[channel].append((q, loop))
         return q
 
     def unsubscribe(self, channel: str, q: asyncio.Queue) -> None:
         with self._lock:
             try:
-                self._subscribers[channel].remove(q)
-            except ValueError:
+                self._subscribers[channel] = [(queue, loop) for queue, loop in self._subscribers[channel] if queue is not q]
+            except Exception:
                 pass
 
     def publish(self, channel: str, payload: dict[str, object]) -> bool:
@@ -50,16 +51,20 @@ class InMemoryEventBus:
             queues = list(self._subscribers.get(channel, []))
         if not queues:
             return False
-        for q in queues:
-            try:
-                q.put_nowait(payload)
-            except asyncio.QueueFull:
-                # Drop oldest and retry
+            
+        for q, loop in queues:
+            def _put_nowait(queue=q, item=payload):
                 try:
-                    q.get_nowait()
-                    q.put_nowait(payload)
-                except Exception:
-                    pass
+                    queue.put_nowait(item)
+                except asyncio.QueueFull:
+                    try:
+                        queue.get_nowait()
+                        queue.put_nowait(item)
+                    except Exception:
+                        pass
+                        
+            if loop and loop.is_running():
+                loop.call_soon_threadsafe(_put_nowait)
         return True
 
     def snapshot(self) -> dict[str, object]:
