@@ -542,7 +542,45 @@ def _parse_intel_points(raw: str) -> list[str]:
 
 
 def _sync_snapshot() -> dict[str, object]:
-    return sync_state_store.snapshot()
+    snapshot = sync_state_store.snapshot()
+    if not snapshot.get("finished_at"):
+        # Fallback to the latest SyncLog entry in the database
+        try:
+            with SessionLocal() as db:
+                latest = db.execute(select(SyncLog).order_by(SyncLog.ended_at.desc())).scalars().first()
+                if latest:
+                    # Convert UTC ended_at and started_at to IST (Asia/Kolkata)
+                    ended_utc = latest.ended_at.replace(tzinfo=timezone.utc)
+                    ended_ist = ended_utc.astimezone(ZoneInfo("Asia/Kolkata"))
+                    snapshot["finished_at"] = ended_ist.isoformat()
+                    
+                    started_utc = latest.started_at.replace(tzinfo=timezone.utc)
+                    started_ist = started_utc.astimezone(ZoneInfo("Asia/Kolkata"))
+                    snapshot["started_at"] = started_ist.isoformat()
+                    
+                    snapshot["duration_seconds"] = latest.duration_sec
+                    snapshot["stats"] = {
+                        "scanned": latest.scanned,
+                        "inserted": latest.kept,
+                        "updated": 0,
+                        "failed": latest.failed,
+                    }
+                    snapshot["message"] = f"Finished (historical): scanned={latest.scanned}, new={latest.kept}"
+        except Exception:
+            pass
+            
+    # Present active/runtime timestamps in IST as well
+    for key in ("started_at", "finished_at"):
+        val = snapshot.get(key)
+        if isinstance(val, str) and val:
+            try:
+                dt = datetime.fromisoformat(val)
+                dt_ist = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+                snapshot[key] = dt_ist.isoformat()
+            except Exception:
+                pass
+                
+    return snapshot
 
 
 def _severity_from_risk(risk: int) -> str:
@@ -1802,29 +1840,37 @@ def legacy_home(
 
 
 @app.post("/sync")
-def sync_now():
-    raise HTTPException(status_code=410, detail="Manual sync is disabled. Scheduler runs automatically.")
+def sync_now(request: Request, _admin=Depends(require_admin_access)):
+    if not _try_start_sync(trigger="manual"):
+        raise HTTPException(status_code=409, detail="A sync or maintenance job is already running.")
+    
+    # Run in a background thread to prevent HTTP gateway timeout (sub-second return!)
+    from threading import Thread
+    Thread(target=_run_sync_job, args=("manual",), daemon=True).start()
+    return {"ok": True, "message": "Manual news sync successfully started in background."}
 
 
 # ---------- Manual Review API ----------
-@app.patch("/api/incidents/{incident_id}/review")
-def review_incident(incident_id: int, request: Request, _admin=Depends(require_admin_access)):
-    """Approve, reject, or reset an incident's review status."""
-    import json as _json
-    body = _json.loads(request._body.decode() if hasattr(request, '_body') else '{}')
-    # Accept body from async request
-    try:
-        import asyncio
-        body = asyncio.get_event_loop().run_until_complete(request.json())
-    except Exception:
-        pass
+class IncidentReviewRequest(BaseModel):
+    review_status: str
+    reviewed_by: str = "admin"
+    review_notes: str = ""
 
-    status = str(body.get("review_status", "")).strip().lower()
+
+@app.patch("/api/incidents/{incident_id}/review")
+async def review_incident(
+    incident_id: int, 
+    review_req: IncidentReviewRequest,
+    request: Request, 
+    _admin=Depends(require_admin_access)
+):
+    """Approve, reject, or reset an incident's review status."""
+    status = review_req.review_status.strip().lower()
     if status not in ("approved", "rejected", "pending"):
         return JSONResponse(status_code=400, content={"detail": "review_status must be 'approved', 'rejected', or 'pending'"})
 
-    reviewer = str(body.get("reviewed_by", "admin"))[:120]
-    notes = str(body.get("review_notes", ""))[:500]
+    reviewer = review_req.reviewed_by[:120] or "admin"
+    notes = review_req.review_notes[:500]
 
     with SessionLocal() as db:
         item = db.get(NewsItem, incident_id)
@@ -1835,7 +1881,13 @@ def review_incident(incident_id: int, request: Request, _admin=Depends(require_a
         item.reviewed_at = datetime.utcnow()
         item.review_notes = notes
         db.commit()
-        _audit(actor=reviewer, action=f"review:{status}", notes=f"incident={incident_id} {notes[:100]}", request=request)
+        _audit(
+            actor=reviewer,
+            action=f"review:{status}",
+            status="ok",
+            ip=_client_ip(request),
+            notes=f"incident={incident_id} {notes[:100]}",
+        )
         return {
             "ok": True,
             "id": incident_id,

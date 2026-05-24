@@ -141,6 +141,16 @@ class IntelligenceSummarizer:
         if ollama_enabled:
             ollama_model = os.environ.get("OLLAMA_MODEL", "deepseek-v3.1:671b-cloud")
             ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
+            ollama_token = os.environ.get("OLLAMA_BEARER_TOKEN") or os.environ.get("LLM_API_KEY")
+
+            is_openai_format = (
+                ollama_token is not None or
+                "v1/chat/completions" in ollama_url or
+                "digitalocean.com" in ollama_url or
+                "azure.com" in ollama_url or
+                "openai.com" in ollama_url or
+                "deepseek.com" in ollama_url
+            )
             
             # Safe character-based truncation for large Ollama cloud models
             truncated_article = article_text[:12000]
@@ -172,28 +182,61 @@ class IntelligenceSummarizer:
             )
 
             try:
-                payload = {
-                    "model": ollama_model,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
-                    "stream": False,
-                    "format": "json",
-                    "options": {
-                        "temperature": self.temperature,
-                        "num_predict": self.max_tokens
-                    }
+                headers = {
+                    "Content-Type": "application/json"
                 }
-                response = requests.post(ollama_url, json=payload, timeout=120, proxies={"http": None, "https": None})
+                if ollama_token:
+                    headers["Authorization"] = f"Bearer {ollama_token}"
+
+                if is_openai_format:
+                    payload = {
+                        "model": ollama_model,
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "stream": False,
+                        "temperature": self.temperature,
+                        "max_tokens": 2048,
+                        "response_format": {"type": "json_object"}
+                    }
+                else:
+                    payload = {
+                        "model": ollama_model,
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ],
+                        "stream": False,
+                        "format": "json",
+                        "options": {
+                            "temperature": self.temperature,
+                            "num_predict": 2048
+                        }
+                    }
+
+                response = requests.post(
+                    ollama_url, 
+                    json=payload, 
+                    headers=headers,
+                    timeout=120, 
+                    proxies={"http": None, "https": None}
+                )
                 response.raise_for_status()
                 res_json = response.json()
-                raw_text = res_json.get("message", {}).get("content", "")
+                
+                raw_text = ""
+                if "choices" in res_json and len(res_json["choices"]) > 0:
+                    raw_text = res_json["choices"][0].get("message", {}).get("content", "")
+                elif "message" in res_json:
+                    raw_text = res_json["message"].get("content", "")
+                else:
+                    raw_text = res_json.get("content") or str(res_json)
+
                 parsed = self._extract_json_object(raw_text)
                 if parsed is None:
-                    logger.warning("Ollama returned non-parseable JSON content: %s", raw_text)
+                    logger.warning("Cloud LLM returned non-parseable JSON content: %s", raw_text)
                     return fallback
             except Exception as err:
-                logger.warning("Ollama summary generation failed: %s", err)
+                logger.warning("Cloud LLM summary generation failed: %s", err)
                 return fallback
 
             summary = str(parsed.get("summary") or fallback["summary"]).strip()[:500]
