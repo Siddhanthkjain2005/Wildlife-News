@@ -55,6 +55,8 @@ const EMPTY_FILTERS = {
 
 // Demo mode - set to true to bypass authentication and show mock data
 const DEMO_MODE = false;
+// Maintenance mode - set to true to show the maintenance screen
+const MAINTENANCE_MODE = true;
 
 const DEMO_SUMMARY = {
   total_incidents: 2847,
@@ -156,7 +158,33 @@ const DEMO_NEWS_ROWS = [
   { id: 8, title: "Wildlife sanctuary expansion approved by state", state: "Madhya Pradesh", species: "Various", risk_score: 15, date: "2024-01-11", source: "Tribune" }
 ];
 
+function MaintenanceScreen() {
+  return (
+    <div className="maintenance-shell">
+      <article className="card maintenance-card">
+        <div className="card-head">
+          <div className="card-head-left">
+            <ShieldCheck size={16} className="card-head-icon" />
+            <h2>Website Under Maintenance</h2>
+          </div>
+        </div>
+        <div className="card-body maintenance-body">
+          <p>We&apos;re doing scheduled updates to the Wildlife Crime Intelligence Center.</p>
+          <p className="maintenance-muted">Please check back soon.</p>
+        </div>
+      </article>
+    </div>
+  );
+}
+
 export default function App() {
+  if (MAINTENANCE_MODE) {
+    return <MaintenanceScreen />;
+  }
+  return <DashboardApp />;
+}
+
+function DashboardApp() {
   const [loading, setLoading] = useState(DEMO_MODE ? false : true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);

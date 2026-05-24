@@ -530,6 +530,39 @@ button {
  * Auth Screen - Premium Login
  * ------------------------------------------------------------------ */
 
+.maintenance-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: linear-gradient(135deg, var(--bg) 0%, var(--bg-2) 100%);
+}
+
+.maintenance-card {
+  width: min(520px, 100%);
+  text-align: center;
+  box-shadow: var(--shadow-xl);
+}
+
+.maintenance-body {
+  display: grid;
+  gap: 12px;
+}
+
+.maintenance-body p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.maintenance-body p:first-child {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+.maintenance-muted {
+  font-size: 0.95rem;
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
