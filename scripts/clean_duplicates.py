@@ -64,16 +64,48 @@ def main() -> None:
                 duplicate_of.merged_sources = ",".join(sorted(list(merged)))
                 duplicate_of.source_count = len(merged)
                 
-                # 2. Point all child references (Entity, Alert, Report) to duplicate_of.id
-                db.execute(
-                    Entity.__table__.update().where(Entity.news_id == item.id).values(news_id=duplicate_of.id)
-                )
-                db.execute(
-                    Alert.__table__.update().where(Alert.news_id == item.id).values(news_id=duplicate_of.id)
-                )
-                db.execute(
-                    Report.__table__.update().where(Report.news_id == item.id).values(news_id=duplicate_of.id)
-                )
+                # 2. Safely merge and update child references (Entity, Alert, Report) to duplicate_of.id
+                # A. Report Merging (UNIQUE(news_id) constraint check)
+                existing_report = db.execute(
+                    select(Report).where(Report.news_id == duplicate_of.id)
+                ).scalars().first()
+                if existing_report:
+                    # Duplicate_of already has a report, so we delete the duplicate's report
+                    db.execute(delete(Report).where(Report.news_id == item.id))
+                else:
+                    # Update news_id if duplicate_of does not have a report
+                    db.execute(
+                        Report.__table__.update().where(Report.news_id == item.id).values(news_id=duplicate_of.id)
+                    )
+
+                # B. Alert Merging (avoid duplicate alerts for same news)
+                existing_alert = db.execute(
+                    select(Alert).where(Alert.news_id == duplicate_of.id)
+                ).scalars().first()
+                if existing_alert:
+                    # Duplicate_of already has alerts, so we delete the duplicate's alerts
+                    db.execute(delete(Alert).where(Alert.news_id == item.id))
+                else:
+                    # Update news_id if duplicate_of does not have alerts
+                    db.execute(
+                        Alert.__table__.update().where(Alert.news_id == item.id).values(news_id=duplicate_of.id)
+                    )
+
+                # C. Entity Merging (avoid duplicate entity records for duplicate_of.id)
+                existing_entities = db.execute(
+                    select(Entity).where(Entity.news_id == duplicate_of.id)
+                ).scalars().all()
+                seen_entities = {(e.entity_type, e.entity_value) for e in existing_entities}
+
+                dup_entities = db.execute(
+                    select(Entity).where(Entity.news_id == item.id)
+                ).scalars().all()
+                
+                for ent in dup_entities:
+                    if (ent.entity_type, ent.entity_value) in seen_entities:
+                        db.delete(ent)
+                    else:
+                        ent.news_id = duplicate_of.id
                 
                 # 3. Delete duplicate item from database
                 db.delete(item)
