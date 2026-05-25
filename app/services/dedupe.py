@@ -68,12 +68,12 @@ class DedupeEngine:
     @staticmethod
     def _normalize_title(value: str) -> str:
         text = re.sub(r"\s+", " ", (value or "").strip().lower())
-        return re.sub(r"[^a-z0-9 ]", "", text).strip()
+        return re.sub(r"[^\w\s]", "", text).strip()
 
     @staticmethod
     def _normalize_text(value: str) -> str:
         text = re.sub(r"\s+", " ", (value or "").strip().lower())
-        return re.sub(r"[^a-z0-9 ]", " ", text).strip()
+        return re.sub(r"[^\w\s]", " ", text).strip()
 
     @staticmethod
     def _token_overlap_similarity(left: str, right: str) -> float:
@@ -263,19 +263,9 @@ class DedupeEngine:
 
         since = published_at - timedelta(days=14)
         stmt = apply_strict_incident_filters(select(NewsItem)).where(NewsItem.published_at >= since)
-        stmt = stmt.order_by(NewsItem.published_at.desc()).limit(120)
+        stmt = stmt.order_by(NewsItem.published_at.desc()).limit(200)
 
         candidates = db.execute(stmt).scalars().all()
-        if state.strip():
-            state_candidates = [item for item in candidates if (item.state or "").strip().lower() == state.strip().lower()]
-            if state_candidates:
-                candidates = state_candidates
-        if district.strip():
-            district_candidates = [
-                item for item in candidates if (item.district or "").strip().lower() == district.strip().lower()
-            ]
-            if district_candidates:
-                candidates = district_candidates
 
         best_match, confidence, reason = self._best_similarity_match(
             title=title,
