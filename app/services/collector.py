@@ -1970,32 +1970,37 @@ class NewsCollector:
 
                         scanned += 1
                         provider_stats[provider]["scanned"] += 1
-                        analysis_summary = self._build_analysis_summary(
-                            summary=summary,
-                            url=url,
-                            allow_enrichment=(source_type == "news"),
-                        )
+
+                        # Phase 1: Lightweight pre-filter using RSS summary only (no scraping).
+                        # This quickly rejects ~80% of articles without expensive HTTP calls.
                         detected_language = self._detect_language(
                             title=title,
-                            summary=(analysis_summary or summary),
+                            summary=summary,
                             fallback=article.language,
                         )
                         prior_source = self._prior_source_hits(db, source)
                         initial_intel = self.intelligence_engine.analyze(
                             title=title,
                             summary=summary,
-                            full_content=analysis_summary,
+                            full_content=summary,
                             prior_source_hits=prior_source,
                             source=source,
                             allow_llm=False,
                         )
                         
                         # Pre-filtering Gate: If keyword/SetFit classifiers determine
-                        # this is NOT a poaching incident, skip expensive LLM calls entirely.
+                        # this is NOT a poaching incident, skip expensive scraping + LLM entirely.
                         if not initial_intel.is_poaching:
                             provider_stats[provider]["rejected"] += 1
                             continue
 
+                        # Phase 2: Article passed pre-filter — now scrape full text and run
+                        # the complete LLM-powered intelligence analysis.
+                        analysis_summary = self._build_analysis_summary(
+                            summary=summary,
+                            url=url,
+                            allow_enrichment=(source_type == "news"),
+                        )
                         prior_district = self._prior_district_hits(db, initial_intel.district)
                         intel = self.intelligence_engine.analyze(
                             title=title,
