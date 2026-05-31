@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Wildlife Crime Intelligence Center</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='react-build/dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='react-build/dashboard.css') }}?v={{ cache_buster | default('1') }}">
 </head>
 <body>
   <div id="root">
@@ -29,6 +29,6 @@
       JavaScript is required for the React dashboard. Open <a href="/legacy?legacy=1">legacy dashboard</a>.
     </div>
   </noscript>
-  <script type="module" src="{{ url_for('static', path='react-build/dashboard.js') }}"></script>
+  <script type="module" src="{{ url_for('static', path='react-build/dashboard.js') }}?v={{ cache_buster | default('1') }}"></script>
 </body>
 </html>

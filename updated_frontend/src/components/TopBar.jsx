@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Menu, RefreshCw, Download, FileSpreadsheet, FileText, LogOut, Database, HardDrive, Upload, ChevronDown } from "lucide-react";
 import { formatDateShort } from "../lib/format.js";
+import { TRANSLATIONS } from "../lib/translation.js";
 
 export default function TopBar({
   activeSection,
@@ -10,30 +11,33 @@ export default function TopBar({
   onExport,
   onToggleMenu,
   onLogout,
-  onReanalyze
+  onReanalyze,
+  authToken,
+  language = "en",
+  onLanguageChange
 }) {
+  const t = TRANSLATIONS[language] || TRANSLATIONS.en;
+
   const titles = {
-    overview: "Overview",
-    map: "Threat Map",
-    alerts: "Live Alerts",
-    analytics: "Analytics",
-    incidents: "Incidents",
-    osint: "OSINT Feed",
-    reco: "Recommendations"
+    control_center: "Control Center",
+    sigint_analyzer: "SIGINT Analyzer",
+    database_workspace: "Database Workspace",
+    tactical_resources: "Tactical Resources",
+    system_admin: "System Admin"
   };
   const isSearching = Boolean(syncStatus?.running);
-  const syncLabel = isSearching ? "Search in progress" : "Auto search active";
+  const syncLabel = isSearching ? t.sync_running : "Auto search active";
   const activeData = isSearching ? (syncStatus?.progress || {}) : (syncStatus?.last_search || {});
   const syncMessage = String(syncStatus?.message || "").trim();
   const stage = typeof activeData.stage === "string" && activeData.stage !== "-" ? activeData.stage : "";
   const provider = typeof activeData.provider === "string" && activeData.provider !== "-" ? activeData.provider : "";
-  const language = typeof activeData.language === "string" && activeData.language !== "-" ? activeData.language : "";
+  const lang = typeof activeData.language === "string" && activeData.language !== "-" ? activeData.language : "";
   const query = typeof activeData.query === "string" && activeData.query !== "-" ? activeData.query : "";
   const scanned = activeData.scanned !== undefined ? activeData.scanned : null;
   const kept = activeData.kept !== undefined ? activeData.kept : null;
   const updatedAt = typeof activeData.updated_at === "string" && activeData.updated_at !== "-" ? activeData.updated_at : "";
   
-  const scope = [provider, language].filter(Boolean).join(" / ");
+  const scope = [provider, lang].filter(Boolean).join(" / ");
   const syncMetaParts = [];
   if (stage) syncMetaParts.push(`stage: ${isSearching ? stage : `last ${stage}`}`);
   if (scope) syncMetaParts.push(scope);
@@ -46,30 +50,25 @@ export default function TopBar({
     : (syncMessage || (isSearching ? "Collecting live reports" : ""));
 
   const [openMenu, setOpenMenu] = useState(null); // 'export' | 'database' | null
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  
   const exportRef = useRef(null);
   const databaseRef = useRef(null);
+  const langRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(e) {
-      if (
-        exportRef.current && !exportRef.current.contains(e.target) &&
-        databaseRef.current && !databaseRef.current.contains(e.target)
-      ) {
+      if (exportRef.current && !exportRef.current.contains(e.target) &&
+          databaseRef.current && !databaseRef.current.contains(e.target)) {
         setOpenMenu(null);
       }
+      if (langRef.current && !langRef.current.contains(e.target)) {
+        setLangMenuOpen(false);
+      }
     }
-    function handleEsc(e) {
-      if (e.key === "Escape") setOpenMenu(null);
-    }
-    if (openMenu) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEsc);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [openMenu]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const apiBase = () =>
     typeof import.meta !== "undefined"
@@ -82,12 +81,12 @@ export default function TopBar({
   };
 
   const handleDownloadAllCsv = () => {
-    window.location.href = `${apiBase()}/api/public/download-csv`;
+    window.location.href = `${apiBase()}/api/admin/download-csv?admin_token=${authToken}`;
     setOpenMenu(null);
   };
 
   const handleDownloadDb = () => {
-    window.location.href = `${apiBase()}/api/public/download-db`;
+    window.location.href = `${apiBase()}/api/admin/download-db?admin_token=${authToken}`;
     setOpenMenu(null);
   };
 
@@ -103,7 +102,13 @@ export default function TopBar({
       const form = new FormData();
       form.append("file", file);
       try {
-        const res = await fetch(`${apiBase()}/api/public/upload-db`, { method: "POST", body: form });
+        const res = await fetch(`${apiBase()}/api/admin/upload-db`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${authToken}`
+          },
+          body: form
+        });
         const data = await res.json();
         if (data.ok) {
           alert(`Database restored!\n\nTotal rows: ${data.total_rows}\nPoaching articles: ${data.poaching_rows}\nPredictor retrained: ${data.predictor_retrained ? "Yes" : "No"}`);
@@ -139,10 +144,6 @@ export default function TopBar({
           <span className="sep">/</span>
           <strong>{titles[activeSection] || "Overview"}</strong>
         </div>
-        <div className="india-exclusive-badge hidden md:flex">
-          <span className="dot animate-pulse" />
-          <span>India Exclusive Intelligence</span>
-        </div>
       </div>
 
       <div className="topbar-center">
@@ -154,6 +155,51 @@ export default function TopBar({
       </div>
 
       <div className="topbar-right">
+        <div className="lang-dropdown" ref={langRef}>
+          <button
+            type="button"
+            className="lang-btn"
+            onClick={() => setLangMenuOpen(!langMenuOpen)}
+          >
+            <span>{language === "hi" ? "हिन्दी" : language === "kn" ? "ಕನ್ನಡ" : "EN"}</span>
+            <ChevronDown size={12} className="dropdown-caret" />
+          </button>
+          {langMenuOpen && (
+            <div className="lang-menu" role="menu">
+              <button
+                type="button"
+                className={`lang-item ${language === "en" ? "is-active" : ""}`}
+                onClick={() => {
+                  onLanguageChange("en");
+                  setLangMenuOpen(false);
+                }}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                className={`lang-item ${language === "hi" ? "is-active" : ""}`}
+                onClick={() => {
+                  onLanguageChange("hi");
+                  setLangMenuOpen(false);
+                }}
+              >
+                हिन्दी
+              </button>
+              <button
+                type="button"
+                className={`lang-item ${language === "kn" ? "is-active" : ""}`}
+                onClick={() => {
+                  onLanguageChange("kn");
+                  setLangMenuOpen(false);
+                }}
+              >
+                ಕನ್ನಡ
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="dropdown" ref={exportRef}>
           <button
             type="button"
@@ -163,24 +209,27 @@ export default function TopBar({
             aria-expanded={openMenu === "export"}
           >
             <Download size={15} />
-            <span className="btn-label">Export</span>
+            <span className="btn-label">{t.export}</span>
             <ChevronDown size={13} className={`dropdown-caret ${openMenu === "export" ? "is-open" : ""}`} />
           </button>
           {openMenu === "export" && (
             <div className="dropdown-menu" role="menu">
               <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("csv")}>
                 <Download size={14} />
-                <span>Export as CSV</span>
+                <span>{t.download_csv}</span>
               </button>
               <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("excel")}>
                 <FileSpreadsheet size={14} />
-                <span>Export as Excel</span>
+                <span>{t.download_excel}</span>
               </button>
               <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("excel_incidents_reports")}>
                 <FileSpreadsheet size={14} />
-                <span>Excel (2-Sheet)</span>
+                <span>{t.download_excel_two}</span>
               </button>
-
+              <button type="button" role="menuitem" className="dropdown-item" onClick={() => handleExport("pdf")}>
+                <FileText size={14} />
+                <span>{t.download_pdf}</span>
+              </button>
             </div>
           )}
         </div>
@@ -194,7 +243,7 @@ export default function TopBar({
             aria-expanded={openMenu === "database"}
           >
             <Database size={15} />
-            <span className="btn-label">Database</span>
+            <span className="btn-label">{t.database}</span>
             <ChevronDown size={13} className={`dropdown-caret ${openMenu === "database" ? "is-open" : ""}`} />
           </button>
           {openMenu === "database" && (
@@ -205,11 +254,11 @@ export default function TopBar({
               </button>
               <button type="button" role="menuitem" className="dropdown-item" onClick={handleDownloadDb}>
                 <HardDrive size={14} />
-                <span>Download Database</span>
+                <span>{t.download_db}</span>
               </button>
               <button type="button" role="menuitem" className="dropdown-item" onClick={handleUploadDb}>
                 <Upload size={14} />
-                <span>Upload Database</span>
+                <span>{t.upload_db}</span>
               </button>
               <button type="button" role="menuitem" className="dropdown-item" onClick={handleReanalyzeDb}>
                 <RefreshCw size={14} />
@@ -229,12 +278,12 @@ export default function TopBar({
           aria-label="Refresh data"
         >
           <RefreshCw size={15} className={busy ? "spin" : ""} />
-          <span className="btn-label">Refresh</span>
+          <span className="btn-label">{t.refresh}</span>
         </button>
 
         <button type="button" className="btn btn-ghost" onClick={onLogout} aria-label="Logout">
           <LogOut size={15} />
-          <span className="btn-label">Logout</span>
+          <span className="btn-label">{t.logout}</span>
         </button>
       </div>
 

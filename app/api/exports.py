@@ -3,17 +3,20 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import require_admin_access
+from app.models.news import NewsItem
 from app.services.report_export import (
     build_csv_bytes,
     build_excel_bytes,
     build_excel_incidents_reports_bytes,
     build_pdf_bytes,
+    build_dossier_pdf_bytes,
+    build_bulletin_pdf_bytes,
 )
 
 router = APIRouter(tags=["exports"])
@@ -279,4 +282,63 @@ def export_briefing_pack(
         iter([payload]),
         media_type="application/json; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=wildlife_analyst_briefing_pack.json"},
+    )
+
+
+@router.get("/api/export/pdf-dossier/{incident_id}")
+@router.get("/export/pdf-dossier/{incident_id}")
+def export_pdf_dossier(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin_access),
+):
+    m = _main()
+    news = db.get(NewsItem, incident_id)
+    if not news:
+        raise HTTPException(status_code=404, detail="Incident not found.")
+    payload = m._to_export_payload(news)
+    pdf_bytes = build_dossier_pdf_bytes(payload)
+    m._audit(
+        actor="admin",
+        action="export_pdf_dossier",
+        status="ok",
+        ip=m._client_ip(request),
+        notes=f"incident_id={incident_id}",
+    )
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=wildlife_dossier_{incident_id}.pdf"},
+    )
+
+
+@router.get("/api/admin/export/weekly-bulletin")
+@router.get("/export/weekly-bulletin")
+def export_weekly_bulletin(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin_access),
+):
+    m = _main()
+    from datetime import datetime, timedelta
+    date_from = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    rows = m._fetch_filtered_news_rows(
+        db=db,
+        date_from=date_from,
+        limit=100,
+    )
+    payload = [m._to_export_payload(row) for row in rows]
+    pdf_bytes = build_bulletin_pdf_bytes(payload)
+    m._audit(
+        actor="admin",
+        action="export_weekly_bulletin",
+        status="ok",
+        ip=m._client_ip(request),
+        notes=f"rows={len(payload)}",
+    )
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=wccb_weekly_intel_bulletin.pdf"},
     )

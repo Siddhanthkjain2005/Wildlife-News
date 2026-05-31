@@ -33,7 +33,7 @@ _maintenance_state: dict[str, object] = {
 
 # If maintenance has been "running" for longer than this, assume the server restarted
 # and the flag is stale. Auto-reset it so new runs can proceed.
-_STALE_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+_STALE_TIMEOUT_SECONDS = 180 * 60  # 3 hours (180 minutes)
 
 
 def _now_iso() -> str:
@@ -245,6 +245,9 @@ def run_deep_maintenance(db: Session):
                     db.rollback()
                 except Exception:
                     pass
+
+            # Rate-limiting delay to prevent triggering Groq free-tier 429 client limit
+            time.sleep(2.0)
 
         try:
             db.commit()

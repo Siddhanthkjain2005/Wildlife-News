@@ -243,3 +243,103 @@ def admin_data_quality(
 @router.get("/api/admin/system-health")
 def admin_system_health(_: None = Depends(require_admin_access), db: Session = Depends(get_db)):
     return get_system_health(db)
+
+
+@router.post("/api/admin/db-optimize")
+def admin_db_optimize(request: Request, _: None = Depends(require_admin_access), db: Session = Depends(get_db)):
+    m = _main()
+    try:
+        db.execute("VACUUM;")
+        db.execute("ANALYZE;")
+        m._audit(actor="admin", action="db_optimize", status="ok", ip=m._client_ip(request), notes="")
+        return {"ok": True, "message": "Database storage indices successfully rebuilt and optimized."}
+    except Exception as e:
+        m._audit(actor="admin", action="db_optimize", status="error", ip=m._client_ip(request), notes=str(e))
+        raise HTTPException(status_code=500, detail=f"Database optimization failed: {e}")
+
+
+@router.post("/api/admin/test-alerts")
+def admin_test_alerts(request: Request, _: None = Depends(require_admin_access)):
+    m = _main()
+    results = {}
+    
+    # 1. E-Mail
+    if m.settings.email_alerts_enabled:
+        ok = m.alert_engine._email_send("System Diagnostic Alert", "This is an official channel validation alert.")
+        results["email"] = "sent" if ok else "failed"
+    else:
+        results["email"] = "disabled"
+        
+    # 2. Telegram
+    if m.settings.telegram_alerts_enabled:
+        ok = m.alert_engine._telegram_send("System Diagnostic Alert - Telegram channel validation.")
+        results["telegram"] = "sent" if ok else "failed"
+    else:
+        results["telegram"] = "disabled"
+        
+    # 3. WhatsApp
+    if m.settings.whatsapp_alerts_enabled:
+        ok, err = m.alert_engine._whatsapp_send("System Diagnostic Alert - WhatsApp channel validation.")
+        results["whatsapp"] = "sent" if ok else f"failed: {err}"
+    else:
+        results["whatsapp"] = "disabled"
+        
+    status = "ok" if any(v == "sent" for v in results.values()) else "error"
+    m._audit(actor="admin", action="test_alerts", status=status, ip=m._client_ip(request), notes=str(results))
+    return {"ok": True, "channels": results, "message": "Alert channels diagnostics complete."}
+
+
+@router.post("/api/admin/test-ai")
+def admin_test_ai(request: Request, _: None = Depends(require_admin_access)):
+    m = _main()
+    try:
+        import os
+        import requests
+
+        ollama_enabled = os.environ.get("OLLAMA_ENABLED", "").lower() in ("true", "1")
+        if not ollama_enabled:
+            raise ValueError("OLLAMA_ENABLED is not set to true.")
+
+        ollama_url = os.environ.get("OLLAMA_URL", "").strip()
+        if not ollama_url:
+            raise ValueError("OLLAMA_URL is not configured.")
+
+        ollama_model = os.environ.get("OLLAMA_MODEL", "gemma3:27b")
+        ollama_token = (
+            os.environ.get("OLLAMA_BEARER_TOKEN")
+            or os.environ.get("LLM_API_KEY")
+            or os.environ.get("OLLAMA_API_KEY")
+        )
+
+        headers = {"Content-Type": "application/json"}
+        if ollama_token:
+            headers["Authorization"] = f"Bearer {ollama_token}"
+
+        payload = {
+            "model": ollama_model,
+            "messages": [{"role": "user", "content": "Return 'connectivity_ok'."}],
+            "stream": False,
+            "max_tokens": 10,
+        }
+        res = requests.post(ollama_url, json=payload, headers=headers, timeout=15)
+        if res.status_code == 200:
+            m._audit(actor="admin", action="test_ai", status="ok", ip=m._client_ip(request), notes=f"model={ollama_model}")
+            return {"ok": True, "message": f"Successfully connected to AI Gateway! Model '{ollama_model}' responsive. Status: 200 OK"}
+        else:
+            detail = ""
+            try:
+                detail = res.json().get("error", {}).get("message", res.text[:200])
+            except Exception:
+                detail = res.text[:200]
+            raise ValueError(f"HTTP {res.status_code}: {detail}")
+    except Exception as e:
+        m._audit(actor="admin", action="test_ai", status="error", ip=m._client_ip(request), notes=str(e)[:500])
+        raise HTTPException(status_code=500, detail=f"AI connectivity validation failed: {e}")
+
+
+@router.post("/api/admin/cache-clear")
+def admin_cache_clear_json(request: Request, _: None = Depends(require_admin_access)):
+    m = _main()
+    m._clear_runtime_cache()
+    m._audit(actor="admin", action="cache_clear", status="ok", ip=m._client_ip(request), notes="")
+    return {"ok": True, "message": "FastAPI runtime cache successfully cleared."}

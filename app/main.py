@@ -1136,10 +1136,15 @@ def _dashboard_summary(db: Session) -> dict[str, object]:
         )
         or 0
     )
+    from app.utils.india_geo import STATE_CENTROIDS
+    valid_states = [s.strip().lower() for s in STATE_CENTROIDS.keys()]
     states_active = int(
         db.scalar(
             _apply_today_news_scope(
-                _strict_incident_scope(select(func.count(func.distinct(NewsItem.state)))).where(NewsItem.state != "")
+                _strict_incident_scope(
+                    select(func.count(func.distinct(func.lower(func.trim(NewsItem.state)))))
+                )
+                .where(func.lower(func.trim(NewsItem.state)).in_(valid_states))
             )
         )
         or 0
@@ -1819,7 +1824,8 @@ def home(
     react_css = Path("app/static/react-build/dashboard.css")
     force_legacy = request.query_params.get("legacy", "").strip().lower() in {"1", "true", "yes"}
     if react_js.exists() and react_css.exists() and not force_legacy:
-        return templates.TemplateResponse("react_index.html", {"request": request})
+        js_mtime = int(react_js.stat().st_mtime)
+        return templates.TemplateResponse("react_index.html", {"request": request, "cache_buster": js_mtime})
 
     texts = get_ui_text(ui_lang if ui_lang in UI_TEXT else "en")
     language_options = sorted(
@@ -2272,17 +2278,18 @@ def get_report(id: int, db: Session = Depends(get_db)):
     }
 
 
-@app.get("/api/public/download-csv")
-def public_download_csv(
+@app.get("/api/admin/download-csv")
+def admin_download_csv(
     request: Request,
     db: Session = Depends(get_db),
+    _admin=Depends(require_admin_access),
 ):
-    """Download ALL poaching news as CSV. No authentication required — serves as data backup."""
+    """Download ALL poaching news as CSV. Admin authentication required — serves as data backup."""
     stmt = _strict_incident_scope(select(NewsItem)).order_by(NewsItem.published_at.desc()).limit(50000)
     rows = db.execute(stmt).scalars().all()
     payload = [_to_export_payload(row) for row in rows]
     csv_bytes = build_csv_bytes(payload)
-    _audit(actor="public", action="public_download_csv", status="ok", ip=_client_ip(request), notes=f"rows={len(payload)}")
+    _audit(actor="admin", action="admin_download_csv", status="ok", ip=_client_ip(request), notes=f"rows={len(payload)}")
     return StreamingResponse(
         iter([csv_bytes]),
         media_type="text/csv; charset=utf-8",
@@ -2290,13 +2297,13 @@ def public_download_csv(
     )
 
 
-@app.get("/api/public/download-db")
-def public_download_db(request: Request):
-    """Download the raw SQLite database file. No authentication required — serves as full data backup."""
+@app.get("/api/admin/download-db")
+def admin_download_db(request: Request, _admin=Depends(require_admin_access)):
+    """Download the raw SQLite database file. Admin authentication required — serves as full data backup."""
     db_path = _database_file_path()
     if db_path is None or not db_path.exists():
         raise HTTPException(status_code=404, detail="Database file not found.")
-    _audit(actor="public", action="public_download_db", status="ok", ip=_client_ip(request), notes=f"db_path={db_path}")
+    _audit(actor="admin", action="admin_download_db", status="ok", ip=_client_ip(request), notes=f"db_path={db_path}")
 
     def _stream_file():
         with open(db_path, "rb") as fh:
@@ -2312,8 +2319,13 @@ def public_download_db(request: Request):
         headers={"Content-Disposition": f"attachment; filename=wildlife_news_backup.db"},
     )
 
-@app.post("/api/public/upload-db")
-async def public_upload_db(request: Request, file: UploadFile = File(...)):
+
+@app.post("/api/admin/upload-db")
+async def admin_upload_db(
+    request: Request,
+    file: UploadFile = File(...),
+    _admin=Depends(require_admin_access),
+):
     """Upload a previously downloaded SQLite database to restore all data.
 
     This is the critical data migration endpoint — when Railway free trial expires:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from datetime import datetime
 from io import BytesIO, StringIO
 from statistics import mean
 
@@ -416,5 +417,377 @@ def build_pdf_bytes(rows: list[dict[str, object]], title: str = "Wildlife Intell
         pdf.drawString(2.4 * cm, y, reco_line)
         y -= 0.38 * cm
 
+    pdf.save()
+    return buf.getvalue()
+
+
+def build_dossier_pdf_bytes(row: dict[str, object]) -> bytes:
+    buf = BytesIO()
+    pdf = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    # Top border / Seal Area
+    y = height - 2 * cm
+    pdf.setFillColorRGB(0.06, 0.12, 0.24) # Dark Navy Blue theme
+    pdf.rect(1.5 * cm, y - 0.2 * cm, width - 3 * cm, 1.2 * cm, fill=True, stroke=False)
+    pdf.setFillColorRGB(1.0, 1.0, 1.0)
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawCentredString(width / 2.0, y + 0.2 * cm, "GOVERNMENT OF INDIA - WILDLIFE CRIME CONTROL BUREAU")
+    
+    # Reset fill color
+    pdf.setFillColorRGB(0.0, 0.0, 0.0)
+    y -= 1.2 * cm
+    
+    # Document Title
+    pdf.setFont("Helvetica-Bold", 15)
+    pdf.drawString(1.5 * cm, y, "WILDLIFE CRIME INTELLIGENCE DOSSIER")
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(width - 4.5 * cm, y, f"Ref: WCCB-ID-{row.get('id', 'N/A')}")
+    y -= 0.5 * cm
+    
+    # Decorative line
+    pdf.setStrokeColorRGB(0.7, 0.7, 0.7)
+    pdf.setLineWidth(1)
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+    
+    # Main Metadata Grid
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(1.5 * cm, y, "INCIDENT INFORMATION DETAILS")
+    y -= 0.45 * cm
+    
+    pdf.setFont("Helvetica", 9)
+    metadata = [
+        ("Incident Date:", str(row.get("date", ""))[:16]),
+        ("Risk Level:", f"{row.get('risk_score', '0')} / 100 (Confidence: {float(row.get('confidence', 0.0) or 0.0):.2f})"),
+        ("Target Species:", str(row.get("species", "")) or "—"),
+        ("Crime Category:", str(row.get("crime_type", "")) or "—"),
+        ("Incident State:", str(row.get("state", "")) or "—"),
+        ("Incident District:", str(row.get("district", "")) or "—"),
+        ("Involved Suspects:", str(row.get("involved_persons", "")) or "—"),
+        ("Intelligence Source:", str(row.get("source", "")) or "—"),
+    ]
+    
+    # Draw metadata in 2 columns
+    col_width = (width - 3 * cm) / 2.0
+    for idx, (label, val) in enumerate(metadata):
+        col = idx % 2
+        row_idx = idx // 2
+        cur_x = 1.5 * cm + col * col_width
+        cur_y = y - row_idx * 0.45 * cm
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(cur_x, cur_y, label)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(cur_x + 3.2 * cm, cur_y, val[:35])
+        
+    y -= 4 * 0.45 * cm + 0.3 * cm
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+    
+    # Title Header Details
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(1.5 * cm, y, "INTELLIGENCE REPORT HEADER")
+    y -= 0.45 * cm
+    pdf.setFont("Helvetica-Oblique", 9)
+    # Wrap title
+    title_str = str(row.get("title", ""))
+    words = title_str.split()
+    lines = []
+    curr_line = ""
+    for word in words:
+        if len(curr_line + " " + word) < 100:
+            curr_line += " " + word if curr_line else word
+        else:
+            lines.append(curr_line)
+            curr_line = word
+    if curr_line:
+        lines.append(curr_line)
+    for line in lines[:3]:
+        pdf.drawString(1.7 * cm, y, line)
+        y -= 0.4 * cm
+    y -= 0.2 * cm
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+
+    # AI Intel Summary Section
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(1.5 * cm, y, "AI INTELLIGENCE REPORT & LEGAL PROVISIONS")
+    y -= 0.45 * cm
+    
+    # Detailed WPA breakdown
+    pdf.setFont("Helvetica-Bold", 9)
+    wpa_fields = [
+        ("WPA Schedule:", str(row.get("wpa_schedule", "")) or "Not Classified"),
+        ("WPA Section:", str(row.get("wpa_section", "")) or "Not Classified"),
+        ("Offence Category:", str(row.get("wpa_offence_type", "")) or "Not Classified"),
+        ("Penalty Class:", str(row.get("wpa_penalty_class", "")) or "Not Classified"),
+        ("Protected Area Type:", str(row.get("protected_area_type", "")) or "None"),
+        ("Enforcement Agency:", str(row.get("enforcement_authority", "")) or "Forest Dept. / Police"),
+    ]
+    for idx, (label, val) in enumerate(wpa_fields):
+        col = idx % 2
+        row_idx = idx // 2
+        cur_x = 1.7 * cm + col * col_width
+        cur_y = y - row_idx * 0.45 * cm
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(cur_x, cur_y, label)
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(cur_x + 3.4 * cm, cur_y, val[:35])
+        
+    y -= 3 * 0.45 * cm + 0.3 * cm
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+    
+    # Intel Details / Route / Recommendations
+    details = [
+        ("Intelligence Summary Notes:", str(row.get("two_line_summary", "")) or str(row.get("summary", "")) or "No summary notes generated."),
+        ("Likely Poaching/Smuggling Route:", str(row.get("likely_smuggling_route", "")) or "Not clear from initial signals."),
+        ("Action Enforcement Recommendations:", str(row.get("action_recommendation", "")) or "Review reports and perform physical field verification."),
+    ]
+    
+    for section_title, text in details:
+        if y < 3 * cm:
+            pdf.showPage()
+            y = height - 2 * cm
+            
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(1.5 * cm, y, section_title)
+        y -= 0.4 * cm
+        pdf.setFont("Helvetica", 9)
+        
+        # Wrap text block
+        words = text.split()
+        curr_line = ""
+        lines = []
+        for word in words:
+            if len(curr_line + " " + word) < 110:
+                curr_line += " " + word if curr_line else word
+            else:
+                lines.append(curr_line)
+                curr_line = word
+        if curr_line:
+            lines.append(curr_line)
+        for line in lines[:4]: # Limit to 4 lines per section
+            pdf.drawString(1.7 * cm, y, line)
+            y -= 0.38 * cm
+        y -= 0.25 * cm
+        
+    # Signature box at bottom
+    if y < 3.5 * cm:
+        pdf.showPage()
+        y = height - 2 * cm
+        
+    y = 2.8 * cm
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+    pdf.setFont("Helvetica", 8)
+    pdf.drawString(1.5 * cm, y, "REPORT GENERATED BY WILDLIFE CRIME INTELLIGENCE CENTER (WCCB COOPERATION FRAMEWORK).")
+    pdf.drawString(1.5 * cm, y - 0.3 * cm, "CLASSIFICATION: FOR OFFICIAL USE ONLY. TIGHT PHYSICAL CONTROL ENFORCED.")
+    
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(width - 5 * cm, y, "AUTHORED/STAMPED BY:")
+    pdf.setFont("Helvetica-Oblique", 8)
+    pdf.drawString(width - 5 * cm, y - 0.4 * cm, "WCCB Duty Intelligence Officer")
+    
+    pdf.save()
+    return buf.getvalue()
+
+
+def build_bulletin_pdf_bytes(rows: list[dict[str, object]]) -> bytes:
+    buf = BytesIO()
+    pdf = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+    
+    # PAGE 1: EXECUTIVE BRIEFING BULLETIN
+    y = height - 1.8 * cm
+    
+    # Official Header
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.setFillColorRGB(0.08, 0.18, 0.36)  # Dark Navy Blue
+    pdf.drawCentredString(width / 2.0, y, "WILDLIFE CRIME INTELLIGENCE CENTER")
+    y -= 0.45 * cm
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.setFillColorRGB(0.72, 0.53, 0.04)  # Gold Accent
+    pdf.drawCentredString(width / 2.0, y, "WCCB TACTICAL INTELLIGENCE & SECURITY ADVISORY BULLETIN")
+    y -= 0.4 * cm
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(0.3, 0.3, 0.3)
+    pdf.drawCentredString(width / 2.0, y, f"GENERATED ON: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC | FOR OFFICIAL ENFORCEMENT USE ONLY")
+    
+    y -= 0.4 * cm
+    pdf.setStrokeColorRGB(0.08, 0.18, 0.36)
+    pdf.setLineWidth(1.5)
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    
+    # Metadata Overview block
+    y -= 0.8 * cm
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.setFillColorRGB(0.08, 0.18, 0.36)
+    pdf.drawString(1.5 * cm, y, "I. WEEKLY TASKFORCE INTEL SUMMARY")
+    
+    y -= 0.5 * cm
+    pdf.setFont("Helvetica", 9.5)
+    pdf.setFillColorRGB(0.1, 0.1, 0.1)
+    
+    total_count = len(rows)
+    high_risk_count = sum(1 for r in rows if int(r.get("risk_score", 0) or 0) > 80)
+    
+    # Get distinct states affected
+    states = {str(r.get("state", "")).strip() for r in rows if r.get("state")}
+    states.discard("")
+    species = {str(r.get("species", "")).strip() for r in rows if r.get("species")}
+    species.discard("")
+    
+    summary_text = (
+        f"During the past 7 days, a total of {total_count} active wildlife crime incidents have been intercepted "
+        f"and analyzed by the hybrid AI pipeline. Out of these, {high_risk_count} cases are classified as HIGH-RISK alerts "
+        f"requiring immediate field intervention. Poaching activity was detected across {len(states)} states "
+        f"impacting {len(species)} federally protected species."
+    )
+    
+    # Wrap summary text
+    words = summary_text.split()
+    curr_line = ""
+    lines = []
+    for word in words:
+        if len(curr_line + " " + word) < 110:
+            curr_line += " " + word if curr_line else word
+        else:
+            lines.append(curr_line)
+            curr_line = word
+    if curr_line:
+        lines.append(curr_line)
+    for line in lines:
+        pdf.drawString(1.5 * cm, y, line)
+        y -= 0.42 * cm
+        
+    # Hotspot analysis grid
+    y -= 0.4 * cm
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+    
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(1.5 * cm, y, "II. TACTICAL COMPLIANCE & SPECIES IMPACT")
+    y -= 0.5 * cm
+    
+    pdf.setFont("Helvetica", 9)
+    hotspots = _top_hotspots(rows, limit=5)
+    pdf.drawString(1.5 * cm, y, "TOP AFFECTED DISTRICTS (HOTSPOTS):")
+    y -= 0.4 * cm
+    for place, count in hotspots:
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(1.8 * cm, y, f"• {place}:")
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(5.5 * cm, y, f"{count} threat reports compiled")
+        y -= 0.38 * cm
+        
+    y -= 0.4 * cm
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(1.5 * cm, y, "MOST IMPACTED SCHEDULED SPECIES:")
+    y -= 0.4 * cm
+    
+    # Species count
+    sp_counts = {}
+    for r in rows:
+        sp = str(r.get("species", "")).strip()
+        if sp and sp != "—":
+            sp_counts[sp] = sp_counts.get(sp, 0) + 1
+    sorted_sp = sorted(sp_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    for sp_name, count in sorted_sp:
+        pdf.setFont("Helvetica-Bold", 9)
+        pdf.drawString(1.8 * cm, y, f"• {sp_name.title()}:")
+        pdf.setFont("Helvetica", 9)
+        pdf.drawString(5.5 * cm, y, f"{count} cases registered")
+        y -= 0.38 * cm
+        
+    # Legal Warning Block
+    y -= 0.5 * cm
+    pdf.setStrokeColorRGB(0.72, 0.53, 0.04)
+    pdf.setFillColorRGB(0.99, 0.98, 0.94)
+    pdf.rect(1.5 * cm, y - 1.6 * cm, width - 3 * cm, 1.8 * cm, fill=True, stroke=True)
+    
+    pdf.setFillColorRGB(0.08, 0.18, 0.36)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(1.8 * cm, y - 0.3 * cm, "OFFICIAL STATUTORY NOTICE - WILDLIFE PROTECTION ACT (WPA), 1972")
+    pdf.setFont("Helvetica-Oblique", 8.5)
+    pdf.drawString(1.8 * cm, y - 0.7 * cm, "All listed Schedule I and Schedule II species represent highest conservation priority categories.")
+    pdf.drawString(1.8 * cm, y - 1.0 * cm, "Any trade, hunting, or possession thereof carries strict non-bailable imprisonment from 3 to 7 years.")
+    pdf.drawString(1.8 * cm, y - 1.3 * cm, "Range forest officers are authorized to arrest suspects and seize contraband under Section 50 of the Act.")
+    
+    y -= 2.2 * cm
+    pdf.drawString(1.5 * cm, y, "CLASSIFICATION: DEPARTMENTAL USE ONLY | STAMP & SIGNATURE REQUIREMENT")
+    pdf.line(1.5 * cm, y - 0.2 * cm, width - 1.5 * cm, y - 0.2 * cm)
+    
+    y -= 1.2 * cm
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(1.5 * cm, y, "COMPILED BY:")
+    pdf.drawString(width / 2.0, y, "VERIFIED BY:")
+    pdf.drawString(width - 5 * cm, y, "STAMP OF AUTHORITY:")
+    
+    pdf.setFont("Helvetica-Oblique", 8)
+    pdf.drawString(1.5 * cm, y - 0.4 * cm, "WTI Crime Analyst")
+    pdf.drawString(width / 2.0, y - 0.4 * cm, "WCCB Duty Coordinator")
+    
+    # PAGE 2: INCIDENT CHRONOLOGICAL BRIEFING
+    pdf.showPage()
+    y = height - 1.8 * cm
+    
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFillColorRGB(0.08, 0.18, 0.36)
+    pdf.drawString(1.5 * cm, y, "III. CHRONOLOGICAL TACTICAL INCIDENT CHANNELS")
+    y -= 0.3 * cm
+    pdf.setStrokeColorRGB(0.08, 0.18, 0.36)
+    pdf.setLineWidth(1.0)
+    pdf.line(1.5 * cm, y, width - 1.5 * cm, y)
+    y -= 0.6 * cm
+    
+    # Print up to 10 latest incidents
+    pdf.setFont("Helvetica", 9)
+    for idx, r in enumerate(rows[:9]):
+        if y < 2.5 * cm:
+            pdf.showPage()
+            y = height - 1.8 * cm
+            
+        pdf.setFont("Helvetica-Bold", 9.5)
+        pdf.setFillColorRGB(0.08, 0.18, 0.36)
+        date_str = str(r.get("date", ""))[:10]
+        pdf.drawString(1.5 * cm, y, f"[{date_str}] CASE ID: {r.get('id', '—')} | {r.get('species', 'Unknown Species')} | Score: {r.get('risk_score', '0')}")
+        y -= 0.38 * cm
+        
+        pdf.setFont("Helvetica-Bold", 9.5)
+        pdf.setFillColorRGB(0.72, 0.53, 0.04)
+        pdf.drawString(1.8 * cm, y, "Location:")
+        pdf.setFont("Helvetica", 9)
+        pdf.setFillColorRGB(0.1, 0.1, 0.1)
+        pdf.drawString(3.3 * cm, y, f"{r.get('district', '—')}, {r.get('state', '—')} (Source: {r.get('source', '—')})")
+        y -= 0.38 * cm
+        
+        pdf.setFont("Helvetica-Bold", 9.5)
+        pdf.setFillColorRGB(0.72, 0.53, 0.04)
+        pdf.drawString(1.8 * cm, y, "Summary:")
+        pdf.setFont("Helvetica", 9)
+        pdf.setFillColorRGB(0.1, 0.1, 0.1)
+        
+        title_text = str(r.get("title", ""))
+        words = title_text.split()
+        curr_line = ""
+        lines = []
+        for word in words:
+            if len(curr_line + " " + word) < 95:
+                curr_line += " " + word if curr_line else word
+            else:
+                lines.append(curr_line)
+                curr_line = word
+        if curr_line:
+            lines.append(curr_line)
+        for line in lines[:2]:
+            pdf.drawString(3.3 * cm, y, line)
+            y -= 0.35 * cm
+            
+        y -= 0.25 * cm
+        pdf.setStrokeColorRGB(0.9, 0.9, 0.9)
+        pdf.line(1.7 * cm, y, width - 1.7 * cm, y)
+        y -= 0.45 * cm
+        
     pdf.save()
     return buf.getvalue()

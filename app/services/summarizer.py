@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from threading import Lock
+from dotenv import load_dotenv
+load_dotenv()
 
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -230,27 +232,87 @@ class IntelligenceSummarizer:
                         }
                     }
 
-                response = requests.post(
-                    ollama_url, 
-                    json=payload, 
-                    headers=headers,
-                    timeout=120, 
-                    proxies={"http": None, "https": None}
-                )
-                response.raise_for_status()
-                res_json = response.json()
+                max_retries = 5
+                backoff_factor = 2.0
+                base_delay = 3.0
+                parsed = None
                 
-                raw_text = ""
-                if "choices" in res_json and len(res_json["choices"]) > 0:
-                    raw_text = res_json["choices"][0].get("message", {}).get("content", "")
-                elif "message" in res_json:
-                    raw_text = res_json["message"].get("content", "")
-                else:
-                    raw_text = res_json.get("content") or str(res_json)
+                for attempt in range(max_retries):
+                    response = None
+                    try:
+                        response = requests.post(
+                            ollama_url, 
+                            json=payload, 
+                            headers=headers,
+                            timeout=120, 
+                            proxies={"http": None, "https": None}
+                        )
+                        
+                        if response.status_code == 429:
+                            retry_after = response.headers.get("Retry-After")
+                            if retry_after:
+                                try:
+                                    delay = float(retry_after)
+                                except ValueError:
+                                    delay = base_delay * (backoff_factor ** attempt)
+                            else:
+                                delay = base_delay * (backoff_factor ** attempt)
+                            
+                            if delay > 120.0:
+                                logger.error(
+                                    "Rate limit delay %.2f exceeds maximum permitted wait (120s). Aborting retry loop.",
+                                    delay
+                                )
+                                response.raise_for_status()
+                                
+                            logger.warning(
+                                "Cloud LLM returned 429 Too Many Requests. Retrying in %.2f seconds (attempt %d/%d)...",
+                                delay, attempt + 1, max_retries
+                            )
+                            import time as _time
+                            _time.sleep(delay)
+                            continue
+                            
+                        response.raise_for_status()
+                        res_json = response.json()
+                        
+                        raw_text = ""
+                        if "choices" in res_json and len(res_json["choices"]) > 0:
+                            raw_text = res_json["choices"][0].get("message", {}).get("content", "")
+                        elif "message" in res_json:
+                            raw_text = res_json["message"].get("content", "")
+                        else:
+                            raw_text = res_json.get("content") or str(res_json)
 
-                parsed = self._extract_json_object(raw_text)
-                if parsed is None:
-                    logger.warning("Cloud LLM returned non-parseable JSON content: %s", raw_text)
+                        parsed = self._extract_json_object(raw_text)
+                        if parsed is None:
+                            logger.warning("Cloud LLM returned non-parseable JSON content: %s", raw_text)
+                            return fallback
+                        break
+                    except Exception as err:
+                        is_429 = False
+                        if response is not None:
+                            if response.status_code == 429:
+                                is_429 = True
+                            elif response.status_code == 400:
+                                logger.warning("Cloud LLM returned 400 Bad Request. Response details: %s", response.text)
+                        elif "429" in str(err):
+                            is_429 = True
+                            
+                        if is_429 and attempt < max_retries - 1:
+                            delay = base_delay * (backoff_factor ** attempt)
+                            logger.warning(
+                                "Cloud LLM 429 rate limit encountered: %s. Retrying in %.2f seconds (attempt %d/%d)...",
+                                err, delay, attempt + 1, max_retries
+                            )
+                            import time as _time
+                            _time.sleep(delay)
+                            continue
+                        
+                        logger.warning("Cloud LLM summary generation failed: %s", err)
+                        return fallback
+                else:
+                    logger.warning("Cloud LLM summary generation failed after %d attempts due to rate limits.", max_retries)
                     return fallback
             except Exception as err:
                 logger.warning("Cloud LLM summary generation failed: %s", err)

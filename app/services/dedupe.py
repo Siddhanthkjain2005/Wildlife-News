@@ -137,7 +137,12 @@ class DedupeEngine:
         right_embedding = self._embed_text(right)
         if left_embedding and right_embedding:
             return self._cosine(left_embedding, right_embedding)
-        return self._token_overlap_similarity(self._normalize_text(left), self._normalize_text(right))
+        
+        # Highly accurate token Jaccard overlap fallback when sentence-transformers is disabled.
+        # Since Jaccard scores max out lower on raw text comparisons, map [0, 0.38] Jaccard score
+        # linearly to [0, 1.0] to align with semantic_similarity_threshold (0.86).
+        jaccard = self._token_overlap_similarity(self._normalize_text(left), self._normalize_text(right))
+        return min(1.0, jaccard / 0.38)
 
     @staticmethod
     def _merged_sources_set(row: NewsItem) -> set[str]:
@@ -155,6 +160,7 @@ class DedupeEngine:
         species: list[str] | None = None,
         involved_persons: list[str] | None = None,
         published_at: datetime | None = None,
+        state: str | None = None,
     ) -> tuple[NewsItem | None, float, str]:
         title_norm = self._normalize_title(title)
         if not title_norm:
@@ -205,7 +211,15 @@ class DedupeEngine:
                 except (TypeError, AttributeError):
                     pass
 
-            composite = score + entity_boost + temporal_factor
+            # Geographic mismatch penalty: if both have explicit, different states, penalize heavily
+            geo_penalty = 0.0
+            if state and candidate.state:
+                s1 = state.strip().lower()
+                s2 = candidate.state.strip().lower()
+                if s1 and s2 and s1 != s2 and "unknown" not in s1 and "unknown" not in s2:
+                    geo_penalty = -0.30
+
+            composite = score + entity_boost + temporal_factor + geo_penalty
             if composite > best_score:
                 best_score = composite
                 if title_similarity >= semantic_similarity:
@@ -261,8 +275,9 @@ class DedupeEngine:
                 url_hash=hash_value,
             )
 
+        # Widen candidate pool to ALL recent articles in last 14 days, regardless of strict filters
         since = published_at - timedelta(days=14)
-        stmt = apply_strict_incident_filters(select(NewsItem)).where(NewsItem.published_at >= since)
+        stmt = select(NewsItem).where(NewsItem.published_at >= since)
         stmt = stmt.order_by(NewsItem.published_at.desc()).limit(200)
 
         candidates = db.execute(stmt).scalars().all()
@@ -274,6 +289,7 @@ class DedupeEngine:
             species=species,
             involved_persons=involved_persons,
             published_at=published_at,
+            state=state,
         )
         if best_match is None:
             return DuplicateDecision(

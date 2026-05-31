@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,6 +57,13 @@ class Settings(BaseSettings):
     gliner_enabled: bool = False
     gliner_model_name: str = "urchade/gliner_multi-v2.1"
     gliner_threshold: float = 0.6
+
+    # Ollama Cloud LLM
+    ollama_enabled: bool = False
+    ollama_url: str = "https://api.ollama.com/api/chat"
+    ollama_model: str = "gemma3:27b"
+    ollama_api_key: str = ""
+
 
     # Providers
     enabled_providers: str = (

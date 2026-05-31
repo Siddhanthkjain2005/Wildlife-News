@@ -1985,6 +1985,13 @@ class NewsCollector:
                             source=source,
                             allow_llm=False,
                         )
+                        
+                        # Pre-filtering Gate: If keyword/SetFit classifiers determine
+                        # this is NOT a poaching incident, skip expensive LLM calls entirely.
+                        if not initial_intel.is_poaching:
+                            provider_stats[provider]["rejected"] += 1
+                            continue
+
                         prior_district = self._prior_district_hits(db, initial_intel.district)
                         intel = self.intelligence_engine.analyze(
                             title=title,
@@ -1994,6 +2001,7 @@ class NewsCollector:
                             prior_source_hits=prior_source,
                             source=source,
                         )
+
 
                         dedupe_decision = self.dedupe_engine.find_duplicate(
                             db=db,

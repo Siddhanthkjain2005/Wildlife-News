@@ -1,13 +1,13 @@
 import { Satellite, Lightbulb, ExternalLink, Inbox } from "lucide-react";
 import { resolveExternalUrl } from "../lib/api.js";
 
-export function OsintFeed({ items }) {
+export function OsintFeed({ items, t = {} }) {
   return (
     <article className="card" id="section-osint">
       <div className="card-head">
         <div className="card-head-left">
           <Satellite size={16} className="card-head-icon" />
-          <h2>OSINT Signal Feed</h2>
+          <h2>{t.osint_feed || "SIGINT Intelligence"}</h2>
         </div>
         <span className="card-count mono">{items.length} signals</span>
       </div>
@@ -17,7 +17,7 @@ export function OsintFeed({ items }) {
             <div className="empty-state-icon">
               <Inbox size={20} />
             </div>
-            <div>No OSINT signals yet</div>
+            <div>No SIGINT signals yet</div>
           </div>
         ) : (
           <div className="feed">
@@ -52,13 +52,13 @@ export function OsintFeed({ items }) {
   );
 }
 
-export function Recommendations({ items }) {
+export function Recommendations({ items, t = {} }) {
   return (
     <article className="card" id="section-reco">
       <div className="card-head">
         <div className="card-head-left">
           <Lightbulb size={16} className="card-head-icon" />
-          <h2>Top Recommendations</h2>
+          <h2>{t.recommendations || "Strategic Directives"}</h2>
         </div>
         <span className="card-count mono">{items.length}</span>
       </div>
@@ -68,7 +68,7 @@ export function Recommendations({ items }) {
             <div className="empty-state-icon">
               <Lightbulb size={20} />
             </div>
-            <div>No recommendations generated yet</div>
+            <div>No strategic directives generated yet</div>
           </div>
         ) : (
           <div className="feed">

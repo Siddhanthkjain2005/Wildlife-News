@@ -118,8 +118,12 @@ def chart_data(db: Session = Depends(get_db)):
             bucket["incidents"] += 1
             if row.risk_score > settings.risk_alert_threshold:
                 bucket["high_risk"] += 1
-            state_key = (row.state or "Unknown").strip().title() or "Unknown"
-            state_totals[state_key] = state_totals.get(state_key, 0) + 1
+            from app.utils.india_geo import STATE_CENTROIDS
+            valid_states_set = {s.strip().lower() for s in STATE_CENTROIDS.keys()}
+            state_raw = (row.state or "").strip()
+            if state_raw.lower() in valid_states_set:
+                state_key = state_raw.title()
+                state_totals[state_key] = state_totals.get(state_key, 0) + 1
             source_name = (row.source or "Unknown").strip() or "Unknown"
             source_bucket = source_totals.setdefault(source_name, {"count": 0.0, "confidence_sum": 0.0})
             source_bucket["count"] += 1.0
@@ -148,13 +152,16 @@ def chart_data(db: Session = Depends(get_db)):
             reverse=True,
         )[:12]
 
-        all_states = db.execute(
+        from app.utils.india_geo import STATE_CENTROIDS
+        valid_states_set = {s.strip().lower() for s in STATE_CENTROIDS.keys()}
+        all_states_raw = db.execute(
             m._apply_today_news_scope(
                 apply_strict_incident_filters(select(func.distinct(NewsItem.state))).where(NewsItem.state != "").order_by(
                     NewsItem.state.asc()
                 )
             )
         ).scalars().all()
+        all_states = [s for s in all_states_raw if s and s.strip().lower() in valid_states_set]
         all_sources = db.execute(
             m._apply_today_news_scope(
                 apply_strict_incident_filters(select(func.distinct(NewsItem.source))).where(NewsItem.source != "").order_by(

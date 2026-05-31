@@ -81,6 +81,11 @@ body,
   line-height: 1.6;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 body {
   background: var(--bg);
   min-height: 100vh;
@@ -117,7 +122,8 @@ button {
 .app {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Sidebar */
@@ -325,6 +331,8 @@ button {
   display: grid;
   grid-template-rows: auto 1fr;
   background: var(--bg);
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .topbar {
@@ -2406,3 +2414,436 @@ table.data-table {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+/* ------------------------------------------------------------------ *
+ * WPA Legal Reference & Bilingual UI Switcher Styles
+ * ------------------------------------------------------------------ */
+
+/* Language Dropdown Selector */
+.lang-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s;
+}
+
+.lang-btn:hover {
+  background: var(--bg-2);
+  border-color: var(--border-3);
+}
+
+.lang-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lang-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: left;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+.lang-item:hover {
+  background: var(--bg-2);
+  color: var(--primary);
+}
+
+.lang-item.is-active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* WPA grid */
+.wpa-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .wpa-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wpa-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* WPA Search Box */
+.search-box-wpa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.search-icon-wpa {
+  position: absolute;
+  left: 14px;
+  color: var(--dim);
+}
+
+.wpa-search-input {
+  width: 100%;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 12px 12px 12px 38px;
+  font-size: 0.9rem;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  transition: all 0.2s;
+}
+
+.wpa-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+/* WPA Species list */
+.wpa-list {
+  display: grid;
+  gap: 16px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.wpa-species-item {
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 16px;
+  background: var(--bg-2);
+  transition: all 0.2s;
+}
+
+.wpa-species-item:hover {
+  border-color: var(--primary-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.wpa-species-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.wpa-species-title h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.scientific-name {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.wpa-schedules {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sch-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  background: var(--bg-3);
+  color: var(--text);
+}
+
+.sch-pill.amend {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid var(--primary-border);
+}
+
+.wpa-desc {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.wpa-desc p {
+  margin: 0;
+}
+
+.penalty-text {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  margin-top: 4px !important;
+}
+
+.wpa-no-results {
+  text-align: center;
+  padding: 30px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* WPA Selector & Draft box */
+.incident-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.wpa-select-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wpa-select {
+  width: 100%;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 12px;
+  font-size: 0.9rem;
+  background: var(--bg-1);
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wpa-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.draft-generator-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.draft-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.draft-textarea {
+  width: 100%;
+  height: 380px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  padding: 16px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  background: var(--bg-dark-1);
+  color: #a3b8cc;
+  outline: none;
+  font-family: "JetBrains Mono", monospace;
+  resize: none;
+  overflow-y: auto;
+}
+
+.draft-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  border: 2px dashed var(--border-2);
+  border-radius: var(--r-lg);
+  color: var(--dim);
+  text-align: center;
+  padding: 24px;
+}
+
+.placeholder-icon {
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.draft-placeholder p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* WPA Multi-tab navigation & Seizure SOPs */
+.wpa-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-2);
+  padding-bottom: 12px;
+}
+
+.wpa-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  color: var(--dim);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wpa-tab-btn:hover {
+  background: var(--bg-2);
+  color: var(--text-strong);
+}
+
+.wpa-tab-btn.is-active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid var(--primary-border);
+}
+
+.sop-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .sop-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sop-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sop-menu-btn {
+  text-align: left;
+  border: 1px solid var(--border-2);
+  background: var(--bg-2);
+  color: var(--text);
+  padding: 14px;
+  border-radius: var(--r-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sop-menu-btn:hover {
+  border-color: var(--primary-border);
+  background: var(--bg-3);
+}
+
+.sop-menu-btn.is-active {
+  border-color: var(--primary-border);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.sop-steps-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sop-steps-header {
+  border-bottom: 1px solid var(--border-2);
+  padding-bottom: 8px;
+}
+
+.sop-steps-header h3 {
+  margin: 0 0 4px;
+  color: var(--text-strong);
+  font-size: 1.15rem;
+}
+
+.sop-steps-header p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.sop-step-item {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--bg-2);
+  border-left: 3px solid var(--primary);
+}
+
+.sop-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.sop-step-text {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
