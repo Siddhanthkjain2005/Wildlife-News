@@ -287,7 +287,7 @@ PROVIDER_QUERY_CAPS = {
     "x_adapter": 2,
 }
 PROVIDER_LANGUAGE_CAPS = {
-    "google_rss": 13,
+    "google_rss": 7,
     "bing_rss": 4,
     "gdelt": 3,
     "newsapi": 2,
@@ -1414,6 +1414,10 @@ class NewsCollector:
                 response = getattr(err, "response", None)
                 cooldown_seconds = self._cooldown_seconds_from_response(response)
                 self._set_provider_cooldown(provider=provider, seconds=cooldown_seconds, reason="rate_limit_429")
+            elif status_code == 503:
+                # Google and other providers return 503 when rate-limiting from server side.
+                # Apply a shorter cooldown to avoid hammering them every sync cycle.
+                self._set_provider_cooldown(provider=provider, seconds=600, reason="service_unavailable_503")
             logger.warning("Provider request failed: %s (%s, %s): %s", provider, language, query, err)
             self._record_provider_failure(provider)
             self._push_failed_source(provider=provider, language=language, query=query, error=str(err))

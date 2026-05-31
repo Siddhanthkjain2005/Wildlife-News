@@ -340,11 +340,14 @@ function DashboardApp() {
       return undefined;
     }
 
-    const wsUrl = ENDPOINTS.wsLive(authToken);
     let ws = null;
     let reconnectTimer = null;
 
     function connect() {
+      // Always read the latest token from localStorage so that if the HTTP
+      // layer auto-refreshed the JWT, the WebSocket picks up the new one.
+      const freshToken = getStoredToken() || authToken;
+      const wsUrl = ENDPOINTS.wsLive(freshToken);
       ws = new WebSocket(wsUrl);
       ws.onmessage = (event) => {
         try {
