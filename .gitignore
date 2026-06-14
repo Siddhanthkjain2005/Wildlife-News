@@ -1,6 +1,5 @@
 # OS
 .DS_Store
-Thumbs.db
 
 # Python
 .env
@@ -30,11 +29,6 @@ updated_frontend/node_modules/
 # Build artifacts (embedded build is force-added)
 app/static/react-build/
 
-# Dead / experimental frontend directories
-best_frontend/
-wildlife-command-center/
-wildlife-frontend/
-
 # Archives
 *.zip
 
@@ -44,4 +38,5 @@ scratch/
 
 # Misc
 venv_test/
-
+venv/
+.env*

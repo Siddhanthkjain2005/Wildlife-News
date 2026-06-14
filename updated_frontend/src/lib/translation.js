@@ -1,5 +1,11 @@
 export const TRANSLATIONS = {
   en: {
+    // Section headers
+    sec_control: "Control Center",
+    sec_sigint: "SIGINT Analyzer",
+    sec_database: "Database Workspace",
+    sec_tactical: "Tactical Resources",
+    sec_admin: "System Admin",
     // Sidebar
     monitoring: "Monitoring",
     analysis: "Analysis",
@@ -136,6 +142,12 @@ export const TRANSLATIONS = {
     vermin_exotic: "Exotic / Vermin Specific",
   },
   hi: {
+    // Section headers
+    sec_control: "कमांड सेंटर",
+    sec_sigint: "सिगिन्ट विश्लेषक",
+    sec_database: "डेटाबेस वर्कस्पेस",
+    sec_tactical: "सामरिक संसाधन",
+    sec_admin: "सिस्टम एडमिन",
     // Sidebar
     monitoring: "निगरानी",
     analysis: "विश्लेषण",
@@ -272,6 +284,12 @@ export const TRANSLATIONS = {
     vermin_exotic: "विदेशी / गैर-संरक्षित प्रजातियां",
   },
   kn: {
+    // Section headers
+    sec_control: "ಕಮಾಂಡ್ ಸೆಂಟರ್",
+    sec_sigint: "ಸಿಗ್ಇಂಟ್ ವಿಶ್ಲೇಷಕ",
+    sec_database: "ಡೇಟಾಬೇಸ್ ವರ್ಕ್‌ಸ್ಪೇಸ್",
+    sec_tactical: "ತಂತ್ರಗಾರಿಕೆ ಸಂಪನ್ಮೂಲಗಳು",
+    sec_admin: "ಸಿಸ್ಟಂ ಅಡ್ಮಿನ್",
     // Sidebar
     monitoring: "ಮೇಲ್ವಿಚಾರಣೆ",
     analysis: "ವಿಶ್ಲೇಷಣೆ",

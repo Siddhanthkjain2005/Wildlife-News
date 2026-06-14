@@ -19,9 +19,9 @@ export default function MapPanel({ mapData, onMapError }) {
           [mapData.center?.lat || 22.97, mapData.center?.lng || 78.65],
           5
         );
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           maxZoom: 12,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          attribution: "&copy; OpenStreetMap contributors"
         }).addTo(mapRef.current);
         layerRef.current = L.layerGroup().addTo(mapRef.current);
       }
@@ -34,20 +34,6 @@ export default function MapPanel({ mapData, onMapError }) {
         if (typeof item.lat !== "number" || typeof item.lng !== "number") return;
         const severity = riskLevel(item.risk_score);
         const color = severity === "high" ? "#C75050" : severity === "medium" ? "#C9933D" : "#5A9E6F";
-        
-        // If high risk, plot a beautiful golden translucent range ring representing the active tactical interception buffer zone
-        if (item.risk_score >= 80) {
-          const bufferRing = L.circle([item.lat, item.lng], {
-            radius: 45000, // 45km tactical radius
-            color: "#C17F59",
-            fillColor: "#C17F59",
-            fillOpacity: 0.12,
-            weight: 1.5,
-            dashArray: "4,4"
-          });
-          bufferRing.addTo(layer);
-        }
-
         const marker = L.circleMarker([item.lat, item.lng], {
           radius: severity === "high" ? 8 : severity === "medium" ? 7 : 6,
           color,
@@ -91,10 +77,6 @@ export default function MapPanel({ mapData, onMapError }) {
         <span className="legend-dot high">High risk</span>
         <span className="legend-dot medium">Medium</span>
         <span className="legend-dot low">Low</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "12px", color: "var(--dim)" }}>
-          <span style={{ display: "inline-block", width: "16px", height: "12px", borderRadius: "3px", border: "1.5px dashed #C17F59", background: "rgba(193, 127, 89, 0.12)" }} />
-          Tactical Interception Range (45km)
-        </span>
         <span style={{ marginLeft: "auto", color: "var(--dim)" }}>Tap a marker for details</span>
       </div>
     </article>

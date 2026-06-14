@@ -317,7 +317,7 @@ def require_admin_access(
     token = _extract_token(request=request, x_admin_token=x_admin_token, authorization=authorization)
     if not token:
         raise HTTPException(status_code=401, detail="Admin authentication required.")
-    if settings.admin_token and token == settings.admin_token:
+    if settings.admin_token and hmac.compare_digest(token, settings.admin_token):
         return
     if admin_sessions.validate(token):
         return
@@ -339,7 +339,7 @@ def require_permission(permission: str):
         token = _extract_token(request=request, x_admin_token=x_admin_token, authorization=authorization)
         if not token:
             raise HTTPException(status_code=401, detail="Authentication required.")
-        if settings.admin_token and token == settings.admin_token:
+        if settings.admin_token and hmac.compare_digest(token, settings.admin_token):
             return
         if admin_sessions.validate(token):
             return

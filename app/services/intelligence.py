@@ -2837,6 +2837,59 @@ class HybridIntelligenceEngine:
             "enforcement_authority": enforcement,
         }
 
+    def is_candidate(self, *, title: str, summary: str) -> bool:
+        """Cheap, lenient pre-filter to decide whether an article is worth
+        scraping + full analysis.
+
+        This intentionally does NOT apply the strict body-level veto gates from
+        analyze(): those require operational verbs, species, location and crime
+        indicators that live in the full article body, not in a 1-2 sentence RSS
+        snippet. Running the strict gate on a bare snippet rejects almost every
+        real article before it is ever scraped.
+
+        Instead we ask a much weaker question: does the title+summary plausibly
+        concern wildlife/forest crime in (or relevant to) India? If yes, let it
+        through to Phase 2 where the strict gate runs on the scraped full text.
+        """
+        text = normalize_space(f"{title}. {summary}").lower()
+        if not text:
+            return False
+
+        # Hard veto still applies cheaply — these patterns are unambiguous noise
+        # (black magic, job scams, cybercrime, etc.) regardless of body text.
+        for pattern in HARD_VETO_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE):
+                return False
+
+        # Wildlife/forest-crime topical signal: any crime keyword hit, an action
+        # term (seized/arrested/poacher...), a poaching-specific object
+        # (ivory/tusk/pangolin scales...), or a named species.
+        has_topic = (
+            self._keyword_signal_hits(text) >= 1
+            or any(term in text for term in POACHING_SPECIFIC_SIGNALS)
+            or bool(self._extract_species(text))
+        )
+        if not has_topic:
+            return False
+
+        # India relevance: cheap hint terms OR a resolvable Indian state/district.
+        # When india_only is disabled, skip this constraint entirely.
+        if settings.india_only:
+            state, district, _ = self._extract_location(text)
+            has_india = (
+                any(term in text for term in INDIA_HINT_TERMS)
+                or bool(state)
+                or bool(district)
+            )
+            # Don't reject solely for missing India hints in a short snippet —
+            # the country is often only stated in the body. Only reject when the
+            # snippet explicitly places the event in another country.
+            mentions_foreign = any(c in text for c in STOP_COUNTRIES)
+            if mentions_foreign and not has_india:
+                return False
+
+        return True
+
     def analyze(
         self,
         *,

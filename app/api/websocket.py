@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -17,15 +18,33 @@ def _redis_topic(channel: str) -> str:
     return f"{prefix}:{channel}"
 
 
+def _extract_ws_token(websocket: WebSocket) -> tuple[str, str | None]:
+    """Read the auth token from the Sec-WebSocket-Protocol header (preferred,
+    keeps the token out of URLs/proxy logs) and fall back to the legacy
+    query-string parameter for backward compatibility.
+
+    Returns (token, accepted_subprotocol). When the token arrives via
+    subprotocol the server must echo that subprotocol back on accept(), or the
+    browser will fail the handshake.
+    """
+    # Header form: "Sec-WebSocket-Protocol: wildlife-auth, <token>"
+    raw_proto = websocket.headers.get("sec-websocket-protocol") or ""
+    parts = [p.strip() for p in raw_proto.split(",") if p.strip()]
+    if len(parts) >= 2 and parts[0] == "wildlife-auth":
+        return parts[1], parts[0]
+    # Legacy fallback: token in query string (deprecated — leaks into logs).
+    return (websocket.query_params.get("token") or "").strip(), None
+
+
 @router.websocket("/api/ws/live")
 async def websocket_live(websocket: WebSocket):
-    supplied_token = (websocket.query_params.get("token") or "").strip()
+    supplied_token, accept_proto = _extract_ws_token(websocket)
     controls_enabled = bool(
         settings.admin_api_key or settings.admin_token or settings.admin_password or settings.admin_password_hash
     )
     if controls_enabled:
         token_ok = False
-        if settings.admin_token and supplied_token == settings.admin_token:
+        if settings.admin_token and supplied_token and hmac.compare_digest(supplied_token, settings.admin_token):
             token_ok = True
         elif supplied_token and admin_sessions.validate(supplied_token):
             token_ok = True
@@ -38,7 +57,11 @@ async def websocket_live(websocket: WebSocket):
             await websocket.close(code=1008, reason="Invalid token")
             return
 
-    await websocket.accept()
+    # Echo the negotiated subprotocol back when the token came via header.
+    if accept_proto:
+        await websocket.accept(subprotocol=accept_proto)
+    else:
+        await websocket.accept()
     redis_url = (settings.redis_url or "").strip()
 
     if not redis_url:

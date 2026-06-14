@@ -4,8 +4,7 @@
 
 ### Real-Time Poaching & Wildlife Crime Intelligence System
 
-[![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-wildlife--news.up.railway.app-00C853?style=for-the-badge)](https://wildlife-news.up.railway.app)
-[![Frontend](https://img.shields.io/badge/🎨_Frontend-wildlife--news.vercel.app-black?style=for-the-badge)](https://wildlife-news.vercel.app)
+[![Live](https://img.shields.io/badge/🌐_Live-www.wildlifenews.me-00C853?style=for-the-badge)](https://www.wildlifenews.me)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -145,7 +144,7 @@ Every year, India loses thousands of endangered animals to poaching and illegal 
 | **Frontend** | React 18, Vite, Recharts, Leaflet Maps |
 | **AI/ML** | Hugging Face Transformers, mDeBERTa-v3, Sentence-Transformers |
 | **Database** | SQLite (production), with backup & snapshot system |
-| **Deployment** | Docker, Railway (backend), Vercel (frontend) |
+| **Deployment** | Digital Ocean droplet, systemd, nginx (HTTPS reverse proxy) |
 | **Data Sources** | Google RSS, Bing, GDELT, DuckDuckGo, NewsAPI, 11 Indian media feeds |
 
 ---
@@ -226,15 +225,26 @@ The system will immediately begin collecting and analyzing wildlife news. No API
 
 ## 🌐 Deployment
 
-### Railway (Backend — Recommended)
+### Production (Digital Ocean droplet + systemd + nginx)
 
-The backend auto-deploys from this repo. Environment variables are configured in Railway dashboard.
+The live system runs on a Digital Ocean droplet:
 
-### Vercel (Frontend — Optional Standalone)
+- **App**: `uvicorn app.main:app` on `127.0.0.1:8000`, managed by the
+  `wildlife-news.service` systemd unit (`/etc/systemd/system/wildlife-news.service`),
+  with `EnvironmentFile=/var/www/wildlife-news/.env`.
+- **TLS / reverse proxy**: nginx terminates HTTPS on 443 (domain
+  `https://www.wildlifenews.me/`) and proxies to the uvicorn backend. The React
+  dashboard is served same-origin, so `VITE_API_BASE_URL` is left empty.
+- **Deploy**: sync code to `/var/www/wildlife-news`, then
+  `systemctl restart wildlife-news.service`. Verify with `curl -s localhost:8000/health`.
 
-1. Import repo → Set root directory to `updated_frontend`
-2. Set `VITE_API_BASE_URL` to your Railway backend URL
-3. Deploy
+Optional ML detection models (zero-shot classifier + person NER) are installed
+from `requirements-ai.txt` (CPU-only torch); without them the engine falls back
+to rule-based classification.
+
+> **Note:** `railway.toml`, `Procfile`, and `docker-compose.yml` remain in the
+> repo for alternative/container deployments but are **not** used by the live
+> Digital Ocean deployment described above.
 
 ---
 

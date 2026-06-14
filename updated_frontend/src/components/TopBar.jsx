@@ -7,6 +7,7 @@ export default function TopBar({
   activeSection,
   busy,
   syncStatus,
+  wsStatus = "connecting",
   onRefresh,
   onExport,
   onToggleMenu,
@@ -18,12 +19,20 @@ export default function TopBar({
 }) {
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
 
+  const WS_BADGE = {
+    live: { label: "Live", cls: "ws-live" },
+    connecting: { label: "Connecting…", cls: "ws-connecting" },
+    reconnecting: { label: "Reconnecting…", cls: "ws-connecting" },
+    offline: { label: "Offline", cls: "ws-offline" }
+  };
+  const wsBadge = WS_BADGE[wsStatus] || WS_BADGE.connecting;
+
   const titles = {
-    control_center: "Control Center",
-    sigint_analyzer: "SIGINT Analyzer",
-    database_workspace: "Database Workspace",
-    tactical_resources: "Tactical Resources",
-    system_admin: "System Admin"
+    control_center: t.sec_control || "Control Center",
+    sigint_analyzer: t.sec_sigint || "SIGINT Analyzer",
+    database_workspace: t.sec_database || "Database Workspace",
+    tactical_resources: t.sec_tactical || "Tactical Resources",
+    system_admin: t.sec_admin || "System Admin"
   };
   const isSearching = Boolean(syncStatus?.running);
   const syncLabel = isSearching ? t.sync_running : "Auto search active";
@@ -152,6 +161,15 @@ export default function TopBar({
           <span className="sync-pill-label">{syncLabel}</span>
           {syncMeta ? <span className="sync-pill-meta">{syncMeta}</span> : null}
         </div>
+        <span
+          className={`ws-badge ${wsBadge.cls}`}
+          role="status"
+          aria-live="polite"
+          title={wsStatus === "live" ? "Live feed connected" : "Live feed disconnected — data may be stale"}
+        >
+          <span className="ws-badge-dot" aria-hidden="true" />
+          {wsBadge.label}
+        </span>
       </div>
 
       <div className="topbar-right">

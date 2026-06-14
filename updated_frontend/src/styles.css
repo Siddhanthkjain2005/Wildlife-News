@@ -476,6 +476,52 @@ button {
   background: var(--dim);
 }
 
+/* WebSocket live-feed status badge */
+.ws-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding: 5px 11px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-2);
+  background: var(--bg-1);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.ws-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  flex-shrink: 0;
+  background: currentColor;
+}
+.ws-badge.ws-live {
+  color: #1a7f47;
+  border-color: rgba(26, 127, 71, 0.35);
+  background: rgba(26, 127, 71, 0.08);
+}
+.ws-badge.ws-live .ws-badge-dot {
+  animation: ws-pulse 1.8s ease-in-out infinite;
+}
+.ws-badge.ws-connecting {
+  color: #9a6a1f;
+  border-color: rgba(154, 106, 31, 0.35);
+  background: rgba(154, 106, 31, 0.08);
+}
+.ws-badge.ws-offline {
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.35);
+  background: rgba(180, 35, 24, 0.08);
+}
+@keyframes ws-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .sync-pill-label {
   font-size: 0.8rem;
   font-weight: 600;
@@ -2847,3 +2893,82 @@ table.data-table {
   color: var(--text);
 }
 
+
+/* ============================================================
+   Predictive Threat Intelligence panel
+   ============================================================ */
+.predictions-wrap { display: flex; flex-direction: column; gap: 18px; }
+
+.pred-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+.pred-stat-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md, 10px);
+  background: var(--bg-1);
+}
+.pred-stat-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted);
+}
+.pred-stat-value { font-size: 1.9rem; font-weight: 800; color: var(--text-strong); line-height: 1.1; margin: 6px 0 2px; }
+.pred-stat-trend { font-size: 0.74rem; color: var(--muted); }
+.pred-stat-trend.is-up { color: #b42318; }
+.pred-stat-trend.is-down { color: #1a7f47; }
+
+.pred-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pred-model-note { margin: 0; font-size: 0.78rem; color: var(--muted); }
+.pred-error { padding: 10px 14px; border-radius: 8px; background: rgba(180,35,24,0.08); color: #b42318; font-size: 0.82rem; }
+
+.pred-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.pred-span-2 { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .pred-cards-grid { grid-template-columns: 1fr; }
+  .pred-span-2 { grid-column: auto; }
+}
+
+.pred-scroll { max-height: 360px; overflow-y: auto; }
+.pred-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 16px; border-bottom: 1px solid var(--border-1, rgba(0,0,0,0.06));
+}
+.pred-row:last-child { border-bottom: none; }
+.pred-row-main { min-width: 0; }
+.pred-row-title { font-weight: 700; font-size: 0.86rem; color: var(--text-strong); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pred-cap { text-transform: capitalize; }
+.pred-row-meta { font-size: 0.74rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
+.pred-row-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.pred-risk { font-weight: 800; font-size: 1rem; color: var(--text-strong); min-width: 28px; text-align: right; }
+
+.threat-pill {
+  font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 3px 9px; border-radius: var(--r-full); white-space: nowrap;
+}
+.threat-critical { background: rgba(180,35,24,0.12); color: #b42318; }
+.threat-high { background: rgba(204,102,0,0.12); color: #b35900; }
+.threat-elevated { background: rgba(154,106,31,0.12); color: #9a6a1f; }
+.threat-moderate { background: rgba(31,106,154,0.12); color: #1f6a9a; }
+.threat-low { background: rgba(26,127,71,0.12); color: #1a7f47; }
+
+.pred-trend-tag { font-size: 0.7rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.pred-trend-tag.is-up { color: #b42318; }
+.pred-trend-tag.is-down { color: #1a7f47; }
+
+.poi-tag {
+  font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 2px 6px; border-radius: var(--r-full);
+}
+.poi-network { background: rgba(31,106,154,0.14); color: #1f6a9a; }
+.poi-multistate { background: rgba(154,106,31,0.14); color: #9a6a1f; }
+
+.btn-sm { padding: 5px 11px; font-size: 0.76rem; }
+.spin { animation: pred-spin 1s linear infinite; }
+@keyframes pred-spin { to { transform: rotate(360deg); } }

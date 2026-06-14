@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Sparkles, MessageSquare, ArrowRight, Loader2, Info } from 'lucide-react';
+import { Sparkles, MessageSquare, ArrowRight, Loader2, Info } from 'lucide-react';
 import { postJson, ENDPOINTS } from '../lib/api';
 
 export default function SemanticSearch({ onSelectIncident }) {

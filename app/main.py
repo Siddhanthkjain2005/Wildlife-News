@@ -438,7 +438,7 @@ def _require_api_permission(request: Request, permission: str) -> None:
     token = extract_admin_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if settings.admin_token and token == settings.admin_token:
+    if settings.admin_token and hmac.compare_digest(token, settings.admin_token):
         return
     if admin_sessions.validate(token):
         return
@@ -1973,7 +1973,7 @@ async def review_incident(
                 import time as _time
                 _time.sleep(0.3 * (attempt + 1))
             else:
-                logger.error("review_incident: database locked after %d retries for incident %d", max_retries, incident_id)
+                app_logger.error("review_incident: database locked after %d retries for incident %d", max_retries, incident_id)
                 return JSONResponse(status_code=503, content={"detail": "Database busy. Please retry in a few seconds."})
 
 
@@ -2035,7 +2035,7 @@ def login_submit(
         value=str(tokens["access_token"]),
         max_age=max(60, settings.jwt_access_minutes * 60),
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
     )
     redirect.set_cookie(
@@ -2043,7 +2043,7 @@ def login_submit(
         value=str(tokens["refresh_token"]),
         max_age=max(3600, settings.jwt_refresh_days * 24 * 60 * 60),
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
     )
     return redirect
@@ -2085,7 +2085,7 @@ def admin_login(payload: AdminLoginPayload, request: Request, response: Response
         value=str(tokens["access_token"]),
         max_age=max(60, settings.jwt_access_minutes * 60),
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
     )
     response.set_cookie(
@@ -2093,7 +2093,7 @@ def admin_login(payload: AdminLoginPayload, request: Request, response: Response
         value=str(tokens["refresh_token"]),
         max_age=max(3600, settings.jwt_refresh_days * 24 * 60 * 60),
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
     )
     _audit(actor=payload.username.strip() or "admin", action="login_attempt", status="ok", ip=ip, notes="api_jwt_issued")
@@ -2115,7 +2115,7 @@ def admin_refresh(request: Request, response: Response, payload: AdminRefreshPay
         value=str(tokens["access_token"]),
         max_age=max(60, settings.jwt_access_minutes * 60),
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
     )
     response.set_cookie(
@@ -2123,7 +2123,7 @@ def admin_refresh(request: Request, response: Response, payload: AdminRefreshPay
         value=str(tokens["refresh_token"]),
         max_age=max(3600, settings.jwt_refresh_days * 24 * 60 * 60),
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
     )
     _audit(actor=user_id, action="token_refresh", status="ok", ip=_client_ip(request), notes="")

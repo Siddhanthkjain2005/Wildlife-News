@@ -11,7 +11,7 @@ import {
   Legend,
   Filler
 } from "chart.js";
-import { AlertCircle, Activity, Lock, ShieldCheck, X, ExternalLink, Download, FileText, HardDrive, Database, Cpu, RefreshCw, Radio, Bell, Globe, CheckCircle, AlertTriangle, XCircle, Wrench, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
+import { AlertCircle, Activity, Lock, ShieldCheck, X, ExternalLink, Download, FileText, HardDrive, Database, Cpu, RefreshCw, Radio, Bell, Globe, CheckCircle, AlertTriangle, XCircle, Wrench, ChevronRight } from "lucide-react";
 
 import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
@@ -21,6 +21,7 @@ import Analytics from "./components/Analytics.jsx";
 import FilterBar from "./components/FilterBar.jsx";
 import IncidentTable from "./components/IncidentTable.jsx";
 import NetworkGraph from "./components/NetworkGraph.jsx";
+import Predictions from "./components/Predictions.jsx";
 import SemanticSearch from "./components/SemanticSearch.jsx";
 import AlertFeed from "./components/AlertFeed.jsx";
 import WpaReference from "./components/WpaReference.jsx";
@@ -55,129 +56,6 @@ const EMPTY_FILTERS = {
   source: ""
 };
 
-// Demo mode - set to true to bypass authentication and show mock data
-const DEMO_MODE = false;
-// Maintenance mode - set to true to show the maintenance screen
-const MAINTENANCE_MODE = false;
-
-const DEMO_SUMMARY = {
-  total_incidents: 2847,
-  high_risk_count: 342,
-  states_affected: 28,
-  species_impacted: 156,
-  last_sync_time: new Date().toISOString(),
-  trend_incidents: 12.5,
-  trend_high_risk: -8.2,
-  trend_states: 3,
-  trend_species: 7.1
-};
-
-const DEMO_CHART_DATA = {
-  timeline: {
-    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-    incidents: [120, 145, 132, 178, 156, 189, 201, 234, 198, 267, 245, 282],
-    high_risk: [23, 31, 28, 42, 35, 48, 52, 61, 45, 72, 58, 68]
-  },
-  top_states: [
-    { state: "Maharashtra", count: 423 },
-    { state: "Karnataka", count: 387 },
-    { state: "Tamil Nadu", count: 312 },
-    { state: "Kerala", count: 278 },
-    { state: "Madhya Pradesh", count: 245 },
-    { state: "Assam", count: 198 },
-    { state: "West Bengal", count: 176 },
-    { state: "Rajasthan", count: 154 }
-  ],
-  species_dist: [
-    { species: "Tiger", count: 89 },
-    { species: "Elephant", count: 156 },
-    { species: "Leopard", count: 134 },
-    { species: "Rhinoceros", count: 45 },
-    { species: "Pangolin", count: 234 },
-    { species: "Red Sanders", count: 312 },
-    { species: "Sea Turtle", count: 67 },
-    { species: "Lion", count: 23 },
-    { species: "Deer", count: 189 },
-    { species: "Bear", count: 78 }
-  ],
-  source_rank: [
-    { source: "TOI", reliability_score: 92 },
-    { source: "Hindu", reliability_score: 89 },
-    { source: "NDTV", reliability_score: 87 },
-    { source: "Indian Express", reliability_score: 85 },
-    { source: "Hindustan Times", reliability_score: 83 },
-    { source: "Deccan Herald", reliability_score: 81 },
-    { source: "Tribune", reliability_score: 78 },
-    { source: "Telegraph", reliability_score: 76 }
-  ],
-  filters: {
-    states: ["Maharashtra", "Karnataka", "Tamil Nadu", "Kerala", "Madhya Pradesh", "Assam", "West Bengal", "Rajasthan"],
-    species: ["Tiger", "Elephant", "Leopard", "Rhinoceros", "Pangolin", "Red Sanders", "Sea Turtle", "Lion"],
-    crime_types: ["Poaching", "Trafficking", "Habitat Destruction", "Illegal Trade", "Smuggling"],
-    sources: ["TOI", "Hindu", "NDTV", "Indian Express", "Hindustan Times"]
-  }
-};
-
-const DEMO_MAP_DATA = {
-  markers: [
-    { lat: 19.076, lng: 72.8777, title: "Tiger poaching attempt foiled in Tadoba", state: "Maharashtra", district: "Chandrapur", risk_score: 85, species: "Tiger" },
-    { lat: 12.9716, lng: 77.5946, title: "Elephant corridor protection initiative", state: "Karnataka", district: "Bangalore Rural", risk_score: 45, species: "Elephant" },
-    { lat: 13.0827, lng: 80.2707, title: "Sea turtle nesting site secured", state: "Tamil Nadu", district: "Chennai", risk_score: 32, species: "Sea Turtle" },
-    { lat: 9.9312, lng: 76.2673, title: "Pangolin trafficking ring busted", state: "Kerala", district: "Kochi", risk_score: 92, species: "Pangolin" },
-    { lat: 23.2599, lng: 77.4126, title: "Leopard sighting near village", state: "Madhya Pradesh", district: "Bhopal", risk_score: 67, species: "Leopard" },
-    { lat: 26.1445, lng: 91.7362, title: "Rhinoceros protection patrol", state: "Assam", district: "Guwahati", risk_score: 78, species: "Rhinoceros" },
-    { lat: 22.5726, lng: 88.3639, title: "Illegal wildlife trade investigation", state: "West Bengal", district: "Kolkata", risk_score: 71, species: "Various" },
-    { lat: 26.9124, lng: 75.7873, title: "Desert wildlife monitoring", state: "Rajasthan", district: "Jaipur", risk_score: 38, species: "Deer" },
-    { lat: 21.1702, lng: 72.8311, title: "Lion habitat assessment", state: "Gujarat", district: "Surat", risk_score: 55, species: "Lion" },
-    { lat: 15.2993, lng: 74.124, title: "Red Sanders seizure operation", state: "Goa", district: "Panaji", risk_score: 88, species: "Red Sanders" }
-  ]
-};
-
-const DEMO_ALERTS = [
-  { id: 1, title: "Critical: Tiger poaching network identified in Western Ghats", severity: "high", time: "2 hours ago", state: "Karnataka" },
-  { id: 2, title: "Urgent: Elephant herd approaching human settlement", severity: "high", time: "4 hours ago", state: "Kerala" },
-  { id: 3, title: "Warning: Unusual pangolin trade activity detected", severity: "medium", time: "6 hours ago", state: "Assam" },
-  { id: 4, title: "Alert: Leopard spotted near school premises", severity: "medium", time: "8 hours ago", state: "Maharashtra" },
-  { id: 5, title: "Notice: Seasonal migration pattern shift observed", severity: "low", time: "12 hours ago", state: "Rajasthan" },
-  { id: 6, title: "Info: New wildlife corridor proposal submitted", severity: "low", time: "1 day ago", state: "Madhya Pradesh" }
-];
-
-const DEMO_OSINT = [
-  { id: 1, title: "International wildlife trafficking ring exposed", source: "Interpol", date: "Today", url: "#" },
-  { id: 2, title: "New conservation technology deployed in reserves", source: "WWF", date: "Yesterday", url: "#" },
-  { id: 3, title: "Climate change impact on migration patterns", source: "IUCN", date: "2 days ago", url: "#" },
-  { id: 4, title: "Community-led conservation success story", source: "Wildlife Trust", date: "3 days ago", url: "#" }
-];
-
-const DEMO_NEWS_ROWS = [
-  { id: 1, title: "Forest department seizes illegal wildlife products worth Rs 50 lakh", state: "Maharashtra", species: "Pangolin", risk_score: 87, date: "2024-01-15", source: "TOI" },
-  { id: 2, title: "Tiger census reveals population increase in Corbett", state: "Uttarakhand", species: "Tiger", risk_score: 34, date: "2024-01-14", source: "Hindu" },
-  { id: 3, title: "Elephant tramples crops, villagers demand compensation", state: "Karnataka", species: "Elephant", risk_score: 56, date: "2024-01-14", source: "NDTV" },
-  { id: 4, title: "Red Sanders smugglers arrested at Chennai airport", state: "Tamil Nadu", species: "Red Sanders", risk_score: 91, date: "2024-01-13", source: "Indian Express" },
-  { id: 5, title: "Leopard rescued from well in Pune suburbs", state: "Maharashtra", species: "Leopard", risk_score: 42, date: "2024-01-13", source: "Hindustan Times" },
-  { id: 6, title: "Rhino horn trafficking case: Two more arrests", state: "Assam", species: "Rhinoceros", risk_score: 95, date: "2024-01-12", source: "Telegraph" },
-  { id: 7, title: "Sea turtle nesting season begins on Kerala coast", state: "Kerala", species: "Sea Turtle", risk_score: 28, date: "2024-01-12", source: "Deccan Herald" },
-  { id: 8, title: "Wildlife sanctuary expansion approved by state", state: "Madhya Pradesh", species: "Various", risk_score: 15, date: "2024-01-11", source: "Tribune" }
-];
-
-function MaintenanceScreen() {
-  return (
-    <div className="maintenance-shell">
-      <article className="card maintenance-card">
-        <div className="card-head">
-          <div className="card-head-left">
-            <ShieldCheck size={16} className="card-head-icon" />
-            <h2>Website Under Maintenance</h2>
-          </div>
-        </div>
-        <div className="card-body maintenance-body">
-          <p>We&apos;re doing scheduled updates to the Wildlife Crime Intelligence Center.</p>
-          <p className="maintenance-muted">Please check back soon.</p>
-        </div>
-      </article>
-    </div>
-  );
-};
 
 const pickLatestTimestamp = (values) => {
   let latestValue = "";
@@ -195,31 +73,29 @@ const pickLatestTimestamp = (values) => {
 };
 
 export default function App() {
-  if (MAINTENANCE_MODE) {
-    return <MaintenanceScreen />;
-  }
   return <DashboardApp />;
 }
 
 function DashboardApp() {
   const [language, setLanguage] = useState("en");
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
-  const [loading, setLoading] = useState(DEMO_MODE ? false : true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [authToken, setAuthToken] = useState(() => DEMO_MODE ? "demo" : getStoredToken());
+  const [authToken, setAuthToken] = useState(() => getStoredToken());
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [credentials, setCredentials] = useState({ username: "", password: "" });
 
-  const [summary, setSummary] = useState(DEMO_MODE ? DEMO_SUMMARY : null);
-  const [chartData, setChartData] = useState(DEMO_MODE ? DEMO_CHART_DATA : null);
-  const [mapData, setMapData] = useState(DEMO_MODE ? DEMO_MAP_DATA : null);
-  const [alerts, setAlerts] = useState(DEMO_MODE ? DEMO_ALERTS : []);
-  const [osintItems, setOsintItems] = useState(DEMO_MODE ? DEMO_OSINT : []);
+  const [summary, setSummary] = useState(null);
+  const [chartData, setChartData] = useState(null);
+  const [mapData, setMapData] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [osintItems, setOsintItems] = useState([]);
   const [reports, setReports] = useState([]);
   const [syncStatus, setSyncStatus] = useState(null);
-  const [newsRows, setNewsRows] = useState(DEMO_MODE ? DEMO_NEWS_ROWS : []);
+  const [wsStatus, setWsStatus] = useState("connecting");
+  const [newsRows, setNewsRows] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [reviewStatus, setReviewStatus] = useState("pending");
   const [reviewNotes, setReviewNotes] = useState("");
@@ -229,7 +105,6 @@ function DashboardApp() {
   const [healthActionBusy, setHealthActionBusy] = useState("");
   const [selectedCureIssue, setSelectedCureIssue] = useState("missing_articles");
   const [resourcesTab, setResourcesTab] = useState("wpa_guide");
-  const [selectedSop, setSelectedSop] = useState("tiger");
   const [drafterData, setDrafterData] = useState({
     courtName: "Court of Chief Judicial Magistrate",
     officerName: "Range Forest Officer, Wildlife Division",
@@ -268,7 +143,7 @@ function DashboardApp() {
   }, []);
 
   const loadDashboard = useCallback(async () => {
-    if (!authToken || DEMO_MODE) return;
+    if (!authToken) return;
     setBusy(true);
     const taskPromises = [
       fetchJson(ENDPOINTS.summary),
@@ -315,10 +190,10 @@ function DashboardApp() {
     }
     setLoading(false);
     setBusy(false);
-  }, [authToken, activeSection, handleUnauthorized]);
+  }, [authToken, handleUnauthorized]);
 
   const loadFilteredNews = useCallback(async () => {
-    if (!authToken || DEMO_MODE) return;
+    if (!authToken) return;
     const query = buildQuery({ ...debouncedFilters, min_confidence: 0, limit: 120 });
     try {
       const data = await fetchJson(`${ENDPOINTS.filterNews}?${query}`);
@@ -334,21 +209,26 @@ function DashboardApp() {
   }, [authToken, debouncedFilters, handleUnauthorized]);
 
   useEffect(() => {
-    if (DEMO_MODE) return undefined;
+
     if (!authToken) {
       setLoading(false);
       return undefined;
     }
 
+    const wsUrl = ENDPOINTS.wsLive();
     let ws = null;
     let reconnectTimer = null;
 
     function connect() {
-      // Always read the latest token from localStorage so that if the HTTP
-      // layer auto-refreshed the JWT, the WebSocket picks up the new one.
-      const freshToken = getStoredToken() || authToken;
-      const wsUrl = ENDPOINTS.wsLive(freshToken);
-      ws = new WebSocket(wsUrl);
+      // Pass the auth token via the WebSocket subprotocol instead of the URL
+      // query string, so it never appears in nginx/proxy access logs.
+      setWsStatus((prev) => (prev === "live" ? "reconnecting" : prev === "offline" ? "reconnecting" : prev));
+      ws = authToken
+        ? new WebSocket(wsUrl, ["wildlife-auth", authToken])
+        : new WebSocket(wsUrl);
+      ws.onopen = () => {
+        setWsStatus("live");
+      };
       ws.onmessage = (event) => {
         try {
           const { channel, data } = JSON.parse(event.data);
@@ -379,10 +259,11 @@ function DashboardApp() {
         }
       };
       ws.onclose = () => {
+        setWsStatus("offline");
         reconnectTimer = window.setTimeout(connect, 5000);
       };
-      ws.onerror = (err) => {
-        console.error("WS error:", err);
+      ws.onerror = () => {
+        setWsStatus("offline");
         ws.close();
       };
     }
@@ -473,7 +354,7 @@ function DashboardApp() {
 
   function handleDownloadDossier(incidentId) {
     if (!authToken || !incidentId) return;
-    const base = `/api/export/pdf-dossier/${incidentId}`;
+    const base = ENDPOINTS.exportPdfDossier(incidentId);
     window.location.href = `${base}?admin_token=${authToken}`;
   }
 
@@ -493,7 +374,7 @@ function DashboardApp() {
   }, [loadDashboard, loadFilteredNews]);
 
   const fetchSystemHealth = useCallback(async () => {
-    if (DEMO_MODE) return;
+
     try {
       setHealthLoading(true);
       const data = await fetchJson(ENDPOINTS.adminSystemHealth);
@@ -506,10 +387,6 @@ function DashboardApp() {
   }, [authToken]);
 
   const handleComponentAction = useCallback(async (actionName) => {
-    if (DEMO_MODE) {
-      alert("Diagnostic repair tasks are disabled in Demo Mode.");
-      return;
-    }
     setHealthActionBusy(actionName);
     try {
       let endpoint = "";
@@ -610,51 +487,6 @@ function DashboardApp() {
       setBusy(false);
     }
   }, []);
-
-  const handleAutoPopulateDrafter = useCallback(() => {
-    if (!selectedIncident) {
-      alert("No database incident is currently selected! Go to the 'Database Workspace' tab, select an incident from the table, and then return here to auto-draft.");
-      return;
-    }
-    
-    const speciesPart = selectedIncident.species ? selectedIncident.species.split(',').map(s => s.trim().toUpperCase()).join(' & ') : "PROTECTED SPECIES CONTRABAND";
-    const titleLower = (selectedIncident.title || "").toLowerCase();
-    
-    let contrabandDesc = `${speciesPart} contraband - Seized in connection with illegal poaching and smuggling.`;
-    if (titleLower.includes("skin") || titleLower.includes("hide")) {
-      contrabandDesc = `${speciesPart} skin / hide specimen - 1 unit, preserved for forensic wildlife analysis.`;
-    } else if (titleLower.includes("ivory") || titleLower.includes("tusk")) {
-      contrabandDesc = `${speciesPart} ivory tusk specimen, weighed and tagged for forensic evidence.`;
-    } else if (titleLower.includes("nail") || titleLower.includes("claw") || titleLower.includes("canine") || titleLower.includes("teeth")) {
-      contrabandDesc = `${speciesPart} nails / claws / canine specimens - secured for evidence lock.`;
-    } else if (titleLower.includes("venom")) {
-      contrabandDesc = `${speciesPart} venom extract vial - sealed and tagged.`;
-    } else if (titleLower.includes("meat") || titleLower.includes("carcass")) {
-      contrabandDesc = `${speciesPart} meat/carcass remains - verified by forest range veterinary team.`;
-    }
-    
-    const statePart = selectedIncident.state ? selectedIncident.state : "State Wildlands";
-    const districtPart = selectedIncident.district ? `District ${selectedIncident.district}` : "";
-    const seizurePlace = `${districtPart ? districtPart + ", " : ""}${statePart}, India`;
-    
-    const courtName = `Court of Chief Judicial Magistrate, ${selectedIncident.district || selectedIncident.state || 'Forest Jurisdiction'}`;
-    const accused = selectedIncident.involved_persons ? selectedIncident.involved_persons : "Unknown suspects / Syndicate members under investigation";
-    
-    const sched = selectedIncident.wpa_schedule ? `Schedule ${selectedIncident.wpa_schedule}` : "Schedule I / II";
-    const sections = selectedIncident.wpa_section ? selectedIncident.wpa_section : "Section 9, 39, 49B";
-    const offenceText = `${sched} protected species violation. Charge under WPA 1972 ${sections} and prosecution punishable under Section 51.`;
-
-    setDrafterData({
-      courtName,
-      officerName: "Forest Range Officer / WCCB Authorized Agent",
-      accusedName: accused,
-      contrabandDetails: contrabandDesc,
-      seizurePlace,
-      wpaOffence: offenceText
-    });
-    
-    alert(`Auto-populated draft parameters from incident #${selectedIncident.id}:\n"${selectedIncident.title}"`);
-  }, [selectedIncident]);
 
   async function handleLoginSubmit(event) {
     event.preventDefault();
@@ -781,6 +613,7 @@ function DashboardApp() {
           activeSection={activeSection}
           busy={busy}
           syncStatus={syncStatus}
+          wsStatus={wsStatus}
           onRefresh={loadDashboard}
           onExport={handleExport}
           onToggleMenu={() => setMobileOpen((v) => !v)}
@@ -816,69 +649,11 @@ function DashboardApp() {
                 <div className="section-header-content">
                   <span className="section-number" style={{ color: "#C17F59" }}>01</span>
                   <div>
-                    <h2>Control Center</h2>
+                    <h2>{t.sec_control}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Real-time threat monitoring, national map visualization, and critical poaching alerts</p>
                   </div>
                 </div>
               </div>
-
-              {/* GOVERNMENT ADVISORY PANEL */}
-              <div style={{
-                background: "linear-gradient(135deg, rgba(193, 127, 89, 0.08) 0%, rgba(26, 25, 23, 0.03) 100%)",
-                border: "1.5px solid rgba(193, 127, 89, 0.25)",
-                borderRadius: "12px",
-                padding: "20px",
-                marginBottom: "24px",
-                boxShadow: "0 4px 20px rgba(193, 127, 89, 0.05)"
-              }} className="fade-in">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(193, 127, 89, 0.15)", paddingBottom: "12px", marginBottom: "12px", flexWrap: "wrap", gap: "10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <span style={{
-                      display: "inline-block",
-                      width: "10px",
-                      height: "10px",
-                      borderRadius: "50%",
-                      background: "#C75050",
-                      boxShadow: "0 0 0 4px rgba(199, 80, 80, 0.2)",
-                      animation: "pulse-glow-danger 2s infinite"
-                    }} />
-                    <span style={{ fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", color: "#C75050", background: "rgba(199, 80, 80, 0.08)", padding: "4px 8px", borderRadius: "4px" }}>
-                      WCCB TACTICAL STATUS: SEVERE (AMBER) ALERT
-                    </span>
-                  </div>
-                  <span style={{ fontSize: "11px", fontWeight: "700", color: "#C17F59", display: "flex", alignItems: "center", gap: "4px" }}>
-                    <Sparkles size={12} />
-                    AI Executive Advisory
-                  </span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr", gap: "24px" }} className="advisory-grid">
-                  <div>
-                    <h4 style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "700", color: "var(--text-strong)" }}>
-                      Strategic Syndicate Infiltration Summary
-                    </h4>
-                    <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.6", color: "var(--text)", textAlign: "justify" }}>
-                      AI threat models indicate an elevated risk score across core tiger reserve corridors, specifically focusing on the {summary?.top_states?.[0]?.state || "Central Indian"} borders and South Indian transit corridors. Scraper inputs suggest transit hubs in {summary?.top_states?.[1]?.state || "East Coast"} are experiencing active intelligence signals relating to {chartData?.species_dist?.[0]?.species || "Tiger"} and {chartData?.species_dist?.[1]?.species || "Pangolin"} trafficking routes. Tactical coordinate clustering strongly recommends immediate operational awareness near buffer zone reserves.
-                    </p>
-                  </div>
-                  <div style={{ background: "rgba(255, 255, 255, 0.5)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(193, 127, 89, 0.1)" }}>
-                    <div style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", color: "var(--dim)", marginBottom: "8px" }}>
-                      Active Counter-Tactics
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "12.5px", color: "var(--text-strong)", display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <li>
-                        <strong>STPF Deployment:</strong> Activate special tiger forces in southern buffer zones.
-                      </li>
-                      <li>
-                        <strong>Sensor Calibration:</strong> Target night patrol sectors using thermal hotspots.
-                      </li>
-                      <li>
-                        <strong>WPA Reference:</strong> Check legal charge guides before executing seizure warrants.
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
               <Kpis summary={summary} loading={loading} />
               <div style={{ marginTop: "24px" }}>
                 <MapPanel mapData={mapData} onMapError={setError} />
@@ -896,7 +671,7 @@ function DashboardApp() {
                 <div className="section-header-content">
                   <span className="section-number" style={{ color: "#C17F59" }}>02</span>
                   <div>
-                    <h2>SIGINT Analyzer</h2>
+                    <h2>{t.sec_sigint}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Organized crime syndicate link inspector, networks connections mapping, and intelligence trends</p>
                   </div>
                 </div>
@@ -908,6 +683,13 @@ function DashboardApp() {
                     <p style={{ color: "var(--muted)", margin: 0, fontSize: "13px" }}>Click nodes to inspect relationship parameters and identified suspect links</p>
                   </div>
                   <NetworkGraph />
+                </article>
+                <article className="card" style={{ padding: "24px" }}>
+                  <div style={{ marginBottom: "16px" }}>
+                    <h3 style={{ color: "var(--text-strong)", margin: "0 0 6px", fontSize: "18px" }}>Predictive Threat Intelligence</h3>
+                    <p style={{ color: "var(--muted)", margin: 0, fontSize: "13px" }}>ML-forecasted hotspots, species threat trends, and persons of interest derived from collected incidents</p>
+                  </div>
+                  <Predictions />
                 </article>
                 <Analytics chartData={chartData} />
               </div>
@@ -921,7 +703,7 @@ function DashboardApp() {
                 <div className="section-header-content">
                   <span className="section-number" style={{ color: "#C17F59" }}>03</span>
                   <div>
-                    <h2>Database Workspace</h2>
+                    <h2>{t.sec_database}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Complete historical incident ledger, advanced semantic intelligence searches, and active signal streams</p>
                   </div>
                 </div>
@@ -953,7 +735,7 @@ function DashboardApp() {
                 <div className="section-header-content">
                   <span className="section-number" style={{ color: "#C17F59" }}>04</span>
                   <div>
-                    <h2>Tactical Resources</h2>
+                    <h2>{t.sec_tactical}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Official enforcement tools, complaint drafter, wildlife schedules, and field seizure protocols</p>
                   </div>
                 </div>
@@ -997,63 +779,6 @@ function DashboardApp() {
                     <h3 style={{ margin: "0 0 16px", color: "var(--text-strong)", fontSize: "16px", borderBottom: "1px solid var(--border-2)", paddingBottom: "8px" }}>
                       Complaint Parameters
                     </h3>
-
-                    {/* Active Intelligence Selection Box */}
-                    <div style={{
-                      padding: "12px",
-                      borderRadius: "8px",
-                      background: "rgba(193, 127, 89, 0.05)",
-                      border: "1.5px dashed rgba(193, 127, 89, 0.3)",
-                      marginBottom: "16px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px"
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: "700", color: "#C17F59", textTransform: "uppercase" }}>
-                        <Sparkles size={12} />
-                        Active Database Intelligence Link
-                      </div>
-                      {selectedIncident ? (
-                        <div>
-                          <div style={{ fontSize: "12px", color: "var(--text-strong)", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            Incident #{selectedIncident.id}: {selectedIncident.title}
-                          </div>
-                          <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
-                            Species: {selectedIncident.species || "Unknown"} | Location: {selectedIncident.state || "Unknown"}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleAutoPopulateDrafter}
-                            className="btn"
-                            style={{
-                              marginTop: "8px",
-                              padding: "6px 12px",
-                              fontSize: "11px",
-                              background: "#C17F59",
-                              color: "#ffffff",
-                              border: "none",
-                              width: "100%",
-                              fontWeight: "600",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              gap: "4px"
-                            }}
-                          >
-                            <Download size={12} />
-                            Auto-Draft from Active Incident
-                          </button>
-                        </div>
-                      ) : (
-                        <div>
-                          <div style={{ fontSize: "11.5px", color: "var(--muted)", fontStyle: "italic" }}>
-                            No database incident selected. Go to the "Database Workspace" tab, tap any incident to select, and draft legally binding complaints in one click.
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
                     <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", color: "var(--text)", fontWeight: "600" }}>
                         Designated Magistrate Court
@@ -1200,138 +925,57 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                   <div className="sop-menu-list">
                     <button
                       type="button"
-                      onClick={() => setSelectedSop("tiger")}
-                      className={`sop-menu-btn ${selectedSop === "tiger" ? "is-active" : ""}`}
+                      className="sop-menu-btn is-active"
                     >
                       🐅 Tiger Skin Seizure
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedSop("elephant")}
-                      className={`sop-menu-btn ${selectedSop === "elephant" ? "is-active" : ""}`}
+                      className="sop-menu-btn"
+                      style={{ opacity: 0.6 }}
                     >
                       🐘 Elephant Ivory SOPs
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedSop("leopard")}
-                      className={`sop-menu-btn ${selectedSop === "leopard" ? "is-active" : ""}`}
+                      className="sop-menu-btn"
+                      style={{ opacity: 0.6 }}
                     >
                       🐆 Leopard Skins SOPs
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSelectedSop("birds_reptiles")}
-                      className={`sop-menu-btn ${selectedSop === "birds_reptiles" ? "is-active" : ""}`}
+                      className="sop-menu-btn"
+                      style={{ opacity: 0.6 }}
                     >
                       🦅 Live Birds / Protected Fauna
                     </button>
                   </div>
 
                   {/* SOP Grid */}
-                  {selectedSop === "tiger" && (
-                    <article className="card fade-in" style={{ padding: "20px" }}>
-                      <h3 style={{ margin: "0 0 6px", color: "var(--text-strong)", fontSize: "16px" }}>🐅 Tiger Skin & Canine Seizure Protocol</h3>
-                      <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "13px" }}>Critical checklist for Forest Officers to preserve chain of custody and secure forensic prosecution proof.</p>
-                      
-                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {[
-                          { step: "SOP-T-01", desc: "Verify stripe pattern symmetry and authenticate skin. Look for bullet entry marks or poison residue holes.", checked: true },
-                          { step: "SOP-T-02", desc: "Collect micro-biological DNA swab samples from the flesh remnants on the skin backing under sterile conditions.", checked: true },
-                          { step: "SOP-T-03", desc: "Tag the specimen with a unique tamper-proof security identifier (e.g. WCCB-TIGER-YEAR-XX).", checked: false },
-                          { step: "SOP-T-04", desc: "Measure exact total length from tail-tip to snout, width, and weigh the dry specimen.", checked: false },
-                          { step: "SOP-T-05", desc: "Initiate veterinary certification and seal specimen in a specialized non-static moisture barrier containment bag.", checked: false },
-                          { step: "SOP-T-06", desc: "Register formal seizure memo (Form A) signed by Complainant and at least two local witnesses.", checked: false }
-                        ].map((x) => (
-                          <div key={x.step} className="sop-step-item">
-                            <input type="checkbox" defaultChecked={x.checked} style={{ width: "16px", height: "16px", accentColor: "var(--primary)", marginTop: "4px" }} />
-                            <div>
-                              <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--primary)", display: "block" }}>{x.step}</span>
-                              <span style={{ fontSize: "13px", color: "var(--text)" }}>{x.desc}</span>
-                            </div>
+                  <article className="card" style={{ padding: "20px" }}>
+                    <h3 style={{ margin: "0 0 6px", color: "var(--text-strong)", fontSize: "16px" }}>🐅 Tiger Skin & Canine Seizure Protocol</h3>
+                    <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "13px" }}>Critical checklist for Forest Officers to preserve chain of custody and secure forensic prosecution proof.</p>
+                    
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {[
+                        { step: "SOP-01", desc: "Verify stripe pattern symmetry and authenticate skin. Look for bullet entry marks or poison residue holes.", checked: true },
+                        { step: "SOP-02", desc: "Collect micro-biological DNA swab samples from the flesh remnants on the skin backing under sterile conditions.", checked: true },
+                        { step: "SOP-03", desc: "Tag the specimen with a unique tamper-proof security identifier (e.g. WCCB-TIGER-YEAR-XX).", checked: false },
+                        { step: "SOP-04", desc: "Measure exact total length from tail-tip to snout, width, and weigh the dry specimen.", checked: false },
+                        { step: "SOP-05", desc: "Initiate veterinary certification and seal specimen in a specialized non-static moisture barrier containment bag.", checked: false },
+                        { step: "SOP-06", desc: "Register formal seizure memo (Form A) signed by Complainant and at least two local witnesses.", checked: false }
+                      ].map((x) => (
+                        <div key={x.step} className="sop-step-item">
+                          <input type="checkbox" defaultChecked={x.checked} style={{ width: "16px", height: "16px", accentColor: "var(--primary)", marginTop: "4px" }} />
+                          <div>
+                            <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--primary)", display: "block" }}>{x.step}</span>
+                            <span style={{ fontSize: "13px", color: "var(--text)" }}>{x.desc}</span>
                           </div>
-                        ))}
-                      </div>
-                    </article>
-                  )}
-
-                  {selectedSop === "elephant" && (
-                    <article className="card fade-in" style={{ padding: "20px" }}>
-                      <h3 style={{ margin: "0 0 6px", color: "var(--text-strong)", fontSize: "16px" }}>🐘 Elephant Ivory Seizure & Weight SOP</h3>
-                      <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "13px" }}>Official protocols for identifying, marking, and securing illegal ivory tusks and base cavities.</p>
-                      
-                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {[
-                          { step: "SOP-E-01", desc: "Record base circumference, base cavity depth, weight in kilograms, and length along the outer curvature.", checked: true },
-                          { step: "SOP-E-02", desc: "Obtain core ivory micro-shavings for chemical isotopic ratio analysis at WII to identify geographic origin corridor.", checked: false },
-                          { step: "SOP-E-03", desc: "Affix localized security RFID tag chips inside the basal hollow of the tusk to lock chain-of-custody.", checked: false },
-                          { step: "SOP-E-04", desc: "Inspect tusk surface for fresh mud, blood, saw-marks, or chemical solvent residues indicating carving dates.", checked: false },
-                          { step: "SOP-E-05", desc: "Seal specimens in padded steel-reinforced security containers to prevent fractures or structural scraping.", checked: false },
-                          { step: "SOP-E-06", desc: "Issue immediate Certificate of Custody and register item in WCCB Centralized Ivory Repository database.", checked: false }
-                        ].map((x) => (
-                          <div key={x.step} className="sop-step-item">
-                            <input type="checkbox" defaultChecked={x.checked} style={{ width: "16px", height: "16px", accentColor: "var(--primary)", marginTop: "4px" }} />
-                            <div>
-                              <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--primary)", display: "block" }}>{x.step}</span>
-                              <span style={{ fontSize: "13px", color: "var(--text)" }}>{x.desc}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  )}
-
-                  {selectedSop === "leopard" && (
-                    <article className="card fade-in" style={{ padding: "20px" }}>
-                      <h3 style={{ margin: "0 0 6px", color: "var(--text-strong)", fontSize: "16px" }}>🐆 Leopard Skins & Bones Seizure SOP</h3>
-                      <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "13px" }}>Evidentiary standards for Panthera pardus skins and bones to secure poison-based convictions.</p>
-                      
-                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {[
-                          { step: "SOP-L-01", desc: "Examine rosette pattern groupings. Take high-definition photographs of unique spot grids for national match databases.", checked: true },
-                          { step: "SOP-L-02", desc: "Preserve skeletal remains intact; count claws and canine teeth. Sketch skull structures and note missing elements.", checked: true },
-                          { step: "SOP-L-03", desc: "Perform marrow swab toxicological checks on bone cavities to detect Aldicarb or Organophosphate chemical poaching poisons.", checked: false },
-                          { step: "SOP-L-04", desc: "Wrap dried skins in double-layered breathable parchment paper instead of airtight plastic to prevent rot.", checked: false },
-                          { step: "SOP-L-05", desc: "Vacuum seal claw soil samples for forensic mineral mapping to confirm geographic arrest coordinates.", checked: false },
-                          { step: "SOP-L-06", desc: "Formulate official Joint Inspection Report co-signed by veterinary officer and at least two neutral local witnesses.", checked: false }
-                        ].map((x) => (
-                          <div key={x.step} className="sop-step-item">
-                            <input type="checkbox" defaultChecked={x.checked} style={{ width: "16px", height: "16px", accentColor: "var(--primary)", marginTop: "4px" }} />
-                            <div>
-                              <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--primary)", display: "block" }}>{x.step}</span>
-                              <span style={{ fontSize: "13px", color: "var(--text)" }}>{x.desc}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  )}
-
-                  {selectedSop === "birds_reptiles" && (
-                    <article className="card fade-in" style={{ padding: "20px" }}>
-                      <h3 style={{ margin: "0 0 6px", color: "var(--text-strong)", fontSize: "16px" }}>🦅 Live Birds & Protected Reptiles Welfare SOP</h3>
-                      <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "13px" }}>Critical quarantine, transport, and immediate release legal directives for fragile live fauna.</p>
-                      
-                      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {[
-                          { step: "SOP-B-01", desc: "Verify Schedule I/II designations (e.g. Hill Myna, Indian Star Tortoise, Sand Boa) for exact prosecution charge sheets.", checked: true },
-                          { step: "SOP-B-02", desc: "Execute immediate veterinary inspection for respiratory distress, crowded storage fractures, and dehydration levels.", checked: true },
-                          { step: "SOP-B-03", desc: "Establish sterile quarantine enclosures with proper heat controls, moisture parameters, and oral hydration fluids.", checked: false },
-                          { step: "SOP-B-04", desc: "Photograph smuggler's customized hidden cavities, tubes, or bounding crates as direct proof of organized trafficking.", checked: false },
-                          { step: "SOP-B-05", desc: "Submit Section 50(4) request to Magistrates immediately for instant release of live fauna to reduce transit mortality.", checked: false },
-                          { step: "SOP-B-06", desc: "Compile physical custody transfer memos to verified forest department rangers or designated wildlife rescue sanctuaries.", checked: false }
-                        ].map((x) => (
-                          <div key={x.step} className="sop-step-item">
-                            <input type="checkbox" defaultChecked={x.checked} style={{ width: "16px", height: "16px", accentColor: "var(--primary)", marginTop: "4px" }} />
-                            <div>
-                              <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--primary)", display: "block" }}>{x.step}</span>
-                              <span style={{ fontSize: "13px", color: "var(--text)" }}>{x.desc}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
-                  )}
+                        </div>
+                      ))}
+                    </div>
+                  </article>
                 </div>
               )}
             </div>

@@ -7,8 +7,25 @@ export default function NetworkGraph() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedNetwork, setSelectedNetwork] = useState(null);
+  const [personProfile, setPersonProfile] = useState(null);
+  const [personLoading, setPersonLoading] = useState(false);
   const abortControllerRef = useRef(null);
   const requestIdRef = useRef(0);
+
+  const loadPersonProfile = useCallback(async (name) => {
+    if (!name) return;
+    setPersonProfile({ person: name, loading: true });
+    setPersonLoading(true);
+    try {
+      const result = await fetchJson(ENDPOINTS.graphPersonProfile(name));
+      setPersonProfile(result);
+    } catch (err) {
+      console.error("Failed to load person profile:", err);
+      setPersonProfile({ person: name, error: true });
+    } finally {
+      setPersonLoading(false);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     requestIdRef.current += 1;
@@ -136,7 +153,14 @@ export default function NetworkGraph() {
                   <h3><User size={18} /> Network Actors ({selectedNetwork.actor_count || selectedNetwork.suspect_count || 0})</h3>
                   <div className="actor-list">
                     {(selectedNetwork.actors || selectedNetwork.top_actors || []).map((actor, idx) => (
-                      <div key={`${actor.name || 'actor'}-${actor.incident_count || 0}-${idx}`} className="actor-card animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
+                      <button
+                        type="button"
+                        key={`${actor.name || 'actor'}-${actor.incident_count || 0}-${idx}`}
+                        className="actor-card actor-card-btn animate-fade-in"
+                        style={{ animationDelay: `${idx * 0.05}s` }}
+                        onClick={() => loadPersonProfile(actor.name)}
+                        title={`View intelligence profile for ${actor.name}`}
+                      >
                         <div className="actor-main">
                           <div className="actor-name">{actor.name}</div>
                           <div className="actor-meta">
@@ -145,10 +169,11 @@ export default function NetworkGraph() {
                             <span>{actor.incident_count} Incidents</span>
                           </div>
                         </div>
+                        <ChevronRight size={14} className="actor-chevron" />
                         <div className="actor-risk-bar">
                           <div className="bar-fill" style={{ width: `${actor.centrality * 100}%` }}></div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                     {(!selectedNetwork.actors || selectedNetwork.actors.length === 0) && (!selectedNetwork.top_actors || selectedNetwork.top_actors.length === 0) && (
                       <div className="empty-state">
@@ -220,6 +245,74 @@ export default function NetworkGraph() {
           )}
         </main>
       </div>
+
+      {personProfile && (
+        <div className="poi-overlay" onClick={() => setPersonProfile(null)}>
+          <div className="poi-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="poi-modal-head">
+              <div>
+                <div className="poi-modal-label"><User size={14} /> Suspect Intelligence Profile</div>
+                <h2 className="poi-modal-name">{personProfile.person}</h2>
+              </div>
+              <button type="button" className="poi-close" onClick={() => setPersonProfile(null)} aria-label="Close">×</button>
+            </div>
+
+            {personProfile.loading || personLoading ? (
+              <div className="poi-modal-body"><RefreshCw size={20} className="spin" /> Loading profile…</div>
+            ) : personProfile.error ? (
+              <div className="poi-modal-body poi-error">Unable to load profile for this suspect.</div>
+            ) : (
+              <div className="poi-modal-body">
+                <div className="poi-stat-row">
+                  <div className="poi-stat"><label>Linked incidents</label><strong>{personProfile.incident_count || 0}</strong></div>
+                  <div className="poi-stat"><label>Known associates</label><strong>{personProfile.connections?.length || 0}</strong></div>
+                </div>
+
+                <h3 className="poi-sub"><Users size={15} /> Known Associates</h3>
+                {personProfile.connections?.length ? (
+                  <div className="poi-assoc-list">
+                    {personProfile.connections.slice(0, 20).map((c, i) => (
+                      <button
+                        type="button"
+                        key={`${c.name}-${i}`}
+                        className="poi-assoc"
+                        onClick={() => loadPersonProfile(c.name)}
+                        title={`View ${c.name}`}
+                      >
+                        <span className="poi-assoc-name">{c.name}</span>
+                        <span className="poi-assoc-meta">{c.co_incident_count} shared • {c.incident_count} total</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="poi-empty">No known associates linked.</p>
+                )}
+
+                <h3 className="poi-sub"><AlertTriangle size={15} /> Linked Incidents</h3>
+                {personProfile.incidents?.length ? (
+                  <div className="poi-incident-list">
+                    {personProfile.incidents.slice(0, 25).map((inc, i) => {
+                      const url = resolveExternalUrl(inc.url, inc.open_url);
+                      const body = (
+                        <>
+                          <div className="poi-inc-title">{inc.title}</div>
+                          <div className="poi-inc-meta">Risk {inc.risk_score} • {inc.state || "Unknown"}{inc.district ? `, ${inc.district}` : ""}</div>
+                        </>
+                      );
+                      const key = inc.id || `${inc.title}-${i}`;
+                      return url === "#"
+                        ? <div key={key} className="poi-inc">{body}</div>
+                        : <a key={key} className="poi-inc poi-inc-link" href={url} target="_blank" rel="noopener noreferrer">{body}</a>;
+                    })}
+                  </div>
+                ) : (
+                  <p className="poi-empty">No linked incidents found.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .network-container {
@@ -513,6 +606,36 @@ export default function NetworkGraph() {
         @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .actor-card-btn { width: 100%; background: transparent; border: none; border-bottom: 1px solid rgba(26,25,23,0.06); cursor: pointer; text-align: left; gap: 12px; }
+        .actor-card-btn:hover { background: rgba(193,127,89,0.05); }
+        .actor-chevron { color: #C17F59; flex-shrink: 0; opacity: 0.7; }
+
+        .poi-overlay { position: fixed; inset: 0; background: rgba(26,25,23,0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; backdrop-filter: blur(3px); }
+        .poi-modal { background: #fff; border-radius: 18px; max-width: 620px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
+        .poi-modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 22px 24px; border-bottom: 1px solid rgba(26,25,23,0.08); }
+        .poi-modal-label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #C17F59; font-weight: 700; }
+        .poi-modal-name { margin: 6px 0 0; font-size: 20px; font-weight: 800; color: #0D0C0B; }
+        .poi-close { background: none; border: none; font-size: 26px; line-height: 1; color: #6B6966; cursor: pointer; padding: 0 4px; }
+        .poi-close:hover { color: #1A1917; }
+        .poi-modal-body { padding: 20px 24px; overflow-y: auto; }
+        .poi-error { color: #A03434; }
+        .poi-stat-row { display: flex; gap: 16px; margin-bottom: 18px; }
+        .poi-stat { flex: 1; padding: 12px 14px; background: rgba(26,25,23,0.03); border-radius: 10px; }
+        .poi-stat label { display: block; font-size: 11px; text-transform: uppercase; color: #6B6966; margin-bottom: 4px; }
+        .poi-stat strong { font-size: 22px; font-weight: 800; color: #0D0C0B; }
+        .poi-sub { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; margin: 20px 0 12px; color: #1A1917; }
+        .poi-assoc-list { display: flex; flex-wrap: wrap; gap: 8px; }
+        .poi-assoc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; background: rgba(91,123,168,0.08); border: 1px solid rgba(91,123,168,0.18); border-radius: 10px; cursor: pointer; text-align: left; }
+        .poi-assoc:hover { background: rgba(91,123,168,0.16); }
+        .poi-assoc-name { font-size: 13px; font-weight: 700; color: #1A1917; }
+        .poi-assoc-meta { font-size: 10px; color: #6B6966; }
+        .poi-incident-list { display: flex; flex-direction: column; gap: 8px; }
+        .poi-inc { display: block; text-decoration: none; color: inherit; border: 1px solid rgba(26,25,23,0.08); border-radius: 10px; padding: 10px 12px; }
+        .poi-inc-link:hover { background: rgba(193,127,89,0.06); border-color: rgba(193,127,89,0.25); }
+        .poi-inc-title { font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+        .poi-inc-meta { font-size: 11px; color: #6B6966; margin-top: 2px; }
+        .poi-empty { font-size: 13px; color: #6B6966; }
       `}} />
     </div>
   );

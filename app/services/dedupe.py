@@ -128,7 +128,10 @@ class DedupeEngine:
         vector = model.encode(normalized, normalize_embeddings=True)
         embedding = [float(x) for x in vector.tolist()]
         if len(self._embedding_cache) >= self._max_cache_size:
-            self._embedding_cache.clear()
+            # Evict the single oldest entry (FIFO) instead of clearing the whole
+            # cache, which would throw away ~1200 embeddings and cause recompute
+            # thrash on the next batch of articles.
+            self._embedding_cache.pop(next(iter(self._embedding_cache)), None)
         self._embedding_cache[normalized] = embedding
         return embedding
 

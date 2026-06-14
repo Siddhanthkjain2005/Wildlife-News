@@ -265,6 +265,13 @@ ALL_PROVIDER_ORDER = [
 ]
 DISABLED_PROVIDERS = {"govt_notices"}
 
+# Per-provider minimum seconds between requests. Some free APIs enforce strict
+# spacing (e.g. GDELT requires >= 5s/request or it returns HTTP 429). Providers
+# not listed here use the global PROVIDER_MIN_REQUEST_INTERVAL_SECONDS setting.
+PROVIDER_MIN_INTERVAL_OVERRIDES: dict[str, float] = {
+    "gdelt": 5.5,
+}
+
 KEY_BASED_PROVIDERS = {"newsapi", "gnews", "mediastack", "newsdata", "currents", "thenewsapi", "worldnewsapi", "eventregistry", "newscatcher"}
 PROVIDER_QUERY_CAPS = {
     "google_rss": 6,
@@ -323,6 +330,16 @@ class NewsCollector:
         self.intelligence_engine = intelligence_engine
         self.dedupe_engine = dedupe_engine or DedupeEngine()
         self.http = requests.Session()
+        # Send a real browser User-Agent on every request. Google/Bing News RSS
+        # endpoints return 503/403 to the default "python-requests" UA; without
+        # this header google_rss is blocked on essentially every query.
+        self.http.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+        })
         self._provider_failures: dict[str, int] = {}
         self._failed_sources: list[dict[str, object]] = []
         self._provider_cooldowns: dict[str, datetime] = {}
@@ -609,12 +626,15 @@ class NewsCollector:
 
     def _enabled_providers(self) -> list[str]:
         configured = self._csv_list(settings.enabled_providers)
-        ordered: list[str] = []
-        for provider in ([*configured, *ALL_PROVIDER_ORDER] if configured else ALL_PROVIDER_ORDER):
-            if provider and provider not in ordered:
-                ordered.append(provider)
-        filtered = [provider for provider in ordered if provider not in DISABLED_PROVIDERS]
-        return filtered or [provider for provider in ALL_PROVIDER_ORDER if provider not in DISABLED_PROVIDERS]
+        if configured:
+            # Use only explicitly configured providers, preserving config order
+            ordered: list[str] = []
+            for provider in configured:
+                if provider and provider not in ordered and provider not in DISABLED_PROVIDERS:
+                    ordered.append(provider)
+            return ordered
+        # Fallback: use all providers except disabled ones
+        return [provider for provider in ALL_PROVIDER_ORDER if provider not in DISABLED_PROVIDERS]
 
     def _supported_languages(self) -> list[str]:
         configured = self._csv_list(settings.supported_languages)
@@ -770,7 +790,10 @@ class NewsCollector:
         )
 
     def _throttle_provider(self, provider: str) -> None:
-        interval_seconds = max(0.0, float(settings.provider_min_request_interval_seconds))
+        interval_seconds = max(
+            PROVIDER_MIN_INTERVAL_OVERRIDES.get(provider, 0.0),
+            float(settings.provider_min_request_interval_seconds),
+        )
         if interval_seconds <= 0:
             return
         wait_seconds = 0.0
@@ -811,6 +834,9 @@ class NewsCollector:
 
     def _http_get_json(self, *, provider: str, url: str, params: dict[str, object], headers: dict[str, str] | None = None) -> dict[str, object]:
         def _call() -> requests.Response:
+            # Respect per-provider request spacing (e.g. GDELT needs >=5s) before
+            # every attempt, including retries, to avoid 429 rate-limit bans.
+            self._throttle_provider(provider)
             response = self.http.get(url, params=params, headers=headers, timeout=settings.request_timeout_seconds)
             if response.status_code >= 500:
                 response.raise_for_status()
@@ -1972,25 +1998,18 @@ class NewsCollector:
                         provider_stats[provider]["scanned"] += 1
 
                         # Phase 1: Lightweight pre-filter using RSS summary only (no scraping).
-                        # This quickly rejects ~80% of articles without expensive HTTP calls.
+                        # Uses a LENIENT candidate gate ("is this plausibly India
+                        # wildlife crime, worth scraping?") rather than the strict
+                        # body-level veto, which would reject almost everything when
+                        # applied to a 1-2 sentence RSS snippet. The strict gate runs
+                        # in Phase 2 below on the scraped full article text.
                         detected_language = self._detect_language(
                             title=title,
                             summary=summary,
                             fallback=article.language,
                         )
                         prior_source = self._prior_source_hits(db, source)
-                        initial_intel = self.intelligence_engine.analyze(
-                            title=title,
-                            summary=summary,
-                            full_content=summary,
-                            prior_source_hits=prior_source,
-                            source=source,
-                            allow_llm=False,
-                        )
-                        
-                        # Pre-filtering Gate: If keyword/SetFit classifiers determine
-                        # this is NOT a poaching incident, skip expensive scraping + LLM entirely.
-                        if not initial_intel.is_poaching:
+                        if not self.intelligence_engine.is_candidate(title=title, summary=summary):
                             provider_stats[provider]["rejected"] += 1
                             continue
 
@@ -2001,7 +2020,9 @@ class NewsCollector:
                             url=url,
                             allow_enrichment=(source_type == "news"),
                         )
-                        prior_district = self._prior_district_hits(db, initial_intel.district)
+                        _snippet_text = f"{title}. {summary}"
+                        _, _snippet_district, _ = self.intelligence_engine._extract_location(_snippet_text)
+                        prior_district = self._prior_district_hits(db, _snippet_district)
                         intel = self.intelligence_engine.analyze(
                             title=title,
                             summary=summary,

@@ -335,6 +335,33 @@ def test_intelligence_species_merging() -> None:
     assert "pangolin" in result.species
 
 
+def test_is_candidate_accepts_plausible_wildlife_crime_snippets() -> None:
+    """The lenient Phase-1 pre-filter must let real poaching snippets through
+    so they get scraped — regression guard for the 0-kept ingestion bug."""
+    engine = HybridIntelligenceEngine()
+    assert engine.is_candidate(
+        title="Forest officials seize leopard skin in Nagpur, two arrested",
+        summary="Two persons were arrested with a leopard skin near Tadoba.",
+    )
+    assert engine.is_candidate(
+        title="Pangolin scales worth lakhs seized in Chhattisgarh",
+        summary="Police recovered pangolin scales and arrested a smuggler.",
+    )
+
+
+def test_is_candidate_rejects_obvious_non_wildlife_snippets() -> None:
+    engine = HybridIntelligenceEngine()
+    assert not engine.is_candidate(
+        title="IPL 2026: Mumbai beats Chennai in last-ball thriller",
+        summary="A cricket match report with no wildlife relevance.",
+    )
+    # Hard-veto noise (job scam) must be rejected cheaply.
+    assert not engine.is_candidate(
+        title="Police bust online job scam racket",
+        summary="A cyber crime gang ran a job fraud scheme.",
+    )
+
+
 
 
 

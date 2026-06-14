@@ -67,11 +67,9 @@ class Settings(BaseSettings):
 
     # Providers
     enabled_providers: str = (
-        "google_rss,bing_rss,gdelt,duckduckgo,indian_media_rss,newsapi,gnews,mediastack,newsdata,"
-        "currents,thenewsapi,worldnewsapi,eventregistry,newscatcher,"
-        "reddit_osint,ngo_feeds,x_adapter"
+        "google_rss,bing_rss,gnews,gdelt,indian_media_rss,ngo_feeds"
     )
-    supported_languages: str = "en,hi,kn,ta,te,ml,bn,mr,gu,pa,ur,or,as"
+    supported_languages: str = "en,hi,kn,ta,te,ml,bn"
     newsapi_key: str | None = None
     gnews_api_key: str | None = None
     mediastack_api_key: str | None = None
