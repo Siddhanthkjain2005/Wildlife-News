@@ -10,6 +10,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![CI](https://img.shields.io/github/actions/workflow/status/Siddhanthkjain2005/Wildlife-News/ci.yml?branch=main&style=for-the-badge&label=CI&logo=githubactions&logoColor=white)](https://github.com/Siddhanthkjain2005/Wildlife-News/actions)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 <br/>
@@ -59,42 +60,11 @@ Developed in collaboration with the **Wildlife Trust of India (WTI)**, this plat
 
 ## ⚙️ System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    WILDLIFE INTELLIGENCE PLATFORM                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────────────────────────────────────────────────────┐       │
-│  │              DATA COLLECTION LAYER                       │       │
-│  │  Google RSS │ Bing RSS │ GDELT │ GNews                   │       │
-│  │  Indian Media RSS feeds │ NGO Feeds                      │       │
-│  └──────────────────────┬───────────────────────────────────┘       │
-│                         │                                           │
-│  ┌──────────────────────▼───────────────────────────────────┐       │
-│  │              HYBRID INTELLIGENCE ENGINE                  │       │
-│  │  ┌─────────┐ ┌──────────┐ ┌────────────┐ ┌───────────┐  │       │
-│  │  │ Dedupe  │ │ AI/Rule  │ │ NER Person │ │ Location  │  │       │
-│  │  │ Engine  │ │ Classifier│ │ Extractor │ │ Resolver  │  │       │
-│  │  └─────────┘ └──────────┘ └────────────┘ └───────────┘  │       │
-│  │  ┌─────────┐ ┌──────────┐ ┌────────────┐ ┌───────────┐  │       │
-│  │  │ Species │ │ Risk     │ │ Crime Type │ │ India     │  │       │
-│  │  │ Detect  │ │ Scoring  │ │ Classifier │ │ Validator │  │       │
-│  │  └─────────┘ └──────────┘ └────────────┘ └───────────┘  │       │
-│  └──────────────────────┬───────────────────────────────────┘       │
-│                         │                                           │
-│  ┌──────────────────────▼───────────────────────────────────┐       │
-│  │         PREDICTIVE THREAT INTELLIGENCE                   │       │
-│  │  Regional Threat Ratings │ Hotspot Prediction │ Species    │       │
-│  │  Vulnerability Models    │ Network Analysis   │ Forecasts  │       │
-│  └──────────────────────┬───────────────────────────────────┘       │
-│                         │                                           │
-│  ┌──────────────────────▼───────────────────────────────────┐       │
-│  │              PRESENTATION LAYER                          │       │
-│  │  React Dashboard │ WebSocket Live Sync │ Excel Exporter │       │
-│  └──────────────────────────────────────────────────────────┘       │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+<div align="center">
+  <img src="docs/images/architecture.png" alt="Wildlife Intelligence Platform — system architecture" width="620"/>
+</div>
+
+Data flows top-to-bottom through five layers: **multi-source ingestion** (RSS, OSINT, news APIs) → **deduplication & rate-limited collection** → a **hybrid AI processing engine** (NER, zero-shot classification, species ID) → a **predictive intelligence layer** (risk scoring, hotspot detection, network analysis) → and finally the **command-center dashboard** and **real-time alert system**.
 
 ---
 
@@ -118,6 +88,18 @@ Developed in collaboration with the **Wildlife Trust of India (WTI)**, this plat
 - **WebSocket Sync**: Real-time feedback loop displaying active scraper sync status, data processing state, and live incident updates.
 - **Production Hardening**: Admin settings protected with constant-time token comparison (`hmac.compare_digest`) and HTTP cookies configured with secure production headers.
 - **Data Export**: Support for CSV, formatted Excel briefs, and full analyst briefing packs.
+
+---
+
+## 🔔 Incident-to-Alert Workflow
+
+From the moment an article is collected to the instant a field team is notified, every incident passes through a five-stage intelligence pipeline:
+
+<div align="center">
+  <img src="docs/images/alert-workflow.png" alt="Incident detection to stakeholder notification workflow" width="780"/>
+</div>
+
+**1. Incident Detected** → news article collected from RSS/API sources · **2. AI Validation** → NLP classification, species identification, location extraction · **3. Risk Scoring** → threat level assessment (Low / Medium / High / Critical) · **4. Alert Generation** → automated alert created with full intelligence dossier · **5. Stakeholder Notification** → Email, Telegram, and WebSocket push to field teams.
 
 ---
 
@@ -208,9 +190,69 @@ To optimize scraping speed and eliminate API rate limits (such as Google RSS 503
 
 ## 💻 Tech Stack
 
-- **Backend**: FastAPI, Python 3.11+, SQLAlchemy, SQLite
-- **Frontend**: React (Vite), Tailwind CSS/Vanilla CSS, Lucide icons, Leaflet (Map)
-- **Deployment**: Nginx, Systemd services, DigitalOcean droplet
+- **Backend**: FastAPI, Python 3.11+, SQLAlchemy, SQLite (PostgreSQL-ready via Alembic migrations)
+- **AI / NLP**: Hugging Face Transformers (mDeBERTa-v3), SetFit, multilingual NER, Ollama / OpenAI-compatible LLMs
+- **Frontend**: React (Vite), Tailwind CSS / Vanilla CSS, Lucide icons, Leaflet (Map)
+- **Realtime & Infra**: WebSockets, Nginx, Systemd services, DigitalOcean droplet
+- **Quality**: pytest suite (81 tests), GitHub Actions CI, Alembic schema migrations
+
+---
+
+## 🚀 Getting Started
+
+> Requires **Python 3.11+**. The AI models download automatically on first run.
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/Siddhanthkjain2005/Wildlife-News.git
+cd Wildlife-News
+
+# 2. Create a virtual environment and install dependencies
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Configure environment
+cp .env.example .env               # then edit values as needed
+
+# 4. Apply database migrations
+alembic upgrade head
+
+# 5. Run the application
+uvicorn app.main:app --reload --port 8000
+```
+
+The dashboard is then available at **http://localhost:8000**.
+
+```bash
+# Run the test suite
+pytest tests/ -q
+```
+
+For optional AI extras (LLM summarization, RAG, SetFit), install the additional requirements:
+
+```bash
+pip install -r requirements-ai.txt
+```
+
+---
+
+## 📂 Project Structure
+
+```
+app/
+├── api/            # FastAPI routers (incidents, dashboard, search, graph, RAG, admin, websocket)
+├── services/       # Intelligence engine — collector, classifier, NER, predictor, RAG, summarizer
+├── models/         # SQLAlchemy ORM models (news, intelligence, OSINT, audit, reports)
+├── repositories/   # Data-access layer with reusable query filters
+├── core/           # Config, database, caching, security, realtime, logging
+├── workers/        # Background sync manager
+└── utils/          # India geo-resolution, location data, text utilities
+alembic/            # Database schema migrations
+scripts/            # Maintenance, data-cleaning, and training utilities
+tests/              # pytest suite (81 tests)
+docs/               # Architecture diagrams and documentation
+```
 
 ---
 

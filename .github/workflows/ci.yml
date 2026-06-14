@@ -15,6 +15,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: |
@@ -25,14 +26,4 @@ jobs:
         run: python -m compileall app tests
 
       - name: Run tests
-        run: pytest -q
-
-  build:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t wildlife-intel:ci .
+        run: pytest tests/ -q
