@@ -121,6 +121,75 @@ Developed in collaboration with the **Wildlife Trust of India (WTI)**, this plat
 
 ---
 
+## 🧠 Large Language Model (LLM) Integration
+
+The platform features an advanced integration with Large Language Models via **Ollama Cloud** (supporting OpenAI-compatible endpoints, Azure, OpenAI, or local instances).
+
+The LLM is deployed across two main components in the system architecture:
+
+### 1. Structured Article Ingestion & Legal Annotation (`app/services/summarizer.py`)
+During news ingestion, unstructured article text is processed by the summarizer service using the **`gemma3:27b`** or **`deepseek-v3.1:671b-cloud`** model. The LLM is instructed to act as a *wildlife crime intelligence analyst for the Government of India* and return a **STRICT JSON** representation of the incident.
+
+```python
+# System prompt schema returned by the LLM
+{
+  "is_wildlife_poaching_incident": bool,       # Verifies active poaching/smuggling/trade in India
+  "suggested_confidence_score": int,           # Factuality verification score (0-100)
+  "llm_classification_reason": str,            # Logic audit trail for classifications
+  "summary": str,                              # High-impact 2-3 sentence overview
+  "key_facts": list,                           # Structured bulleted fact lists (max 6)
+  "smuggling_route": str,                      # Transit routes detected (e.g. state border crossings)
+  "wpa_schedule": str,                         # Mapped WPA Schedule (Schedule I/II/III/IV/V/VI)
+  "wpa_section": str,                          # Target violations (e.g., Section 9, 39, 49-B, 51)
+  "wpa_offence_type": str,                     # Hunting, Possession, Illegal Trade, etc.
+  "wpa_penalty_class": str,                    # Severe, moderate, or minor severity
+  "protected_area_type": str,                  # Associated Wildlife Sanctuary/National Park
+  "enforcement_authority": str,                # State Forest Dept, Police, WCCB, etc.
+  "extracted_species": list,                   # Singularized, lowercased English common names
+  "extracted_suspects": list,                  # Fully capitalized perpetrator names (filters officers)
+  "extracted_location": str                    # Formatted "State, District" geographic target
+}
+```
+
+#### LLM Prompt Processing Details:
+- **Species Mapping**: Automatically translates regional species names to unified English names (e.g., *Chital* → *spotted deer*, *Kala Hiran* → *blackbuck*).
+- **Suspect Filtering**: Filters out names of investigating forest officers, SPs, or police inspectors, capturing only the actual suspects/arrested persons.
+- **WPA Schedules**: Applies strict guidelines mapping endangered species (Tigers, Leopards, Elephants, Pangolins, Blackbucks) to **Schedule I**, and lesser protected species (Jackals, Monkeys, Cobras) to **Schedule II**.
+
+### 2. Retrieval-Augmented Generation (RAG) Engine (`app/services/rag_engine.py`)
+The platform includes an interactive search and briefing tool powered by a RAG pipeline utilizing the **`llama3.3-70b-instruct`** or **`meta-llama-3.1-8b-instruct`** model.
+
+```
+                   [ User Query ]
+                         │
+                         ▼
+        ┌──────────────────────────────────┐
+        │       Semantic Search            │
+        │  Matches vectors in SQLite db    │
+        └────────────────┬─────────────────┘
+                         │
+                         ▼
+        ┌──────────────────────────────────┐
+        │  Context Ingestion & Filtering   │
+        │  Aggregates top incident records │
+        └────────────────┬─────────────────┘
+                         │
+                         ▼
+        ┌──────────────────────────────────┐
+        │       LLM Synthesis Prompt       │
+        │  Instructs to answer only based  │
+        │  on structured context entries   │
+        └────────────────┬─────────────────┘
+                         │
+                         ▼
+             [ Analyst Briefing Pack ]
+          Concise sentences + [ID] citations
+```
+
+The LLM formats context files into integrated briefing responses, citing incident IDs in bracketed notations to provide auditable source validation.
+
+---
+
 ## 🗣️ Optimized Language Support
 
 To optimize scraping speed and eliminate API rate limits (such as Google RSS 503 cooldowns), the platform's query processor is restricted to **7 high-yield languages**:
