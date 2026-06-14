@@ -1651,17 +1651,24 @@ class HybridIntelligenceEngine:
         if not value:
             return ""
         tokens = [token.strip() for token in value.split(" ") if token.strip()]
-        has_latin = any(re.search(r"[A-Za-z]", token) for token in tokens)
-        has_non_latin = any(re.search(r"[^\x00-\x7F]", token) for token in tokens)
+        if not tokens:
+            return ""
+        # Strip stopword tokens FIRST. Greedy regex captures (especially for
+        # non-Latin scripts where function words like को/गिरफ्तार/किया match the
+        # name-token pattern) often append trailing grammatical words to a name.
+        # Filtering before the length check keeps real multi-name list splits
+        # (e.g. "सुरेश यादव को गिरफ्तार किया" -> "सुरेश यादव") instead of
+        # discarding the whole candidate for exceeding the token cap.
+        lowered_tokens = [token.lower().strip(".") for token in tokens]
+        clean_tokens = [t for t, lt in zip(tokens, lowered_tokens) if lt not in PERSON_NAME_STOPWORDS]
+        if not clean_tokens:
+            return ""
+        has_latin = any(re.search(r"[A-Za-z]", token) for token in clean_tokens)
+        has_non_latin = any(re.search(r"[^\x00-\x7F]", token) for token in clean_tokens)
         if has_latin and has_non_latin:
             return ""
         max_tokens = 6 if has_latin else 4
-        if not tokens or len(tokens) > max_tokens:
-            return ""
-        lowered_tokens = [token.lower().strip(".") for token in tokens]
-        # Filter out stopword tokens but keep non-stopword ones
-        clean_tokens = [t for t, lt in zip(tokens, lowered_tokens) if lt not in PERSON_NAME_STOPWORDS]
-        if not clean_tokens:
+        if len(clean_tokens) > max_tokens:
             return ""
         lowered_clean = [t.lower().strip(".") for t in clean_tokens]
         normalized = " ".join(lowered_clean)
