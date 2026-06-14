@@ -140,12 +140,67 @@ class DedupeEngine:
         right_embedding = self._embed_text(right)
         if left_embedding and right_embedding:
             return self._cosine(left_embedding, right_embedding)
-        
+
         # Highly accurate token Jaccard overlap fallback when sentence-transformers is disabled.
         # Since Jaccard scores max out lower on raw text comparisons, map [0, 0.38] Jaccard score
         # linearly to [0, 1.0] to align with semantic_similarity_threshold (0.86).
         jaccard = self._token_overlap_similarity(self._normalize_text(left), self._normalize_text(right))
         return min(1.0, jaccard / 0.38)
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Embed many texts in a single model call, reusing the FIFO cache.
+
+        Returns one vector per input (empty list when the text is blank or the
+        embedding model is unavailable). This is the batched counterpart to
+        ``_embed_text`` and exists so callers that rank a large candidate pool
+        (semantic search) encode every uncached text once per request instead of
+        invoking the transformer once per candidate.
+        """
+        normalized = [self._normalize_text(text or "") for text in texts]
+        results: list[list[float]] = [[] for _ in texts]
+        missing_idx: list[int] = []
+        missing_norm: list[str] = []
+        for i, norm in enumerate(normalized):
+            if not norm:
+                continue
+            cached = self._embedding_cache.get(norm)
+            if cached is not None:
+                results[i] = cached
+            else:
+                missing_idx.append(i)
+                missing_norm.append(norm)
+
+        if not missing_idx:
+            return results
+
+        model = self._get_embedding_model()
+        if model is False:
+            return results
+
+        # De-duplicate identical uncached texts so the model encodes each once.
+        unique_norm = list(dict.fromkeys(missing_norm))
+        try:
+            vectors = model.encode(unique_norm, normalize_embeddings=True, batch_size=64)
+        except Exception as err:  # noqa: BLE001
+            logger.warning("Batch embedding failed, falling back to per-text encode: %s", err)
+            return results
+
+        encoded: dict[str, list[float]] = {}
+        for norm, vector in zip(unique_norm, vectors, strict=False):
+            embedding = [float(x) for x in vector.tolist()]
+            encoded[norm] = embedding
+            if len(self._embedding_cache) >= self._max_cache_size:
+                self._embedding_cache.pop(next(iter(self._embedding_cache)), None)
+            self._embedding_cache[norm] = embedding
+
+        for i, norm in zip(missing_idx, missing_norm, strict=False):
+            results[i] = encoded.get(norm, [])
+        return results
+
+    @staticmethod
+    def cosine(left: list[float], right: list[float]) -> float:
+        """Public cosine helper for callers that already hold embeddings."""
+        return DedupeEngine._cosine(left, right)
 
     @staticmethod
     def _merged_sources_set(row: NewsItem) -> set[str]:

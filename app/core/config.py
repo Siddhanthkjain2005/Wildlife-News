@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     dedupe_semantic_similarity_threshold: float = 0.86
     dedupe_embedding_model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+    # Hybrid retrieval (semantic vector + BM25 keyword fusion)
+    hybrid_search_enabled: bool = True
+    hybrid_vector_weight: float = 0.6
+    hybrid_bm25_weight: float = 0.4
+
     # Models
     model_name: str = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
     person_ner_enabled: bool = True

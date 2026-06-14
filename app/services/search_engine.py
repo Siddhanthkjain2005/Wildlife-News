@@ -1,18 +1,89 @@
 from __future__ import annotations
 
+import math
+import re
+from collections import Counter
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models import NewsItem
 from app.repositories.incident_repo import IncidentRepository
 from app.services.dedupe import DedupeEngine
+
+_TOKEN_PATTERN = re.compile(r"[^\wऀ-ॿಀ-೿஀-௿ఀ-౿ঀ-৿ഀ-ൿ઀-૿଀-୿؀-ۿ]+")
+
+
+def _tokenize(text: str) -> list[str]:
+    return [tok for tok in _TOKEN_PATTERN.split((text or "").lower()) if len(tok) >= 2]
 
 
 @dataclass
 class SearchResult:
     item: NewsItem
     similarity: float
+
+
+class _BM25:
+    """Compact in-memory BM25 ranker over a candidate set.
+
+    BM25 captures exact keyword relevance (names, places, species, statute
+    numbers) that dense vector similarity tends to wash out. Fusing the two
+    yields markedly better retrieval for short, entity-heavy analyst queries.
+    """
+
+    __slots__ = ("k1", "b", "_docs", "_df", "_avg_len", "_n")
+
+    def __init__(self, documents: list[list[str]], *, k1: float = 1.5, b: float = 0.75) -> None:
+        self.k1 = k1
+        self.b = b
+        self._docs = documents
+        self._n = len(documents)
+        self._df: Counter[str] = Counter()
+        for doc in documents:
+            for term in set(doc):
+                self._df[term] += 1
+        total_len = sum(len(doc) for doc in documents)
+        self._avg_len = (total_len / self._n) if self._n else 0.0
+
+    def _idf(self, term: str) -> float:
+        df = self._df.get(term, 0)
+        if df == 0:
+            return 0.0
+        # BM25+ style idf, always positive.
+        return math.log(1 + (self._n - df + 0.5) / (df + 0.5))
+
+    def scores(self, query_tokens: list[str]) -> list[float]:
+        if not self._n or not query_tokens:
+            return [0.0] * self._n
+        q_terms = set(query_tokens)
+        idf = {term: self._idf(term) for term in q_terms}
+        out: list[float] = []
+        for doc in self._docs:
+            if not doc:
+                out.append(0.0)
+                continue
+            counts = Counter(doc)
+            doc_len = len(doc)
+            score = 0.0
+            for term in q_terms:
+                tf = counts.get(term, 0)
+                if tf == 0:
+                    continue
+                denom = tf + self.k1 * (1 - self.b + self.b * doc_len / (self._avg_len or 1.0))
+                score += idf[term] * (tf * (self.k1 + 1)) / denom
+            out.append(score)
+        return out
+
+
+def _normalize_scores(scores: list[float]) -> list[float]:
+    if not scores:
+        return scores
+    top = max(scores)
+    if top <= 0:
+        return [0.0] * len(scores)
+    return [s / top for s in scores]
 
 
 class SemanticSearchEngine:
@@ -60,16 +131,63 @@ class SemanticSearchEngine:
         repo = IncidentRepository(db)
         return repo.list_recent_poaching(limit=safe_limit)
 
+    def _vector_scores(self, *, query: str, texts: list[str]) -> list[float] | None:
+        """Score all candidate texts against the query with ONE batched encode.
+
+        Returns None when batch embedding is not available on the configured
+        dedupe engine (e.g. injected test doubles), signalling the caller to use
+        the per-row similarity fallback.
+        """
+        embed_batch = getattr(self.dedupe_engine, "embed_batch", None)
+        cosine = getattr(self.dedupe_engine, "cosine", None)
+        if embed_batch is None or cosine is None:
+            return None
+        query_vec = embed_batch([query])[0]
+        if not query_vec:
+            return None
+        candidate_vecs = embed_batch(texts)
+        return [cosine(query_vec, vec) if vec else 0.0 for vec in candidate_vecs]
+
     def _rank_rows(self, *, query: str, rows: list[NewsItem], exclude_id: int | None = None) -> list[SearchResult]:
-        ranked: list[SearchResult] = []
+        usable: list[tuple[NewsItem, str]] = []
         for row in rows:
             if exclude_id is not None and row.id == exclude_id:
                 continue
             candidate_text = self._incident_text(row)
             if not candidate_text:
                 continue
-            score = self.dedupe_engine._semantic_similarity(query, candidate_text)
-            ranked.append(SearchResult(item=row, similarity=score))
+            usable.append((row, candidate_text))
+
+        if not usable:
+            return []
+
+        texts = [text for _, text in usable]
+
+        # Dense vector scores: one batched encode for the whole candidate set when
+        # the model is available; otherwise fall back to per-row similarity (also
+        # what test doubles exercise).
+        vector_scores = self._vector_scores(query=query, texts=texts)
+        if vector_scores is None:
+            vector_scores = [self.dedupe_engine._semantic_similarity(query, text) for text in texts]
+
+        if not settings.hybrid_search_enabled:
+            ranked = [SearchResult(item=row, similarity=score) for (row, _), score in zip(usable, vector_scores, strict=True)]
+            ranked.sort(key=lambda result: result.similarity, reverse=True)
+            return ranked
+
+        # Sparse keyword (BM25) scores fused with the dense scores.
+        query_tokens = _tokenize(query)
+        bm25 = _BM25([_tokenize(text) for text in texts])
+        bm25_scores = _normalize_scores(bm25.scores(query_tokens))
+
+        v_weight = max(0.0, float(settings.hybrid_vector_weight))
+        b_weight = max(0.0, float(settings.hybrid_bm25_weight))
+        weight_sum = (v_weight + b_weight) or 1.0
+
+        ranked: list[SearchResult] = []
+        for (row, _), v_score, b_score in zip(usable, vector_scores, bm25_scores, strict=True):
+            fused = (v_weight * float(v_score) + b_weight * float(b_score)) / weight_sum
+            ranked.append(SearchResult(item=row, similarity=fused))
         ranked.sort(key=lambda result: result.similarity, reverse=True)
         return ranked
 
