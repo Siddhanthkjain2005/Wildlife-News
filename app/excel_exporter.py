@@ -5,7 +5,7 @@ from openpyxl import Workbook, load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.core.config import settings
 from app.models import NewsItem
 from app.repositories.news_filters import apply_strict_incident_filters
 
