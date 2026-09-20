@@ -545,11 +545,28 @@ def _parse_intel_points(raw: str) -> list[str]:
 def _sync_snapshot() -> dict[str, object]:
     snapshot = sync_state_store.snapshot()
     if not snapshot.get("running") and (not snapshot.get("finished_at") or not snapshot.get("last_search")):
-        # Fallback to the latest SyncLog entry in the database
+        # Fallback: derive "last update" from real data signals. A completed
+        # SyncLog row is preferred, but the newest ingested article is the
+        # ground truth for "when did the data last change" — a sync that was
+        # interrupted still ingested articles even without a log row.
         try:
             with SessionLocal() as db:
                 latest = db.execute(select(SyncLog).order_by(SyncLog.ended_at.desc())).scalars().first()
-                if latest:
+                latest_ingest_at = db.scalar(select(func.max(NewsItem.created_at)).select_from(NewsItem))
+                # "Last update" = when the DATA last changed. If articles were
+                # ingested more recently than the newest completed sync row
+                # (e.g. sync interrupted before persisting, or historical rows
+                # are stale), the ingestion time is the truthful signal.
+                use_ingest = (
+                    latest_ingest_at is not None
+                    and (latest is None or latest.ended_at is None or latest_ingest_at > latest.ended_at)
+                )
+                if use_ingest:
+                    ingest_ist = latest_ingest_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo("Asia/Kolkata"))
+                    snapshot["finished_at"] = ingest_ist.isoformat()
+                    snapshot["started_at"] = ingest_ist.isoformat()
+                    snapshot["message"] = "Data current (derived from latest ingestion)"
+                if latest and not use_ingest:
                     # Convert UTC ended_at and started_at to IST (Asia/Kolkata)
                     ended_utc = latest.ended_at.replace(tzinfo=timezone.utc)
                     ended_ist = ended_utc.astimezone(ZoneInfo("Asia/Kolkata"))
@@ -1470,6 +1487,18 @@ def _run_sync_job(trigger: str) -> None:
             sync_logger.warning("Predictor retraining failed: %s", pred_err)
     except Exception as err:
         duration = perf_counter() - started
+        # Persist a failure row so health checks / sync history reflect the
+        # abort instead of silently pointing at an old successful crawl.
+        try:
+            with SessionLocal() as err_db:
+                _persist_sync_logs(
+                    db=err_db,
+                    started_at=started_at,
+                    ended_at=datetime.utcnow(),
+                    stats={"scanned": 0, "kept": 0, "provider_failures": 1, "provider_stats": []},
+                )
+        except Exception:
+            pass
         _complete_sync_error(trigger=trigger, error_message=str(err), duration=duration)
 
 
@@ -1798,7 +1827,19 @@ def startup_event() -> None:
     try:
         loaded = wildlife_predictor.load_model()
         if not loaded:
-            app_logger.info("No saved predictor model found, will train after first sync.")
+            # Train immediately if historical data already exists — don't wait for
+            # the first sync (prevents an empty Predictions panel on fresh deploys).
+            try:
+                with SessionLocal() as db:
+                    if wildlife_predictor.train(db):
+                        app_logger.info(
+                            "Trained predictor from existing data at startup (samples=%d).",
+                            wildlife_predictor._training_sample_count,
+                        )
+                    else:
+                        app_logger.info("No saved predictor model and no data to train on yet; will train on first sync.")
+            except Exception as train_err:
+                app_logger.warning("Startup predictor training failed: %s", train_err)
         else:
             app_logger.info("Loaded saved predictor model (samples=%d)", wildlife_predictor._training_sample_count)
     except Exception as err:
@@ -1825,7 +1866,7 @@ def home(
     force_legacy = request.query_params.get("legacy", "").strip().lower() in {"1", "true", "yes"}
     if react_js.exists() and react_css.exists() and not force_legacy:
         js_mtime = int(react_js.stat().st_mtime)
-        return templates.TemplateResponse("react_index.html", {"request": request, "cache_buster": js_mtime})
+        return templates.TemplateResponse("dashboard.html", {"request": request, "cache_buster": js_mtime})
 
     texts = get_ui_text(ui_lang if ui_lang in UI_TEXT else "en")
     language_options = sorted(
@@ -2877,4 +2918,4 @@ async def serve_spa(path: str):
         return FileResponse(react_index)
     
     # Fallback to simple HTML if build doesn't exist
-    return Response(content="<h1>Wildlife Crime Intelligence Center</h1><p>Frontend build missing. Run 'npm run build' in updated_frontend.</p>", media_type="text/html")
+    return Response(content="<h1>Wildlife Crime Intelligence Center</h1><p>Frontend build missing. Run 'npm run build' in frontend.</p>", media_type="text/html")

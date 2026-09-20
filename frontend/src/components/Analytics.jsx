@@ -1,9 +1,9 @@
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { Activity, BarChart3, PieChart, ShieldCheck } from "lucide-react";
 
-const AXIS_COLOR = "#6B6966";
-const GRID_COLOR = "rgba(26, 25, 23, 0.06)";
-const LEGEND_COLOR = "#6B6966";
+const AXIS_COLOR = "#8CA2C8";
+const GRID_COLOR = "rgba(148, 178, 235, 0.08)";
+const LEGEND_COLOR = "#8CA2C8";
 
 const baseOptions = {
   responsive: true,
@@ -20,11 +20,11 @@ const baseOptions = {
       }
     },
     tooltip: {
-      backgroundColor: "#FFFFFF",
-      borderColor: "rgba(26, 25, 23, 0.12)",
+      backgroundColor: "rgba(10, 17, 32, 0.96)",
+      borderColor: "rgba(240, 150, 75, 0.35)",
       borderWidth: 1,
-      titleColor: "#1A1917",
-      bodyColor: "#6B6966",
+      titleColor: "#F4F8FF",
+      bodyColor: "#D7E3F8",
       padding: 12,
       boxPadding: 6,
       cornerRadius: 12,
@@ -77,13 +77,13 @@ export default function Analytics({ chartData }) {
       {
         label: "Incidents",
         data: timeline.incidents,
-        borderColor: "#C17F59",
+        borderColor: "#F0964B",
         backgroundColor: (context) => {
           const { ctx, chartArea } = context.chart;
-          if (!chartArea) return "rgba(193, 127, 89, 0.12)";
+          if (!chartArea) return "rgba(240, 150, 75, 0.12)";
           const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, "rgba(193, 127, 89, 0.2)");
-          gradient.addColorStop(1, "rgba(193, 127, 89, 0)");
+          gradient.addColorStop(0, "rgba(240, 150, 75, 0.28)");
+          gradient.addColorStop(1, "rgba(240, 150, 75, 0)");
           return gradient;
         },
         fill: true,
@@ -91,18 +91,18 @@ export default function Analytics({ chartData }) {
         borderWidth: 2.5,
         pointRadius: 0,
         pointHoverRadius: 5,
-        pointHoverBackgroundColor: "#C17F59"
+        pointHoverBackgroundColor: "#FFB374"
       },
       {
         label: "High Risk",
         data: timeline.high_risk,
-        borderColor: "#C75050",
+        borderColor: "#FF6B6B",
         backgroundColor: (context) => {
           const { ctx, chartArea } = context.chart;
-          if (!chartArea) return "rgba(199, 80, 80, 0.1)";
+          if (!chartArea) return "rgba(255, 107, 107, 0.1)";
           const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, "rgba(199, 80, 80, 0.18)");
-          gradient.addColorStop(1, "rgba(199, 80, 80, 0)");
+          gradient.addColorStop(0, "rgba(255, 107, 107, 0.22)");
+          gradient.addColorStop(1, "rgba(255, 107, 107, 0)");
           return gradient;
         },
         fill: true,
@@ -110,7 +110,7 @@ export default function Analytics({ chartData }) {
         borderWidth: 2.5,
         pointRadius: 0,
         pointHoverRadius: 5,
-        pointHoverBackgroundColor: "#C75050"
+        pointHoverBackgroundColor: "#FF6B6B"
       }
     ]
   };
@@ -121,8 +121,8 @@ export default function Analytics({ chartData }) {
       {
         label: "Incidents",
         data: topStates.map((x) => x.count),
-        backgroundColor: "rgba(193, 127, 89, 0.75)",
-        hoverBackgroundColor: "#C17F59",
+        backgroundColor: "rgba(240, 150, 75, 0.65)",
+        hoverBackgroundColor: "#F0964B",
         borderRadius: 6,
         borderSkipped: false,
         barThickness: 16
@@ -131,8 +131,8 @@ export default function Analytics({ chartData }) {
   };
 
   const speciesColors = [
-    "#C17F59", "#D4956F", "#C9933D", "#C75050", "#5B7BA8",
-    "#5A9E6F", "#8B7355", "#A67B5B", "#9C7B56", "#7D7471"
+    "#F0964B", "#FFB374", "#FFC24D", "#FF6B6B", "#6FA8FF",
+    "#4ADE9C", "#A78BFA", "#22D3EE", "#F472B6", "#94A3B8"
   ];
   const speciesChart = {
     labels: speciesDist.slice(0, 10).map((x) => x.species),
@@ -140,9 +140,9 @@ export default function Analytics({ chartData }) {
       {
         data: speciesDist.slice(0, 10).map((x) => x.count),
         backgroundColor: speciesColors,
-        borderColor: "#FFFFFF",
+        borderColor: "#0D1526",
         borderWidth: 3,
-        hoverOffset: 8
+        hoverOffset: 12
       }
     ]
   };
@@ -153,8 +153,8 @@ export default function Analytics({ chartData }) {
       {
         label: "Reliability",
         data: sourceRank.slice(0, 10).map((x) => Number(x.reliability_score || 0)),
-        backgroundColor: "rgba(91, 123, 168, 0.75)",
-        hoverBackgroundColor: "#5B7BA8",
+        backgroundColor: "rgba(111, 168, 255, 0.65)",
+        hoverBackgroundColor: "#6FA8FF",
         borderRadius: 6,
         borderSkipped: false,
         barThickness: 14

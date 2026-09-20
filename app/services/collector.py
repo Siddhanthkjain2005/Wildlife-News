@@ -1997,6 +1997,21 @@ class NewsCollector:
                         scanned += 1
                         provider_stats[provider]["scanned"] += 1
 
+                        # Keep the live status panel moving during the slow
+                        # LLM analysis phase (LLM calls + 429 backoffs can
+                        # otherwise leave the UI showing a stale fetch line).
+                        if progress_callback:
+                            progress_callback(
+                                {
+                                    "stage": "analyzing",
+                                    "provider": provider,
+                                    "language": article.language or "unknown",
+                                    "query": query,
+                                    "scanned": scanned,
+                                    "kept": kept,
+                                }
+                            )
+
                         # Phase 1: Lightweight pre-filter using RSS summary only (no scraping).
                         # Uses a LENIENT candidate gate ("is this plausibly India
                         # wildlife crime, worth scraping?") rather than the strict

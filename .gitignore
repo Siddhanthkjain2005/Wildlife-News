@@ -1,5 +1,12 @@
 # OS
 .DS_Store
+**/.DS_Store
+
+# Office temp files
+~$*
+*.docx
+*.pdf
+!docs/**/*.png
 
 # Python
 .env
@@ -24,19 +31,39 @@ data/ml_models/
 
 # Frontend
 node_modules/
-updated_frontend/node_modules/
+frontend/node_modules/
 
 # Build artifacts (embedded build is force-added)
 app/static/react-build/
 
 # Archives
 *.zip
+*.tar.gz
+.server-backups/
 
 # Scratch / temp
 scratch/
 *.resolved
 
+# Report build artifacts (keep source .py + figs only)
+report/site/
+report/main_el/
+report/final/
+
+# Frontend build output (embedded build is force-added separately)
+frontend/dist/
+
 # Misc
 venv_test/
 venv/
 .env*
+.env
+!.env.example
+
+# Local analysis and runtime state
+report/
+data/
+!data/person_blocklist.txt
+*.pem
+*.key
+*.publishsettings

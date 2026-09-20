@@ -149,7 +149,7 @@ export default function TopBar({
           <Menu size={18} />
         </button>
         <div className="breadcrumb">
-          <span>Wildlife Intelligence</span>
+          <span className="breadcrumb-brand">Workspace</span>
           <span className="sep">/</span>
           <strong>{titles[activeSection] || "Overview"}</strong>
         </div>

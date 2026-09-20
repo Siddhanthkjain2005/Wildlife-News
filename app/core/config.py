@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     person_ner_enabled: bool = True
     person_ner_model_name: str = "Babelscape/wikineural-multilingual-ner"
     person_ner_min_score: float = 0.65
+    # Optional external blocklist of non-name tokens (one per line, '#' comments).
+    # Merged with the built-in set; lets ops tune NER noise without code changes.
+    person_blocklist_path: str = "./data/person_blocklist.txt"
     article_enrichment_enabled: bool = True
     article_enrichment_min_chars: int = 280
     article_enrichment_max_chars: int = 3500
@@ -151,6 +154,20 @@ class Settings(BaseSettings):
 
 import os
 
+
+def _coerce_optional_bools() -> None:
+    """Treat empty env values (e.g. ``OLLAMA_ENABLED=`` in .env) as unset so
+    boolean Settings fields fall back to their defaults instead of crashing
+    pydantic with ``bool_parsing`` validation errors at import time."""
+    for field_name, field in Settings.model_fields.items():
+        if field.annotation is not bool:
+            continue
+        raw = os.environ.get(field_name.upper())
+        if raw is not None and not raw.strip():
+            os.environ.pop(field_name.upper(), None)
+
+
+_coerce_optional_bools()
 settings = Settings()
 if settings.database_url and settings.database_url.startswith("postgres://"):
     settings.database_url = settings.database_url.replace("postgres://", "postgresql://", 1)

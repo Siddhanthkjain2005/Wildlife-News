@@ -23,7 +23,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # Frontend setup
-cd updated_frontend
+cd frontend
 npm install
 EMBED_BUILD=true npm run build
 cd ..

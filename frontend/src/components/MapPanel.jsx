@@ -33,7 +33,7 @@ export default function MapPanel({ mapData, onMapError }) {
       (mapData.markers || []).slice(0, 600).forEach((item) => {
         if (typeof item.lat !== "number" || typeof item.lng !== "number") return;
         const severity = riskLevel(item.risk_score);
-        const color = severity === "high" ? "#C75050" : severity === "medium" ? "#C9933D" : "#5A9E6F";
+        const color = severity === "high" ? "#FF6B6B" : severity === "medium" ? "#FFC24D" : "#4ADE9C";
         const marker = L.circleMarker([item.lat, item.lng], {
           radius: severity === "high" ? 8 : severity === "medium" ? 7 : 6,
           color,
@@ -45,12 +45,23 @@ export default function MapPanel({ mapData, onMapError }) {
         const articleHref = resolveExternalUrl(item.open_url, item.url).replace(/"/g, "&quot;");
         marker.bindPopup(
           `<div style="min-width:240px;font-family:Inter,sans-serif">
-            <b style="font-size:14px;color:#1A1917">${title}</b>
-            <div style="margin-top:6px;color:#6B6966;font-size:12px">${item.state || "-"} · ${item.district || "-"}</div>
-            <div style="margin-top:8px;font-size:13px;color:#1A1917">Risk <b style="color:${color}">${Number(item.risk_score || 0)}</b> · ${item.species || "—"}</div>
-            <a href="${articleHref}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;color:#C17F59;font-weight:500">Open article →</a>
+            <b style="font-size:14px;color:#F4F8FF">${title}</b>
+            <div style="margin-top:6px;color:#8CA2C8;font-size:12px">${item.state || "-"} · ${item.district || "-"}</div>
+            <div style="margin-top:8px;font-size:13px;color:#D7E3F8">Risk <b style="color:${color}">${Number(item.risk_score || 0)}</b> · ${item.species || "—"}</div>
+            <a href="${articleHref}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;color:#FFB374;font-weight:500">Open article →</a>
           </div>`
         );
+        // Pulsing halo ring for high-risk markers (pure Leaflet, no deps)
+        if (severity === "high") {
+          L.circleMarker([item.lat, item.lng], {
+            radius: 16,
+            color: "#FF6B6B",
+            weight: 1,
+            opacity: 0.55,
+            fill: false,
+            interactive: false
+          }).addTo(layer);
+        }
         marker.addTo(layer);
       });
     } catch (err) {
@@ -58,6 +69,12 @@ export default function MapPanel({ mapData, onMapError }) {
       onMapError?.("Map failed to render on this browser. Use legacy view as fallback.");
     }
   }, [mapData, onMapError]);
+
+  useEffect(() => () => {
+    mapRef.current?.remove();
+    mapRef.current = null;
+    layerRef.current = null;
+  }, []);
 
   const count = mapData?.markers?.length || 0;
 
@@ -70,7 +87,7 @@ export default function MapPanel({ mapData, onMapError }) {
         </div>
         <span className="card-count mono">{count} markers</span>
       </div>
-      <div className="card-body-flush" style={{ position: "relative", minHeight: 460 }}>
+      <div className="card-body-flush" style={{ position: "relative", minHeight: 400 }}>
         <div className="map-surface" ref={nodeRef} />
       </div>
       <div className="map-legend">

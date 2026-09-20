@@ -1,3 +1,4 @@
+import { ConservationBrand, PartnerMark } from "./ConservationHero.jsx";
 import {
   Shield,
   LayoutDashboard,
@@ -33,13 +34,7 @@ export default function Sidebar({ activeSection, onSelect, isOpen, syncStatus, l
   return (
     <aside className={`sidebar ${isOpen ? "is-open" : ""}`} aria-label="Primary navigation">
       <div className="sidebar-head">
-        <div className="brand-mark" aria-hidden="true">
-          <Shield size={20} strokeWidth={2} />
-        </div>
-        <div className="brand-copy">
-          <div className="brand-title">Wildlife Intelligence</div>
-          <div className="brand-sub">Command Center</div>
-        </div>
+        <ConservationBrand />
       </div>
 
       <nav className="sidebar-body">
@@ -72,6 +67,7 @@ export default function Sidebar({ activeSection, onSelect, isOpen, syncStatus, l
       </nav>
 
       <div className="sidebar-foot">
+        <div className="sidebar-mission"><span>OUR PURPOSE</span><p>Keep the wild.<br /><em>Alive.</em></p><PartnerMark /></div>
         <div className="sync-card">
           <div className="sync-row">
             <span>{t.data_sync}</span>

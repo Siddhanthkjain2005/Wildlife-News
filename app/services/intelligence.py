@@ -921,6 +921,40 @@ PERSON_NAME_STOPWORDS = {
     "published", "caption", "attempting", "sell", "by",
 }
 
+
+def _load_external_blocklist(path: str) -> set[str]:
+    """Load an optional operator-maintained blocklist of non-name tokens.
+
+    One token per line; blank lines and '#' comments are ignored. Tokens are
+    lowercased and merged into PERSON_NAME_STOPWORDS so analysts can suppress
+    recurring NER noise (a wire-agency byline, a new district abbreviation)
+    without a code change or redeploy. Missing/unreadable file -> no-op.
+    """
+    if not path:
+        return set()
+    try:
+        from pathlib import Path
+
+        blocklist_file = Path(path)
+        if not blocklist_file.is_file():
+            return set()
+        loaded: set[str] = set()
+        for raw_line in blocklist_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            loaded.add(line.lower())
+        if loaded:
+            logger.info("Loaded %d external person-blocklist tokens from %s", len(loaded), path)
+        return loaded
+    except OSError as err:
+        logger.warning("Could not read person blocklist %s: %s", path, err)
+        return set()
+
+
+# Merge any operator-provided tokens into the built-in stopword set at import time.
+PERSON_NAME_STOPWORDS |= _load_external_blocklist(getattr(settings, "person_blocklist_path", ""))
+
 PERSON_COUNT_WORDS = {
     "an": 1,
     "one": 1,

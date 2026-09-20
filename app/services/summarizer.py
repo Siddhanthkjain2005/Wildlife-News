@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import time as _time
 from functools import lru_cache
 from threading import Lock
 from dotenv import load_dotenv
@@ -10,6 +12,59 @@ from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger("app.summarizer")
+
+
+class _KeyPool:
+    """Round-robin pool of LLM API keys.
+
+    Distributes load across multiple provider keys and temporarily blocks
+    (60s) any key that receives a 429 so the caller can rotate to a fresh
+    key instead of sleeping out the rate-limit window.
+    """
+
+    def __init__(self) -> None:
+        self._keys: list[str] = []
+        self._idx = 0
+        self._lock = Lock()
+        self._blocked_until: dict[str, float] = {}
+
+    def configure(self, raw: str | None) -> None:
+        keys = [k.strip() for k in re.split(r"[,;\s]+", raw or "") if k.strip()]
+        with self._lock:
+            if keys != self._keys:
+                self._keys = keys
+                self._idx = 0
+                self._blocked_until.clear()
+                if len(keys) > 1:
+                    logger.info("LLM key rotation pool initialized with %d keys.", len(keys))
+
+    def current(self) -> str | None:
+        now = _time.time()
+        with self._lock:
+            if not self._keys:
+                return None
+            for _ in range(len(self._keys)):
+                key = self._keys[self._idx % len(self._keys)]
+                # Advance round-robin pointer on every hand-out.
+                self._idx = (self._idx + 1) % len(self._keys)
+                if self._blocked_until.get(key, 0) <= now:
+                    return key
+            # All keys temporarily blocked — hand out the next in rotation.
+            return self._keys[self._idx % len(self._keys)]
+
+    def mark_rate_limited(self, key: str | None) -> None:
+        if not key:
+            return
+        with self._lock:
+            self._blocked_until[key] = _time.time() + 60.0
+            try:
+                pos = self._keys.index(key)
+            except ValueError:
+                return
+            self._idx = (pos + 1) % len(self._keys)
+
+
+_key_pool = _KeyPool()
 
 
 class IntelligenceSummarizer:
@@ -155,11 +210,16 @@ class IntelligenceSummarizer:
             else:
                 ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/chat")
                 
-            ollama_token = (
-                os.environ.get("OLLAMA_BEARER_TOKEN") or 
-                os.environ.get("LLM_API_KEY") or 
-                os.environ.get("OLLAMA_API_KEY")
+            # Support multi-key rotation: OLLAMA_API_KEYS may hold several
+            # comma/whitespace-separated keys; on 429 the pool rotates to the
+            # next key instead of sleeping out the rate-limit window.
+            _key_pool.configure(
+                os.environ.get("OLLAMA_API_KEYS")
+                or os.environ.get("OLLAMA_API_KEY")
+                or os.environ.get("LLM_API_KEY")
+                or os.environ.get("OLLAMA_BEARER_TOKEN")
             )
+            ollama_token = _key_pool.current()
 
             is_openai_format = (
                 ollama_token is not None or
@@ -204,8 +264,8 @@ class IntelligenceSummarizer:
                 headers = {
                     "Content-Type": "application/json"
                 }
-                if ollama_token:
-                    headers["Authorization"] = f"Bearer {ollama_token}"
+                # NOTE: Authorization header is set per-attempt inside the retry
+                # loop below so each request can rotate to a different key.
 
                 if is_openai_format:
                     payload = {
@@ -215,7 +275,9 @@ class IntelligenceSummarizer:
                         ],
                         "stream": False,
                         "temperature": self.temperature,
-                        "max_tokens": 2048,
+                        # Reasoning models (e.g. gpt-oss) spend completion tokens
+                        # thinking before emitting JSON — 2048 truncates mid-JSON.
+                        "max_tokens": 8192,
                         "response_format": {"type": "json_object"}
                     }
                 else:
@@ -240,6 +302,9 @@ class IntelligenceSummarizer:
                 for attempt in range(max_retries):
                     response = None
                     try:
+                        ollama_token = _key_pool.current()
+                        if ollama_token:
+                            headers["Authorization"] = f"Bearer {ollama_token}"
                         response = requests.post(
                             ollama_url, 
                             json=payload, 
@@ -269,7 +334,7 @@ class IntelligenceSummarizer:
                                 "Cloud LLM returned 429 Too Many Requests. Retrying in %.2f seconds (attempt %d/%d)...",
                                 delay, attempt + 1, max_retries
                             )
-                            import time as _time
+                            _key_pool.mark_rate_limited(ollama_token)
                             _time.sleep(delay)
                             continue
                             
@@ -305,7 +370,7 @@ class IntelligenceSummarizer:
                                 "Cloud LLM 429 rate limit encountered: %s. Retrying in %.2f seconds (attempt %d/%d)...",
                                 err, delay, attempt + 1, max_retries
                             )
-                            import time as _time
+                            _key_pool.mark_rate_limited(ollama_token)
                             _time.sleep(delay)
                             continue
                         

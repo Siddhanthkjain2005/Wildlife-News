@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,6 +13,7 @@ import {
 } from "chart.js";
 import { AlertCircle, Activity, Lock, ShieldCheck, X, ExternalLink, Download, FileText, HardDrive, Database, Cpu, RefreshCw, Radio, Bell, Globe, CheckCircle, AlertTriangle, XCircle, Wrench, ChevronRight } from "lucide-react";
 
+import ConservationHero, { LoginStory } from "./components/ConservationHero.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
 import Kpis from "./components/Kpis.jsx";
@@ -77,6 +78,7 @@ export default function App() {
 }
 
 function DashboardApp() {
+  const mainRef = useRef(null);
   const [language, setLanguage] = useState("en");
   const t = TRANSLATIONS[language] || TRANSLATIONS.en;
   const [loading, setLoading] = useState(true);
@@ -536,23 +538,26 @@ function DashboardApp() {
       fetchSystemHealth();
     }
     // Fix scrolling issues in main page: scroll viewport to the top instantly
-    window.scrollTo({ top: 0, behavior: "instant" });
+    mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }
 
   if (!authToken) {
     return (
       <div className="auth-shell">
+        <LoginStory />
+        <div className="login-panel">
+        <span className="login-eyebrow">THE CONSERVATION WORKSPACE</span>
         <article className="card auth-card">
           <div className="card-head">
             <div className="card-head-left">
               <ShieldCheck size={16} className="card-head-icon" />
-              <h2>Authorized Access</h2>
+              <h2>Secure access</h2>
             </div>
           </div>
           <div className="card-body auth-card-body">
             <div className="auth-brand">
-              <h1>Wildlife Crime Intelligence Center</h1>
-              <p>Sign in with authorized credentials to continue.</p>
+              <h1>Welcome back.</h1>
+              <p>Your next action could protect a life. Sign in to your intelligence workspace.</p>
             </div>
             <form className="auth-form" onSubmit={handleLoginSubmit}>
               <label className="auth-field">
@@ -582,11 +587,14 @@ function DashboardApp() {
               ) : null}
               <button className="btn btn-primary auth-submit" type="submit" disabled={authBusy}>
                 <Lock size={14} />
-                {authBusy ? "Signing in..." : "Sign in"}
+                {authBusy ? "Signing in..." : "Enter command center"}
               </button>
             </form>
           </div>
         </article>
+        <div className="login-security"><ShieldCheck size={15} /> Authorized personnel only · Secure session</div>
+        <p className="login-purpose">Built to prevent poaching.<br />Designed for those who protect the wild.</p>
+        </div>
       </div>
     );
   }
@@ -608,7 +616,7 @@ function DashboardApp() {
         aria-hidden="true"
       />
 
-      <div className="main">
+      <div className="main" ref={mainRef}>
         <TopBar
           activeSection={activeSection}
           busy={busy}
@@ -645,22 +653,15 @@ function DashboardApp() {
           {/* PAGE 1: CONTROL CENTER */}
           {activeSection === "control_center" && (
             <div className="fade-in">
-              <div className="section-header" style={{ marginBottom: "20px" }}>
-                <div className="section-header-content">
-                  <span className="section-number" style={{ color: "#C17F59" }}>01</span>
-                  <div>
-                    <h2>{t.sec_control}</h2>
-                    <p style={{ opacity: 0.8, fontSize: "14px" }}>Real-time threat monitoring, national map visualization, and critical poaching alerts</p>
-                  </div>
-                </div>
-              </div>
+              <div className="overview-heading"><div><span className="eyebrow">THE BIG PICTURE</span><h2>Conservation command center<span>.</span></h2></div><span className="overview-region"><Globe size={14} /> India operations</span></div>
+              <ConservationHero onExplore={() => handleNavSelect("database_workspace")} onIntelligence={() => handleNavSelect("sigint_analyzer")} />
+              <div className="section-caption"><span>Situational overview</span><span>Intelligence from collected reports <span className="small-status-dot" /></span></div>
               <Kpis summary={summary} loading={loading} />
-              <div style={{ marginTop: "24px" }}>
+              <div className="operations-layout">
                 <MapPanel mapData={mapData} onMapError={setError} />
-              </div>
-              <div style={{ marginTop: "24px" }}>
                 <AlertFeed alerts={alerts} />
               </div>
+              <div className="conservation-footer"><span><ShieldCheck size={14} /> Protecting wildlife through actionable intelligence.</span><span>WILDGUARD × WILDLIFE TRUST OF INDIA</span></div>
             </div>
           )}
 
@@ -669,7 +670,7 @@ function DashboardApp() {
             <div className="fade-in">
               <div className="section-header" style={{ marginBottom: "20px" }}>
                 <div className="section-header-content">
-                  <span className="section-number" style={{ color: "#C17F59" }}>02</span>
+                  <span className="section-number" style={{ color: "var(--primary)" }}>02</span>
                   <div>
                     <h2>{t.sec_sigint}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Organized crime syndicate link inspector, networks connections mapping, and intelligence trends</p>
@@ -701,7 +702,7 @@ function DashboardApp() {
             <div className="fade-in">
               <div className="section-header" style={{ marginBottom: "20px" }}>
                 <div className="section-header-content">
-                  <span className="section-number" style={{ color: "#C17F59" }}>03</span>
+                  <span className="section-number" style={{ color: "var(--primary)" }}>03</span>
                   <div>
                     <h2>{t.sec_database}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Complete historical incident ledger, advanced semantic intelligence searches, and active signal streams</p>
@@ -733,7 +734,7 @@ function DashboardApp() {
             <div className="fade-in">
               <div className="section-header" style={{ marginBottom: "20px" }}>
                 <div className="section-header-content">
-                  <span className="section-number" style={{ color: "#C17F59" }}>04</span>
+                  <span className="section-number" style={{ color: "var(--primary)" }}>04</span>
                   <div>
                     <h2>{t.sec_tactical}</h2>
                     <p style={{ opacity: 0.8, fontSize: "14px" }}>Official enforcement tools, complaint drafter, wildlife schedules, and field seizure protocols</p>
@@ -839,14 +840,14 @@ function DashboardApp() {
                   </article>
 
                   {/* Generated Paper View */}
-                  <article className="card" style={{ padding: "24px", background: "#fdfcfa", color: "#1a1917", borderRadius: "8px", border: "2px solid #C17F59", boxShadow: "0 10px 25px rgba(0,0,0,0.15)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "1.5px solid #C17F59", paddingBottom: "10px" }}>
-                      <span style={{ fontWeight: "700", textTransform: "uppercase", fontSize: "11px", tracking: "1px", color: "#C17F59" }}>FORMAL LEGAL COMPLAINT (WPA 1972)</span>
+                  <article className="card" style={{ padding: "24px", background: "#fdfcfa", color: "#1a1917", borderRadius: "8px", border: "2px solid var(--primary)", boxShadow: "0 10px 25px rgba(0,0,0,0.15)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "1.5px solid var(--primary)", paddingBottom: "10px" }}>
+                      <span style={{ fontWeight: "700", textTransform: "uppercase", fontSize: "11px", tracking: "1px", color: "var(--primary)" }}>FORMAL LEGAL COMPLAINT (WPA 1972)</span>
                       <div style={{ display: "flex", gap: "10px" }}>
                         <button
                           type="button"
                           className="btn"
-                          style={{ padding: "4px 10px", fontSize: "11px", background: "#C17F59", color: "#ffffff", border: "none" }}
+                          style={{ padding: "4px 10px", fontSize: "11px", background: "var(--primary)", color: "#ffffff", border: "none" }}
                           onClick={() => {
                             const complaintText = `BEFORE THE COURT OF THE CHIEF JUDICIAL MAGISTRATE AT: ${drafterData.courtName.toUpperCase()}
 COMPLAINANT: ${drafterData.officerName}
@@ -987,7 +988,7 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
               <div className="section-header" style={{ marginBottom: "20px" }}>
                 <div className="section-header-content" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", flexWrap: "wrap", gap: "12px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <span className="section-number" style={{ color: "#C17F59" }}>05</span>
+                    <span className="section-number" style={{ color: "var(--primary)" }}>05</span>
                     <div>
                       <h2>System Control Center</h2>
                       <p style={{ opacity: 0.8, fontSize: "14px" }}>Visual system pipeline dashboard, real-time diagnostic matrices, and administrative recovery controls</p>
@@ -1051,13 +1052,13 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                     justifyContent: "space-between",
                     flexWrap: "wrap",
                     gap: "16px",
-                    background: systemHealth.status === "healthy" ? "#e6f4ea" : systemHealth.status === "warning" ? "#fef7e0" : "#fce8e6",
-                    border: `1.5px solid ${systemHealth.status === "healthy" ? "#34a853" : systemHealth.status === "warning" ? "#fbbc05" : "#ea4335"}`,
-                    color: systemHealth.status === "healthy" ? "#137333" : systemHealth.status === "warning" ? "#b06000" : "#c5221f"
+                    background: systemHealth.status === "healthy" ? "rgba(74, 222, 156, 0.08)" : systemHealth.status === "warning" ? "rgba(255, 194, 77, 0.08)" : "rgba(255, 107, 107, 0.08)",
+                    border: `1.5px solid ${systemHealth.status === "healthy" ? "rgba(74, 222, 156, 0.5)" : systemHealth.status === "warning" ? "rgba(255, 194, 77, 0.5)" : "rgba(255, 107, 107, 0.5)"}`,
+                    color: systemHealth.status === "healthy" ? "#4ADE9C" : systemHealth.status === "warning" ? "#FFC24D" : "#FF6B6B"
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                    <div style={{ padding: "8px", borderRadius: "50%", background: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ padding: "8px", borderRadius: "50%", background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       {systemHealth.status === "healthy" ? (
                         <CheckCircle size={32} />
                       ) : systemHealth.status === "warning" ? (
@@ -1073,19 +1074,19 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                         {systemHealth.status === "error" && "CRITICAL SYSTEM DAMAGE DETECTED"}
                       </h3>
                       <p style={{ margin: 0, fontSize: "13px", opacity: 0.95 }}>
-                        {systemHealth.status === "healthy" && "All 5 core backend databases, collectors, and Llama 3.1 parsers are reporting optimal latency and standard integrity."}
+                        {systemHealth.status === "healthy" && "All core backend databases, collectors, and the Groq-powered intelligence parser are reporting optimal latency and standard integrity."}
                         {systemHealth.status === "warning" && "Recent errors have been registered in the audit logs or disk utilization is nearing thresholds. Please inspect standalone components."}
                         {systemHealth.status === "error" && "Critical components have reported standard failure or daily request quotas are locked. Click 'Repair Component' on the damaged card."}
                       </p>
                     </div>
                   </div>
-                  <span style={{ fontSize: "11px", fontWeight: "700", opacity: 0.8, textTransform: "uppercase", padding: "4px 8px", background: "rgba(0,0,0,0.06)", borderRadius: "4px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "700", opacity: 0.8, textTransform: "uppercase", padding: "4px 8px", background: "rgba(255,255,255,0.06)", borderRadius: "4px" }}>
                     Last Checked: {formatDate(systemHealth.timestamp)}
                   </span>
                 </div>
               ) : (
                 <div style={{ padding: "24px", textAlign: "center", background: "var(--bg-2)", border: "1.5px solid var(--border)", borderRadius: "8px", marginBottom: "24px" }}>
-                  <Activity size={32} className="spin" style={{ color: "#C17F59", marginBottom: "8px" }} />
+                  <Activity size={32} className="spin" style={{ color: "var(--primary)", marginBottom: "8px" }} />
                   <p style={{ margin: 0, color: "var(--muted)", fontSize: "13px" }}>Assembling core component diagnostic matrices...</p>
                 </div>
               )}
@@ -1201,6 +1202,53 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                 </div>
               )}
 
+              {/* COMPONENT DETAIL CARDS — full stats & troubleshoot per subsystem */}
+              {systemHealth && systemHealth.components && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginBottom: "30px" }}>
+                  {Object.entries(systemHealth.components).map(([key, comp]) => {
+                    const statusColor = comp.status === "damaged" ? "var(--danger)" : comp.status === "idle" ? "var(--warn)" : "var(--success)";
+                    const statusBg = comp.status === "damaged" ? "var(--danger-soft)" : comp.status === "idle" ? "var(--warn-soft)" : "var(--success-soft)";
+                    return (
+                      <article key={key} className="card" style={{ padding: "20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", marginBottom: "14px" }}>
+                          <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "var(--text-strong)" }}>{comp.name}</h3>
+                          <span style={{
+                            fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.08em",
+                            padding: "4px 10px", borderRadius: "999px", color: statusColor, background: statusBg,
+                            border: `1px solid ${statusColor}`
+                          }}>
+                            {comp.status}
+                          </span>
+                        </div>
+                        <p style={{ margin: "0 0 14px", fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>{comp.description}</p>
+                        <div style={{ display: "grid", gap: "6px", marginBottom: "14px" }}>
+                          {Object.entries(comp.stats || {}).map(([k, v]) => (
+                            <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "11.5px", borderBottom: "1px dashed var(--border)", paddingBottom: "5px" }}>
+                              <span style={{ color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.04em", fontSize: "10px", fontWeight: "700", alignSelf: "center" }}>{k}</span>
+                              <span className="mono" style={{ color: "var(--text)", textAlign: "right", wordBreak: "break-word" }}>{String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: "11.5px", color: "var(--muted)", background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: "8px", padding: "10px 12px", lineHeight: "1.5" }}>
+                          <strong style={{ color: "var(--primary)" }}>💡 </strong>{comp.troubleshoot}
+                        </div>
+                        {comp.action && (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ marginTop: "12px", fontSize: "11px" }}
+                            onClick={() => handleComponentAction(comp.action)}
+                            disabled={healthActionBusy !== ""}
+                          >
+                            {healthActionBusy === comp.action ? "Working…" : "Run Action"}
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* NON-TECH WIZARD (SELF-HEALING ASSISTANT) */}
               {systemHealth && (
                 <article className="card" style={{ padding: "24px", marginBottom: "30px", border: "1.5px solid var(--border)", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)" }}>
@@ -1224,7 +1272,7 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                       {[
                         { id: "missing_articles", q: "❓ No new poaching articles appear today", label: "Background news crawler status check" },
                         { id: "database_slowness", q: "🚀 System metrics or page loading is slow", label: "SQLite relational storage indexing optimization" },
-                        { id: "ai_failing", q: "🤖 AI summarizing or parsing returns errors", label: "Llama 3.1 Azure Inference routing check" },
+                        { id: "ai_failing", q: "🤖 AI summarizing or parsing returns errors", label: "Groq LLM gateway & key-pool check" },
                         { id: "alerts_not_arriving", q: "📱 Threat warnings not reaching handsets", label: "SMTP / SMS official alert channels validation" },
                         { id: "cache_stale", q: "🔄 Edited incident updates do not show up", label: "Uvicorn Fast API cache purging" }
                       ].map((item) => {
@@ -1337,17 +1385,17 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                       {selectedCureIssue === "ai_failing" && (
                         <>
                           <div>
-                            <h4 style={{ margin: "0 0 8px", color: "var(--text-strong)", fontSize: "14px", fontWeight: "700" }}>Troubleshoot: Llama 3.1 AI Intelligence Parser</h4>
+                            <h4 style={{ margin: "0 0 8px", color: "var(--text-strong)", fontSize: "14px", fontWeight: "700" }}>Troubleshoot: AI Intelligence Parser (Groq)</h4>
                             <p style={{ margin: "0 0 14px", fontSize: "13px", color: "var(--muted)", lineHeight: "1.5" }}>
-                              The Llama 3.1 AI model parses and summarizes raw news reports. If summaries are missing, the endpoint may be rate-limited or the API token could be invalid. Check connection latency with a small diagnostic test.
+                              The AI model parses and summarizes raw news reports into structured intelligence. If summaries are missing, the gateway may be rate-limited or a key could be invalid. The system rotates across multiple keys automatically — run a connectivity test to verify.
                             </p>
                             <div style={{ padding: "12px", background: "var(--bg-1)", borderRadius: "6px", border: "1px solid var(--border)", fontSize: "12px", color: "var(--muted)", marginBottom: "16px" }}>
                               <strong>Live Diagnostic Stats:</strong>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "8px" }}>
-                                <div>Model Name: <strong className="mono">{systemHealth.components.ai_engine.stats["Active Model"]}</strong></div>
-                                <div>Azure Inference: <strong style={{ color: "var(--success)" }}>Enabled</strong></div>
-                                <div>Safety Filtering: <strong>{systemHealth.components.ai_engine.stats["Content Filter"]}</strong></div>
-                                <div>Daily API Limit: <strong>{systemHealth.components.ai_engine.stats["Daily Quota Limit"]}</strong></div>
+                                <div>Model: <strong className="mono">{systemHealth.components.ai_engine.stats["Active Model"]}</strong></div>
+                                <div>Gateway: <strong style={{ color: "var(--success)" }}>{systemHealth.components.ai_engine.stats["Inference API"]}</strong></div>
+                                <div>Key Pool: <strong>{systemHealth.components.ai_engine.stats["API Key Pool"]}</strong></div>
+                                <div>Output Mode: <strong>{systemHealth.components.ai_engine.stats["Content Filter"]}</strong></div>
                               </div>
                             </div>
                           </div>
@@ -1359,7 +1407,7 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                               disabled={healthActionBusy !== ""}
                               style={{ fontSize: "12px", padding: "8px 16px" }}
                             >
-                              {healthActionBusy === "test_ai" ? "Pinging AI Gateway..." : "Verify Llama 3.1 Connectivity"}
+                              {healthActionBusy === "test_ai" ? "Pinging AI Gateway..." : "Test AI Gateway Connectivity"}
                             </button>
                           </div>
                         </>
@@ -1476,7 +1524,7 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                 {/* PDF Exporter Card */}
                 <article className="card" style={{ padding: "20px" }}>
                   <h3 style={{ margin: "0 0 10px", color: "var(--text-strong)", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <FileText size={18} style={{ color: "#C17F59" }} />
+                    <FileText size={18} style={{ color: "var(--primary)" }} />
                     WCCB Intelligence Bulletin Exporter
                   </h3>
                   <p style={{ fontSize: "13px", color: "var(--muted)", margin: "0 0 16px", lineHeight: "1.5" }}>
@@ -1497,7 +1545,7 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
                 {/* Backups & Reanalyze Card */}
                 <article className="card" style={{ padding: "20px" }}>
                   <h3 style={{ margin: "0 0 10px", color: "var(--text-strong)", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <HardDrive size={18} style={{ color: "#C17F59" }} />
+                    <HardDrive size={18} style={{ color: "var(--primary)" }} />
                     Database Maintenance
                   </h3>
                   <p style={{ fontSize: "13px", color: "var(--muted)", margin: "0 0 16px", lineHeight: "1.5" }}>
@@ -1520,7 +1568,7 @@ OFFENCE CHARGED: ${drafterData.wpaOffence}`;
               {/* Security Audit Log */}
               <article className="card" style={{ padding: "20px" }}>
                 <h3 style={{ margin: "0 0 6px", color: "var(--text-strong)", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <ShieldCheck size={18} style={{ color: "#C17F59" }} />
+                  <ShieldCheck size={18} style={{ color: "var(--primary)" }} />
                   Official Security Audit Log
                 </h3>
                 <p style={{ color: "var(--muted)", margin: "0 0 16px", fontSize: "13px" }}>Chronological record of sensitive administrative events, exports, and security credentials updates.</p>

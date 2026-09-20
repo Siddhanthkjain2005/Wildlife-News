@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -249,8 +249,11 @@ def admin_system_health(_: None = Depends(require_admin_access), db: Session = D
 def admin_db_optimize(request: Request, _: None = Depends(require_admin_access), db: Session = Depends(get_db)):
     m = _main()
     try:
-        db.execute("VACUUM;")
-        db.execute("ANALYZE;")
+        if db.bind is not None and db.bind.dialect.name != "sqlite":
+            raise HTTPException(status_code=400, detail="Database optimization is only supported for SQLite.")
+        db.execute(text("VACUUM"))
+        db.execute(text("ANALYZE"))
+        db.commit()
         m._audit(actor="admin", action="db_optimize", status="ok", ip=m._client_ip(request), notes="")
         return {"ok": True, "message": "Database storage indices successfully rebuilt and optimized."}
     except Exception as e:
@@ -304,12 +307,16 @@ def admin_test_ai(request: Request, _: None = Depends(require_admin_access)):
         if not ollama_url:
             raise ValueError("OLLAMA_URL is not configured.")
 
-        ollama_model = os.environ.get("OLLAMA_MODEL", "gemma3:27b")
-        ollama_token = (
-            os.environ.get("OLLAMA_BEARER_TOKEN")
-            or os.environ.get("LLM_API_KEY")
+        ollama_model = os.environ.get("OLLAMA_MODEL", "openai/gpt-oss-20b")
+        # Use the rotation pool's first key (same resolution order as the summarizer)
+        raw_keys = (
+            os.environ.get("OLLAMA_API_KEYS")
             or os.environ.get("OLLAMA_API_KEY")
+            or os.environ.get("LLM_API_KEY")
+            or os.environ.get("OLLAMA_BEARER_TOKEN")
+            or ""
         )
+        ollama_token = next((k.strip() for k in raw_keys.replace(",", " ").replace(";", " ").split() if k.strip()), None)
 
         headers = {"Content-Type": "application/json"}
         if ollama_token:
@@ -319,12 +326,23 @@ def admin_test_ai(request: Request, _: None = Depends(require_admin_access)):
             "model": ollama_model,
             "messages": [{"role": "user", "content": "Return 'connectivity_ok'."}],
             "stream": False,
-            "max_tokens": 10,
+            # Reasoning models spend tokens thinking before answering — keep headroom.
+            "max_tokens": 200,
         }
-        res = requests.post(ollama_url, json=payload, headers=headers, timeout=15)
+        res = requests.post(ollama_url, json=payload, headers=headers, timeout=30)
         if res.status_code == 200:
+            try:
+                msg = (res.json().get("choices") or [{}])[0].get("message", {})
+                content = (msg.get("content") or "").strip()
+            except Exception:
+                content = ""
+            if content:
+                detail = f"response: '{content[:40]}'"
+            else:
+                # Reasoning models may return only the reasoning trace at low limits
+                detail = "reasoning-only response (valid)"
             m._audit(actor="admin", action="test_ai", status="ok", ip=m._client_ip(request), notes=f"model={ollama_model}")
-            return {"ok": True, "message": f"Successfully connected to AI Gateway! Model '{ollama_model}' responsive. Status: 200 OK"}
+            return {"ok": True, "message": f"Successfully connected to AI Gateway! Model '{ollama_model}' responsive ({detail}). Status: 200 OK"}
         else:
             detail = ""
             try:

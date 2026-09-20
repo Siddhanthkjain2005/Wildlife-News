@@ -317,7 +317,7 @@ export default function NetworkGraph() {
       <style dangerouslySetInnerHTML={{ __html: `
         .network-container {
           padding: 24px;
-          color: #1A1917;
+          color: #F4F8FF;
         }
         .network-header {
           display: flex;
@@ -344,7 +344,7 @@ export default function NetworkGraph() {
           overflow-wrap: anywhere;
         }
         .subtitle {
-          color: #6B6966;
+          color: #8CA2C8;
           font-size: 13px;
           margin: 4px 0 0;
           overflow-wrap: anywhere;
@@ -356,8 +356,8 @@ export default function NetworkGraph() {
           height: 600px;
         }
         .network-sidebar {
-          background: rgba(255, 255, 255, 0.5);
-          border: 1px solid rgba(26, 25, 23, 0.08);
+          background: rgba(20, 30, 52, 0.55);
+          border: 1px solid rgba(148, 178, 235, 0.10);
           border-radius: 16px;
           padding: 16px;
           display: flex;
@@ -369,7 +369,7 @@ export default function NetworkGraph() {
           font-size: 11px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          color: #6B6966;
+          color: #8CA2C8;
           font-weight: 600;
           padding-left: 8px;
         }
@@ -393,13 +393,13 @@ export default function NetworkGraph() {
           transition: all 0.2s ease;
         }
         .cluster-item:hover {
-          background: rgba(193, 127, 89, 0.05);
-          border-color: rgba(193, 127, 89, 0.1);
+          background: rgba(240, 150, 75, 0.10);
+          border-color: rgba(240, 150, 75, 0.18);
         }
         .cluster-item.active {
-          background: #C17F59;
-          color: white;
-          box-shadow: 0 4px 12px rgba(193, 127, 89, 0.25);
+          background: #F0964B;
+          color: #140801;
+          box-shadow: 0 4px 14px rgba(240, 150, 75, 0.30);
         }
         .cluster-id {
           font-family: 'JetBrains Mono', monospace;
@@ -427,19 +427,21 @@ export default function NetworkGraph() {
           text-overflow: ellipsis;
         }
         .network-details {
-          background: #FFFFFF;
-          border: 1px solid rgba(26, 25, 23, 0.08);
+          background: rgba(20, 30, 52, 0.65);
+          border: 1px solid rgba(148, 178, 235, 0.10);
           border-radius: 20px;
           padding: 32px;
-          box-shadow: 0 8px 32px rgba(26, 25, 23, 0.04);
+          box-shadow: 0 8px 32pxrgba(148,178,235,0.07);
           overflow-y: auto;
           min-width: 0;
         }
         .network-hero {
-          background: linear-gradient(135deg, #1A1917 0%, #3D3B38 100%);
+          background: linear-gradient(135deg, #101A30 0%, #1C2B4A 100%);
+          border: 1px solid rgba(148, 178, 235, 0.15);
+          box-shadow: 0 0 40px rgba(111, 168, 255, 0.08), inset 0 1px 0 rgba(255,255,255,0.06);
           border-radius: 16px;
           padding: 24px;
-          color: white;
+          color: #F4F8FF;
           margin-bottom: 32px;
         }
         .hero-stats {
@@ -477,12 +479,12 @@ export default function NetworkGraph() {
           align-items: center;
           gap: 16px;
           padding: 16px;
-          border-bottom: 1px solid rgba(26, 25, 23, 0.06);
+          border-bottom: 1px solid rgba(148, 178, 235, 0.08);
           position: relative;
         }
         .actor-rank {
           font-family: 'JetBrains Mono', monospace;
-          color: #C17F59;
+          color: #F0964B;
           font-weight: 700;
           font-size: 14px;
         }
@@ -494,7 +496,7 @@ export default function NetworkGraph() {
         }
         .actor-meta {
           font-size: 11px;
-          color: #6B6966;
+          color: #8CA2C8;
           display: flex;
           gap: 6px;
           flex-wrap: wrap;
@@ -506,11 +508,11 @@ export default function NetworkGraph() {
           left: 0;
           height: 2px;
           width: 100%;
-          background: rgba(26, 25, 23, 0.03);
+          background: rgba(148, 178, 235, 0.06);
         }
         .bar-fill {
           height: 100%;
-          background: #C17F59;
+          background: #F0964B;
           opacity: 0.6;
         }
         .pill-cloud {
@@ -520,7 +522,7 @@ export default function NetworkGraph() {
         }
         .location-pill, .species-pill {
           padding: 6px 12px;
-          background: rgba(26, 25, 23, 0.04);
+          background:rgba(148,178,235,0.07);
           border-radius: 8px;
           font-size: 12px;
           font-weight: 500;
@@ -539,14 +541,14 @@ export default function NetworkGraph() {
           display: block;
           text-decoration: none;
           color: inherit;
-          border: 1px solid rgba(26, 25, 23, 0.08);
+          border: 1px solid rgba(148, 178, 235, 0.10);
           border-radius: 10px;
           padding: 10px 12px;
           transition: background 0.2s ease, border-color 0.2s ease;
         }
         .incident-item:hover {
-          background: rgba(193, 127, 89, 0.06);
-          border-color: rgba(193, 127, 89, 0.25);
+          background: rgba(240, 150, 75, 0.10);
+          border-color: rgba(240, 150, 75, 0.35);
         }
         .incident-title {
           font-size: 13px;
@@ -557,7 +559,7 @@ export default function NetworkGraph() {
         }
         .incident-meta {
           font-size: 11px;
-          color: #6B6966;
+          color: #8CA2C8;
           overflow-wrap: anywhere;
         }
         .incident-item-disabled {
@@ -565,16 +567,16 @@ export default function NetworkGraph() {
           cursor: default;
         }
         .incident-item-disabled:hover {
-          background: #FFFFFF;
-          border-color: rgba(26, 25, 23, 0.08);
+          background: rgba(20, 30, 52, 0.65);
+          border-color: rgba(148, 178, 235, 0.10);
         }
         .network-error {
           margin: 0 0 16px;
           padding: 10px 12px;
-          border: 1px solid rgba(199, 80, 80, 0.2);
+          border: 1px solid rgba(255, 107, 107, 0.35);
           border-radius: 10px;
-          background: rgba(199, 80, 80, 0.06);
-          color: #A03434;
+          background: rgba(255, 107, 107, 0.10);
+          color: #FF6B6B;
           font-size: 13px;
         }
         @media (max-width: 1280px) {
@@ -607,35 +609,35 @@ export default function NetworkGraph() {
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .actor-card-btn { width: 100%; background: transparent; border: none; border-bottom: 1px solid rgba(26,25,23,0.06); cursor: pointer; text-align: left; gap: 12px; }
-        .actor-card-btn:hover { background: rgba(193,127,89,0.05); }
-        .actor-chevron { color: #C17F59; flex-shrink: 0; opacity: 0.7; }
+        .actor-card-btn { width: 100%; background: transparent; border: none; border-bottom: 1px solid rgba(148,178,235,0.08); cursor: pointer; text-align: left; gap: 12px; }
+        .actor-card-btn:hover { background: rgba(240,150,75,0.10); }
+        .actor-chevron { color: #F0964B; flex-shrink: 0; opacity: 0.7; }
 
-        .poi-overlay { position: fixed; inset: 0; background: rgba(26,25,23,0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; backdrop-filter: blur(3px); }
-        .poi-modal { background: #fff; border-radius: 18px; max-width: 620px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
-        .poi-modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 22px 24px; border-bottom: 1px solid rgba(26,25,23,0.08); }
-        .poi-modal-label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #C17F59; font-weight: 700; }
-        .poi-modal-name { margin: 6px 0 0; font-size: 20px; font-weight: 800; color: #0D0C0B; }
-        .poi-close { background: none; border: none; font-size: 26px; line-height: 1; color: #6B6966; cursor: pointer; padding: 0 4px; }
-        .poi-close:hover { color: #1A1917; }
+        .poi-overlay { position: fixed; inset: 0; background: rgba(2,5,12,0.65); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; backdrop-filter: blur(3px); }
+        .poi-modal { background: #0D1526; border-radius: 18px; max-width: 620px; width: 100%; max-height: 84vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
+        .poi-modal-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 22px 24px; border-bottom: 1px solid rgba(148,178,235,0.10); }
+        .poi-modal-label { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #F0964B; font-weight: 700; }
+        .poi-modal-name { margin: 6px 0 0; font-size: 20px; font-weight: 800; color: #F4F8FF; }
+        .poi-close { background: none; border: none; font-size: 26px; line-height: 1; color: #8CA2C8; cursor: pointer; padding: 0 4px; }
+        .poi-close:hover { color: #F4F8FF; }
         .poi-modal-body { padding: 20px 24px; overflow-y: auto; }
-        .poi-error { color: #A03434; }
+        .poi-error { color: #FF6B6B; }
         .poi-stat-row { display: flex; gap: 16px; margin-bottom: 18px; }
-        .poi-stat { flex: 1; padding: 12px 14px; background: rgba(26,25,23,0.03); border-radius: 10px; }
-        .poi-stat label { display: block; font-size: 11px; text-transform: uppercase; color: #6B6966; margin-bottom: 4px; }
-        .poi-stat strong { font-size: 22px; font-weight: 800; color: #0D0C0B; }
-        .poi-sub { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; margin: 20px 0 12px; color: #1A1917; }
+        .poi-stat { flex: 1; padding: 12px 14px; background: rgba(148,178,235,0.06); border-radius: 10px; }
+        .poi-stat label { display: block; font-size: 11px; text-transform: uppercase; color: #8CA2C8; margin-bottom: 4px; }
+        .poi-stat strong { font-size: 22px; font-weight: 800; color: #F4F8FF; }
+        .poi-sub { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 700; margin: 20px 0 12px; color: #F4F8FF; }
         .poi-assoc-list { display: flex; flex-wrap: wrap; gap: 8px; }
-        .poi-assoc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; background: rgba(91,123,168,0.08); border: 1px solid rgba(91,123,168,0.18); border-radius: 10px; cursor: pointer; text-align: left; }
-        .poi-assoc:hover { background: rgba(91,123,168,0.16); }
-        .poi-assoc-name { font-size: 13px; font-weight: 700; color: #1A1917; }
-        .poi-assoc-meta { font-size: 10px; color: #6B6966; }
+        .poi-assoc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; background: rgba(111,168,255,0.10); border: 1px solidrgba(111, 168, 255, 0.20); border-radius: 10px; cursor: pointer; text-align: left; }
+        .poi-assoc:hover { background: rgba(111,168,255,0.18); }
+        .poi-assoc-name { font-size: 13px; font-weight: 700; color: #F4F8FF; }
+        .poi-assoc-meta { font-size: 10px; color: #8CA2C8; }
         .poi-incident-list { display: flex; flex-direction: column; gap: 8px; }
-        .poi-inc { display: block; text-decoration: none; color: inherit; border: 1px solid rgba(26,25,23,0.08); border-radius: 10px; padding: 10px 12px; }
-        .poi-inc-link:hover { background: rgba(193,127,89,0.06); border-color: rgba(193,127,89,0.25); }
+        .poi-inc { display: block; text-decoration: none; color: inherit; border: 1px solid rgba(148,178,235,0.10); border-radius: 10px; padding: 10px 12px; }
+        .poi-inc-link:hover { background: rgba(240,150,75,0.10); border-color: rgba(240,150,75,0.35); }
         .poi-inc-title { font-size: 13px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-        .poi-inc-meta { font-size: 11px; color: #6B6966; margin-top: 2px; }
-        .poi-empty { font-size: 13px; color: #6B6966; }
+        .poi-inc-meta { font-size: 11px; color: #8CA2C8; margin-top: 2px; }
+        .poi-empty { font-size: 13px; color: #8CA2C8; }
       `}} />
     </div>
   );
