@@ -1,14 +1,14 @@
 from dataclasses import dataclass
 from datetime import timezone, datetime
 from threading import Lock
+from time import monotonic
 
 import logging
 
 logger = logging.getLogger("app.sync_manager")
 
-# Maximum time (seconds) a sync is allowed to stay "running" before the lock
-# is automatically released.  Prevents permanent deadlock if a sync crashes
-# without calling finish()/fail().
+# Maximum inactivity between progress events before a sync is considered stale.
+# Long crawls remain healthy while reporting progress.
 MAX_SYNC_RUNNING_SECONDS: int = 600  # 10 minutes
 
 
@@ -30,6 +30,7 @@ class SyncRuntimeState:
 class SyncStateStore:
     def __init__(self) -> None:
         self._lock = Lock()
+        self._last_activity = monotonic()
         self._state = SyncRuntimeState(stats={}, progress={}, last_search={}, recent_incidents=[])
 
     def _is_stale_locked(self) -> bool:
@@ -37,17 +38,7 @@ class SyncStateStore:
         Must be called while holding self._lock."""
         if not self._state.running:
             return False
-        started_raw = self._state.started_at
-        if not started_raw:
-            return True  # running but no start time => definitely stale
-        try:
-            started_dt = datetime.fromisoformat(started_raw)
-            if started_dt.tzinfo is None:
-                started_dt = started_dt.replace(tzinfo=timezone.utc)
-            elapsed = (datetime.now(tz=timezone.utc) - started_dt).total_seconds()
-            return elapsed > MAX_SYNC_RUNNING_SECONDS
-        except (ValueError, TypeError):
-            return True
+        return monotonic() - self._last_activity > MAX_SYNC_RUNNING_SECONDS
 
     def _force_reset_locked(self, reason: str = "stale_timeout") -> None:
         """Reset the running state. Must be called while holding self._lock."""
@@ -97,6 +88,7 @@ class SyncStateStore:
                     self._force_reset_locked(reason="stale_timeout_on_start")
                 else:
                     return False
+            self._last_activity = monotonic()
             self._state.running = True
             self._state.trigger = trigger
             self._state.message = "Sync started. Searching providers..."
@@ -115,6 +107,7 @@ class SyncStateStore:
         with self._lock:
             if not self._state.running:
                 return
+            self._last_activity = monotonic()
             self._state.progress = payload
             self._state.message = message
             provider = str(payload.get("provider", "")).strip()
@@ -139,6 +132,7 @@ class SyncStateStore:
         with self._lock:
             if not self._state.running:
                 return
+            self._last_activity = monotonic()
             incidents = self._state.recent_incidents or []
             incidents.insert(0, incident)
             if len(incidents) > 120:
