@@ -13,11 +13,13 @@ Required App Service settings:
 - `LOG_DIR=/home/wildguard/logs`
 - `BACKUPS_DIR=/home/wildguard/backups`
 - `EXCEL_PATH=/home/wildguard/data/wildlife-news.xlsx`
-- `FRONTEND_ORIGIN=https://www.wildlifenews.me`
+- `FRONTEND_ORIGIN=https://wildlifenews.azurewebsites.net`
 
 Keep secrets in Azure application settings, never in Git. Persistent data belongs under `/home`, outside the deployment directory. Enable Always On, WebSockets, and HTTPS Only. Run one worker and one instance while using SQLite and the in-process scheduler. Local transformer models may require more memory than B2; configure a supported external inference service when needed.
 
-For the custom domain, add the Azure-provided `asuid.www` TXT verification record and point the `www` CNAME to the app's default Azure hostname. Add the hostname binding, issue a free App Service managed certificate, and bind it using SNI. Verify HTTPS before announcing the URL. Do not alter mail or unrelated DNS records.
+The custom domain is not yet configured; the live application is https://wildlifenews.azurewebsites.net/.
+
+When configuring the custom domain, add the Azure-provided `asuid.www` TXT verification record and point the `www` CNAME to the app's default Azure hostname. Add the hostname binding, issue a free App Service managed certificate, and bind it using SNI. Verify HTTPS before announcing the URL. Do not alter mail or unrelated DNS records.
 
 ## Release package
 
