@@ -1,53 +1,46 @@
-# Contributing to Wildlife Intelligence Platform
+# Contributing to Wildguard
 
-Thank you for your interest in contributing to the Wildlife Intelligence Platform! This project aims to leverage technology for wildlife conservation, and every contribution helps protect endangered species.
+Wildguard supports wildlife crime research and conservation workflows. Changes should improve the clarity, reliability, or usefulness of the platform for its users.
 
-## 🚀 Getting Started
+## Project team
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- Siddhanth K Jain
+- Kamma Rohan
+- Adithya P
+- Dinesh Kulkarni
+- Rajath V Shanbhogue
 
-## 🏗️ Development Setup
+## Development setup
+
+Follow the [quick-start instructions](README.md#quick-start) to install dependencies, configure your local environment, and build the dashboard.
+
+## Proposing a change
+
+1. Describe the problem and expected behavior in an issue. Avoid including sensitive investigation details.
+2. Create a focused branch from `main`.
+3. Implement the change and update relevant documentation.
+4. Run the checks below that apply to your changes.
+5. Open a pull request explaining the user-facing result, verification performed, and any limitations.
+
+## Checks
 
 ```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/Wildlife-News.git
-cd Wildlife-News
-
-# Backend setup
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Frontend setup
-cd frontend
-npm install
-EMBED_BUILD=true npm run build
-cd ..
-
-# Run the development server
-uvicorn app.main:app --reload
+python -m pytest tests/ -q
+npm run build --prefix frontend
+npm run build:embed --prefix frontend
 ```
 
-## 📝 Code Guidelines
+Documentation-only updates should be checked for accurate statements, working references, and readable formatting.
 
-- **Python**: Follow PEP 8 style guidelines
-- **React**: Use functional components with hooks
-- **Commits**: Use conventional commit messages (`feat:`, `fix:`, `docs:`, `chore:`)
-- **Tests**: Add tests for new features when possible
+## Engineering guidelines
 
-## 🎯 Priority Areas
+- Keep API behavior and data contracts explicit.
+- Use React function components and accessible controls.
+- Preserve responsive layouts and reduced-motion support.
+- Distinguish source evidence from automated analysis and forecasts.
+- Add regression coverage when fixing behavior that could recur.
+- Keep credentials, local databases, backups, and private reports out of commits.
 
-- 🌍 Regional language support improvements
-- 📊 ML model accuracy enhancements
-- 🗺️ Geocoding and mapping improvements
-- 🔐 Security hardening
-- 📱 Mobile UI responsiveness
-- 📝 Documentation and examples
+## Commit messages
 
-## 📜 License
-
-By contributing, you agree that your contributions will be licensed under the MIT License.
+Use a short, descriptive subject with a prefix such as `feat:`, `fix:`, `docs:`, or `chore:`. Explain substantial tradeoffs in the commit body or pull request.

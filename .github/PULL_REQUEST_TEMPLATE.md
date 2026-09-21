@@ -1,17 +1,18 @@
-## Summary
-Brief description of changes.
+## Change
 
-## Type of Change
-- [ ] 🐛 Bug fix
-- [ ] ✨ New feature
-- [ ] 📝 Documentation update
-- [ ] 🔧 Refactor
-- [ ] ⚡ Performance improvement
+Describe the problem and the resulting behavior.
 
-## Testing
-Describe how you tested these changes.
+## Verification
+
+List the relevant checks and their results. Include screenshots for interface changes when useful.
+
+## Considerations
+
+Note deployment steps, compatibility changes, or known limitations, if applicable.
 
 ## Checklist
-- [ ] My code follows the project's style guidelines
-- [ ] I have tested my changes
-- [ ] I have updated the documentation if needed
+
+- [ ] Changes are scoped to the stated problem.
+- [ ] Relevant checks pass.
+- [ ] Documentation reflects the change.
+- [ ] No credentials, private reports, or runtime databases are included.

@@ -8,7 +8,8 @@
 [![CI](https://github.com/Siddhanthkjain2005/Wildlife-News/actions/workflows/ci.yml/badge.svg)](https://github.com/Siddhanthkjain2005/Wildlife-News/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/React-18-149ECA?logo=react&logoColor=white)](https://react.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-8BA570.svg)](LICENSE)
+
+**[Live application](https://wildlifenews.azurewebsites.net/) · [Features](#the-workspace) · [Architecture](#architecture) · [Quick start](#quick-start) · [Contributors](#contributors)**
 
 </div>
 
@@ -32,6 +33,18 @@ The platform supports human investigation. Automated classifications, risk score
 | **Exports** | CSV, Excel, PDF dossiers, and analyst briefing packs |
 
 A forest-inspired interface combines original wildlife artwork, a rotating 3D globe, subtle parallax, keyboard focus states, and reduced-motion support. English, Hindi, and Kannada interface options complement configurable multilingual ingestion.
+
+## Contributors
+
+Built by:
+
+- **Siddhanth K Jain**
+- **Kamma Rohan**
+- **Adithya P**
+- **Dinesh Kulkarni**
+- **Rajath V Shanbhogue**
+
+Developed in collaboration with **Wildlife Trust of India (WTI)**.
 
 ## Architecture
 
@@ -110,7 +123,13 @@ GitHub Actions checks the backend and both frontend build formats.
 
 ## Deployment
 
-Target domain: **www.wildlifenews.me**. See [Azure deployment](deployment/azure/README.md) for persistent storage, runtime settings, custom-domain verification, and HTTPS configuration. The configured target does not imply that deployment or DNS validation has completed.
+**Live application:** [wildlifenews.azurewebsites.net](https://wildlifenews.azurewebsites.net/)
+
+**Hosting:** Azure App Service, India South Central.
+
+The workspace requires authorized sign-in. Credentials are not published in this repository.
+
+Custom domain configuration for **www.wildlifenews.me** is pending. See [Azure deployment](deployment/azure/README.md) for persistent storage, runtime settings, domain verification, and HTTPS configuration.
 
 Use a single worker and instance while SQLite and the in-process scheduler are enabled. Store backups and runtime data outside the deployed application directory.
 
@@ -121,5 +140,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and [SECURITY.
 ## Acknowledgments
 
 Developed in collaboration with **Wildlife Trust of India (WTI)**. The tiger hero is original AI-generated conservation artwork; it is illustrative and does not represent a recorded incident. Map attribution is displayed in the interface.
-
-Released under the [MIT License](LICENSE).
