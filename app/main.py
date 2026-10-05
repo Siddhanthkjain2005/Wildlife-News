@@ -513,8 +513,11 @@ def _run_backup_now() -> dict[str, object]:
     if not db_path.exists():
         return {"ok": False, "error": f"Database file not found: {db_path}"}
     backups_dir = Path(settings.backups_dir).resolve()
-    backup_path = create_sqlite_backup(db_path=db_path, backups_dir=backups_dir)
-    snapshot_path = create_snapshot_export(db_path=db_path, backups_dir=backups_dir)
+    try:
+        backup_path = create_sqlite_backup(db_path=db_path, backups_dir=backups_dir)
+        snapshot_path = create_snapshot_export(db_path=db_path, backups_dir=backups_dir)
+    except Exception as err:
+        return {"ok": False, "error": str(err)}
     
     s3_status = "not_configured"
     if settings.s3_backup_bucket:

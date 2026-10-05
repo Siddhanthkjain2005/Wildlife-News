@@ -10,6 +10,7 @@ Required App Service settings:
 - `ADMIN_USERNAME` and a strong `ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH`
 - `JWT_SECRET`: a randomly generated secret
 - `DATABASE_URL=sqlite:////home/wildguard/data/news.db`
+- `SQLITE_JOURNAL_MODE=DELETE` (set by the startup script; WAL is unsuitable for the network-mounted `/home` directory)
 - `LOG_DIR=/home/wildguard/logs`
 - `BACKUPS_DIR=/home/wildguard/backups`
 - `EXCEL_PATH=/home/wildguard/data/wildlife-news.xlsx`

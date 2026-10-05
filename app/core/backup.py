@@ -33,9 +33,18 @@ def create_sqlite_backup(db_path: Path, backups_dir: Path) -> Path:
     backup_path = backups_dir / f"news-backup-{stamp}.db"
     
     # Use native sqlite3 backup API for atomic safety on live DB
-    with sqlite3.connect(str(db_path)) as source:
-        with sqlite3.connect(str(backup_path)) as dest:
-            source.backup(dest)
+    temporary = backup_path.with_suffix(".db.partial")
+    try:
+        with sqlite3.connect(str(db_path)) as source:
+            with sqlite3.connect(str(temporary)) as dest:
+                source.backup(dest)
+                result = dest.execute("PRAGMA integrity_check").fetchall()
+                if result != [("ok",)]:
+                    raise sqlite3.DatabaseError(f"Backup failed integrity validation: {result[:3]}")
+        temporary.replace(backup_path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     return backup_path
 
 
@@ -43,10 +52,16 @@ def create_snapshot_export(db_path: Path, backups_dir: Path) -> Path:
     backups_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     snapshot = backups_dir / f"news-snapshot-{stamp}.sql"
-    with sqlite3.connect(str(db_path)) as conn:
-        with snapshot.open("w", encoding="utf-8") as handle:
-            for line in conn.iterdump():
-                handle.write(f"{line}\n")
+    temporary = snapshot.with_suffix(".sql.partial")
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            with temporary.open("w", encoding="utf-8") as handle:
+                for line in conn.iterdump():
+                    handle.write(f"{line}\n")
+        temporary.replace(snapshot)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     return snapshot
 
 

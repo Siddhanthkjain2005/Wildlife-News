@@ -2,6 +2,7 @@
 set -euo pipefail
 mkdir -p /home/wildguard/data /home/wildguard/logs /home/wildguard/backups
 export DATABASE_URL="${DATABASE_URL:-sqlite:////home/wildguard/data/news.db}"
+export SQLITE_JOURNAL_MODE=DELETE
 export LOG_DIR="${LOG_DIR:-/home/wildguard/logs}"
 export BACKUPS_DIR="${BACKUPS_DIR:-/home/wildguard/backups}"
 export EXCEL_PATH="${EXCEL_PATH:-/home/wildguard/data/wildlife-news.xlsx}"

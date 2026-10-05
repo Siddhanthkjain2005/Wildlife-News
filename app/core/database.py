@@ -32,8 +32,10 @@ if is_sqlite:
         cursor = dbapi_connection.cursor()
         # Set busy timeout immediately to ensure subsequent PRAGMAs don't fail under load.
         cursor.execute("PRAGMA busy_timeout=60000")
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
+        # WAL requires local shared memory and is unsuitable for Azure /home
+        # (a network filesystem). Azure startup selects rollback journaling.
+        cursor.execute(f"PRAGMA journal_mode={settings.sqlite_journal_mode}")
+        cursor.execute("PRAGMA synchronous=FULL" if settings.sqlite_journal_mode == "DELETE" else "PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 

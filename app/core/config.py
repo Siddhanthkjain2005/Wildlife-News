@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Literal
 
 
 class Settings(BaseSettings):
@@ -9,6 +10,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "sqlite:///./data/news.db"
+    sqlite_journal_mode: Literal["WAL", "DELETE"] = "WAL"
 
     # Excel export
     excel_path: str = "./data/wildlife_poaching_news.xlsx"
@@ -188,5 +190,4 @@ if persistent_dir:
         settings.excel_path = f"{persistent_dir}/wildlife_poaching_news.xlsx"
     if settings.backups_dir in ("./data/backups", "data/backups"):
         settings.backups_dir = f"{persistent_dir}/backups"
-
 
